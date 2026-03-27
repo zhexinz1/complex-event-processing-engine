@@ -1,0 +1,285 @@
+"""
+example_usage.py — 系统集成示例
+
+演示如何将 5 个核心模块组合使用，构建完整的规则触发系统。
+
+示例场景：
+  1. 创建 EventBus 和双层 Context。
+  2. 定义 AST 规则：(RSI < 30) AND (close > SMA)。
+  3. 注册 AstRuleTrigger、DeviationTrigger、CronTrigger。
+  4. 模拟行情事件流，观察信号触发。
+"""
+
+import logging
+from datetime import datetime
+
+from ast_engine import (
+    Operator,
+    build_and,
+    build_comparison,
+)
+from context import (
+    DEFAULT_INDICATOR_REGISTRY,
+    GlobalContext,
+    LocalContext,
+)
+from event_bus import EventBus
+from events import (
+    BarEvent,
+    SignalEvent,
+    TickEvent,
+    TimerEvent,
+)
+from triggers import (
+    create_ast_trigger,
+    create_cron_trigger,
+    create_deviation_trigger,
+)
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# 信号处理器（下游业务逻辑）
+# ---------------------------------------------------------------------------
+
+def on_trade_opportunity(signal: SignalEvent) -> None:
+    """
+    处理交易机会信号（示例：打印日志，实际应调用下单模块）。
+
+    Args:
+        signal: SignalEvent 实例。
+    """
+    logger.info(
+        f"🔔 TRADE OPPORTUNITY: {signal.symbol} | "
+        f"Source: {signal.source} | Payload: {signal.payload}"
+    )
+    # 实际业务逻辑：
+    # - 调用风控模块检查是否允许开仓
+    # - 调用下单模块提交订单
+    # - 记录信号到数据库用于回测分析
+
+
+def on_rebalance_trigger(signal: SignalEvent) -> None:
+    """
+    处理再平衡信号（示例：打印日志，实际应调用调仓模块）。
+
+    Args:
+        signal: SignalEvent 实例。
+    """
+    logger.info(
+        f"⚖️  REBALANCE TRIGGER: {signal.symbol} | "
+        f"Deviation: {signal.payload.get('deviation', 0):.4f} | "
+        f"Current: {signal.payload.get('current_weight', 0):.4f} | "
+        f"Target: {signal.payload.get('target_weight', 0):.4f}"
+    )
+    # 实际业务逻辑：
+    # - 计算需要调整的仓位数量
+    # - 调用下单模块提交调仓订单
+    # - 更新持仓记录
+
+
+def on_fund_allocation(signal: SignalEvent) -> None:
+    """
+    处理资金分配信号（示例：打印日志，实际应调用资金管理模块）。
+
+    Args:
+        signal: SignalEvent 实例。
+    """
+    logger.info(
+        f"💰 FUND ALLOCATION: Timer '{signal.payload.get('timer_id')}' fired at "
+        f"{signal.payload.get('fired_at')}"
+    )
+    # 实际业务逻辑：
+    # - 读取最新净值和目标权重配置
+    # - 计算各品种应分配的资金
+    # - 更新 GlobalContext 中的 target_weights
+
+
+# ---------------------------------------------------------------------------
+# 主函数：系统初始化与事件模拟
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    """
+    主函数：演示完整的系统集成流程。
+    """
+    logger.info("=" * 80)
+    logger.info("CEP 规则触发系统启动")
+    logger.info("=" * 80)
+
+    # -----------------------------------------------------------------------
+    # 1. 初始化核心组件
+    # -----------------------------------------------------------------------
+
+    # 创建全局事件总线
+    event_bus = EventBus()
+
+    # 创建全局上下文（存储宏观数据）
+    global_context = GlobalContext()
+    global_context.set("vix", 18.5)  # 波动率指数
+    global_context.set("total_nav", 10_000_000.0)  # 总净值 1000 万
+    global_context.set("target_weights", {
+        "600519.SH": 0.30,  # 贵州茅台目标权重 30%
+        "000858.SZ": 0.25,  # 五粮液目标权重 25%
+    })
+
+    # 创建本地上下文（品种级数据）
+    local_context_maotai = LocalContext(
+        symbol="600519.SH",
+        window_size=100,
+        indicator_registry=DEFAULT_INDICATOR_REGISTRY,
+    )
+    local_context_maotai.update_weight(0.28)  # 当前持仓权重 28%
+
+    local_context_wuliangye = LocalContext(
+        symbol="000858.SZ",
+        window_size=100,
+        indicator_registry=DEFAULT_INDICATOR_REGISTRY,
+    )
+    local_context_wuliangye.update_weight(0.32)  # 当前持仓权重 32%（偏离 +7%）
+
+    # -----------------------------------------------------------------------
+    # 2. 定义 AST 规则树
+    # -----------------------------------------------------------------------
+
+    # 规则：(RSI < 30) AND (close > SMA)
+    # 语义：超卖且价格突破均线，视为买入机会
+    rule_tree_maotai = build_and(
+        build_comparison("rsi", Operator.LT, 30),
+        build_comparison("close", Operator.GT, "sma"),  # 注意：这里 "sma" 会从 Context 读取
+    )
+
+    logger.info(f"规则树（贵州茅台）: {rule_tree_maotai}")
+
+    # -----------------------------------------------------------------------
+    # 3. 注册触发器
+    # -----------------------------------------------------------------------
+
+    # 3.1 AST 规则触发器（监听贵州茅台的 BarEvent）
+    ast_trigger = create_ast_trigger(
+        event_bus=event_bus,
+        trigger_id="AST_MAOTAI_RSI_SMA",
+        rule_tree=rule_tree_maotai,
+        local_context=local_context_maotai,
+        rule_id="RULE_001",
+    )
+
+    # 3.2 持仓偏离触发器（监听五粮液的 TickEvent）
+    deviation_trigger = create_deviation_trigger(
+        event_bus=event_bus,
+        trigger_id="DEVIATION_WULIANGYE",
+        local_context=local_context_wuliangye,
+        global_context=global_context,
+        threshold=0.05,  # 偏离阈值 5%
+    )
+
+    # 3.3 定时触发器（监听每日 14:30 的资金分配指令）
+    cron_trigger = create_cron_trigger(
+        event_bus=event_bus,
+        trigger_id="CRON_DAILY_ALLOCATION",
+        timer_id="DAILY_REBALANCE_1430",
+    )
+
+    # -----------------------------------------------------------------------
+    # 4. 注册信号处理器（下游业务逻辑）
+    # -----------------------------------------------------------------------
+
+    # 订阅 SignalEvent，根据 signal_type 路由到不同的处理器
+    def signal_router(signal: SignalEvent) -> None:
+        """信号路由器：根据信号类型分发到对应处理器。"""
+        from events import SignalType
+
+        if signal.signal_type == SignalType.TRADE_OPPORTUNITY:
+            on_trade_opportunity(signal)
+        elif signal.signal_type == SignalType.REBALANCE_TRIGGER:
+            on_rebalance_trigger(signal)
+        elif signal.signal_type == SignalType.FUND_ALLOCATION:
+            on_fund_allocation(signal)
+        else:
+            logger.warning(f"Unknown signal type: {signal.signal_type}")
+
+    event_bus.subscribe(SignalEvent, signal_router)
+
+    # -----------------------------------------------------------------------
+    # 5. 模拟事件流
+    # -----------------------------------------------------------------------
+
+    logger.info("\n" + "=" * 80)
+    logger.info("开始模拟事件流")
+    logger.info("=" * 80 + "\n")
+
+    # 5.1 模拟贵州茅台的 K 线数据（触发 AST 规则）
+    logger.info(">>> 发布贵州茅台 BarEvent（模拟 RSI < 30 且 close > SMA 的场景）")
+
+    # 先填充一些历史 Bar（用于计算 SMA 和 RSI）
+    for i in range(30):
+        bar = BarEvent(
+            symbol="600519.SH",
+            freq="1m",
+            open=1800.0 + i,
+            high=1810.0 + i,
+            low=1790.0 + i,
+            close=1800.0 + i,
+            volume=1000,
+            bar_time=datetime(2026, 3, 27, 9, 30 + i),
+        )
+        event_bus.publish(bar)
+
+    # 发布触发规则的 Bar（close=1850, 假设此时 RSI=28, SMA=1820）
+    trigger_bar = BarEvent(
+        symbol="600519.SH",
+        freq="1m",
+        open=1840.0,
+        high=1860.0,
+        low=1835.0,
+        close=1850.0,  # 高于 SMA
+        volume=2000,
+        bar_time=datetime(2026, 3, 27, 10, 0),
+    )
+    event_bus.publish(trigger_bar)
+
+    # 5.2 模拟五粮液的 Tick 数据（触发持仓偏离）
+    logger.info("\n>>> 发布五粮液 TickEvent（当前权重 32%，目标 25%，偏离 7%）")
+    tick = TickEvent(
+        symbol="000858.SZ",
+        last_price=180.5,
+        bid=180.4,
+        ask=180.6,
+        volume=500,
+    )
+    event_bus.publish(tick)
+
+    # 5.3 模拟定时器事件（触发资金分配）
+    logger.info("\n>>> 发布 TimerEvent（每日 14:30 资金分配）")
+    timer = TimerEvent(
+        timer_id="DAILY_REBALANCE_1430",
+        fired_at=datetime(2026, 3, 27, 14, 30),
+    )
+    event_bus.publish(timer)
+
+    # -----------------------------------------------------------------------
+    # 6. 系统统计
+    # -----------------------------------------------------------------------
+
+    logger.info("\n" + "=" * 80)
+    logger.info("系统统计")
+    logger.info("=" * 80)
+    logger.info(f"BarEvent 订阅者数量: {event_bus.get_subscriber_count(BarEvent)}")
+    logger.info(f"TickEvent 订阅者数量: {event_bus.get_subscriber_count(TickEvent)}")
+    logger.info(f"TimerEvent 订阅者数量: {event_bus.get_subscriber_count(TimerEvent)}")
+    logger.info(f"SignalEvent 订阅者数量: {event_bus.get_subscriber_count(SignalEvent)}")
+
+    logger.info("\n" + "=" * 80)
+    logger.info("CEP 规则触发系统演示完成")
+    logger.info("=" * 80)
+
+
+if __name__ == "__main__":
+    main()
