@@ -21,7 +21,8 @@ from typing import Any
 class SignalType(str, Enum):
     """SignalEvent 的语义分类，下游 Handler 按此路由处理逻辑。"""
     TRADE_OPPORTUNITY  = "TRADE_OPPORTUNITY"   # AST 规则命中，存在交易机会
-    REBALANCE_TRIGGER  = "REBALANCE_TRIGGER"   # 持仓偏离超阈值，需再平衡
+    REBALANCE_TRIGGER  = "REBALANCE_TRIGGER"   # 持仓偏离超阈值，需再平衡（已废弃，使用 REBALANCE_REQUEST）
+    REBALANCE_REQUEST  = "REBALANCE_REQUEST"   # 再平衡请求（统一的再平衡信号）
     FUND_ALLOCATION    = "FUND_ALLOCATION"     # 定时资金分配指令
     RISK_ALERT         = "RISK_ALERT"          # 风控预警（预留）
 
