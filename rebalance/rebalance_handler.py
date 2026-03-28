@@ -20,10 +20,10 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from event_bus import EventBus
-from events import SignalEvent, SignalType
-from portfolio_context import PortfolioContext
-from rebalance_engine import RebalanceEngine, RebalanceOrder, RebalanceResult
+from cep.core.event_bus import EventBus
+from cep.core.events import SignalEvent, SignalType
+from rebalance.portfolio_context import PortfolioContext
+from rebalance.rebalance_engine import RebalanceEngine, RebalanceOrder, RebalanceResult
 
 logger = logging.getLogger(__name__)
 

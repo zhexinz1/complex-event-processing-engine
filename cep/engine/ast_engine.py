@@ -27,7 +27,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Callable
 
-from context import LocalContext, GlobalContext
+from cep.core.context import LocalContext, GlobalContext
 
 logger = logging.getLogger(__name__)
 

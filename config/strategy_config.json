@@ -1,0 +1,57 @@
+{
+  "target_weights": {
+    "strategy_001": {
+      "AU2606": 0.26,
+      "P2609": 0.17,
+      "RB2610": 0.15,
+      "HC2610": 0.12,
+      "I2609": 0.10,
+      "JM2609": 0.10,
+      "J2609": 0.10
+    }
+  },
+  "contract_info": {
+    "AU2606": {
+      "multiplier": 1000,
+      "min_tick": 0.05,
+      "margin_rate": 0.08,
+      "exchange": "SHFE"
+    },
+    "P2609": {
+      "multiplier": 10,
+      "min_tick": 2,
+      "margin_rate": 0.08,
+      "exchange": "DCE"
+    },
+    "RB2610": {
+      "multiplier": 10,
+      "min_tick": 1,
+      "margin_rate": 0.09,
+      "exchange": "SHFE"
+    },
+    "HC2610": {
+      "multiplier": 10,
+      "min_tick": 1,
+      "margin_rate": 0.09,
+      "exchange": "SHFE"
+    },
+    "I2609": {
+      "multiplier": 100,
+      "min_tick": 0.5,
+      "margin_rate": 0.08,
+      "exchange": "DCE"
+    },
+    "JM2609": {
+      "multiplier": 60,
+      "min_tick": 0.5,
+      "margin_rate": 0.08,
+      "exchange": "DCE"
+    },
+    "J2609": {
+      "multiplier": 100,
+      "min_tick": 0.5,
+      "margin_rate": 0.08,
+      "exchange": "DCE"
+    }
+  }
+}

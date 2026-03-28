@@ -13,24 +13,24 @@ example_usage.py — 系统集成示例
 import logging
 from datetime import datetime
 
-from ast_engine import (
+from cep.engine.ast_engine import (
     Operator,
     build_and,
     build_comparison,
 )
-from context import (
+from cep.core.context import (
     DEFAULT_INDICATOR_REGISTRY,
     GlobalContext,
     LocalContext,
 )
-from event_bus import EventBus
-from events import (
+from cep.core.event_bus import EventBus
+from cep.core.events import (
     BarEvent,
     SignalEvent,
     TickEvent,
     TimerEvent,
 )
-from triggers import (
+from cep.triggers.triggers import (
     create_ast_trigger,
     create_cron_trigger,
     create_deviation_trigger,

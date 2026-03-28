@@ -21,7 +21,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from portfolio_context import ContractInfo, PortfolioContext, Position
+from rebalance.portfolio_context import ContractInfo, PortfolioContext, Position
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ import logging
 from collections import defaultdict
 from typing import Callable, Type, TypeVar
 
-from events import BaseEvent
+from cep.core.events import BaseEvent
 
 # ---------------------------------------------------------------------------
 # 类型别名

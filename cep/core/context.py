@@ -19,7 +19,7 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Callable, Deque, Optional
 
-from events import BarEvent, TickEvent
+from cep.core.events import BarEvent, TickEvent
 
 logger = logging.getLogger(__name__)
 
