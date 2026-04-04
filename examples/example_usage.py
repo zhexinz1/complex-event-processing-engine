@@ -11,7 +11,7 @@ example_usage.py — 系统集成示例
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from cep.engine.ast_engine import (
     Operator,
@@ -163,7 +163,7 @@ def main() -> None:
     # -----------------------------------------------------------------------
 
     # 3.1 AST 规则触发器（监听贵州茅台的 BarEvent）
-    create_ast_trigger(
+    ast_trigger = create_ast_trigger(
         event_bus=event_bus,
         trigger_id="AST_MAOTAI_RSI_SMA",
         rule_tree=rule_tree_maotai,
@@ -172,7 +172,7 @@ def main() -> None:
     )
 
     # 3.2 持仓偏离触发器（监听五粮液的 TickEvent）
-    create_deviation_trigger(
+    deviation_trigger = create_deviation_trigger(
         event_bus=event_bus,
         trigger_id="DEVIATION_WULIANGYE",
         local_context=local_context_wuliangye,
@@ -181,11 +181,14 @@ def main() -> None:
     )
 
     # 3.3 定时触发器（监听每日 14:30 的资金分配指令）
-    create_cron_trigger(
+    cron_trigger = create_cron_trigger(
         event_bus=event_bus,
         trigger_id="CRON_DAILY_ALLOCATION",
         timer_id="DAILY_REBALANCE_1430",
     )
+
+    # EventBus 使用 weakref 保存订阅者；示例中必须显式持有触发器实例。
+    triggers = [ast_trigger, deviation_trigger, cron_trigger]
 
     # -----------------------------------------------------------------------
     # 4. 注册信号处理器（下游业务逻辑）
@@ -216,34 +219,33 @@ def main() -> None:
     logger.info("=" * 80 + "\n")
 
     # 5.1 模拟贵州茅台的 K 线数据（触发 AST 规则）
-    logger.info(">>> 发布贵州茅台 BarEvent（模拟 RSI < 30 且 close > SMA 的场景）")
+    logger.info(">>> 发布贵州茅台 BarEvent（使用一组可触发 RSI < 30 且 close > SMA 的 mock 数据）")
 
-    # 先填充一些历史 Bar（用于计算 SMA 和 RSI）
-    for i in range(30):
+    closes = [
+        100.0, 99.94, 102.96, 106.85, 109.97, 106.2, 109.07, 107.78,
+        106.8, 107.9, 110.91, 114.19, 112.0, 113.62, 117.2, 121.02,
+        124.19, 120.4, 119.14, 118.23, 115.76, 115.51, 115.13, 116.37,
+        116.75, 117.17, 115.16, 115.39, 115.39, 116.77, 117.07,
+    ]
+
+    start_time = datetime(2026, 3, 27, 9, 30)
+    prev_close = closes[0]
+    for i, close in enumerate(closes):
+        bar_time = start_time + timedelta(minutes=i)
         bar = BarEvent(
             symbol="600519.SH",
             freq="1m",
-            open=1800.0 + i,
-            high=1810.0 + i,
-            low=1790.0 + i,
-            close=1800.0 + i,
-            volume=1000,
-            bar_time=datetime(2026, 3, 27, 9, 30 + i),
+            open=prev_close,
+            high=max(prev_close, close) + 0.2,
+            low=min(prev_close, close) - 0.2,
+            close=close,
+            volume=1000 + i * 10,
+            turnover=close * (1000 + i * 10),
+            bar_time=bar_time,
+            timestamp=bar_time,
         )
         event_bus.publish(bar)
-
-    # 发布触发规则的 Bar（close=1850, 假设此时 RSI=28, SMA=1820）
-    trigger_bar = BarEvent(
-        symbol="600519.SH",
-        freq="1m",
-        open=1840.0,
-        high=1860.0,
-        low=1835.0,
-        close=1850.0,  # 高于 SMA
-        volume=2000,
-        bar_time=datetime(2026, 3, 27, 10, 0),
-    )
-    event_bus.publish(trigger_bar)
+        prev_close = close
 
     # 5.2 模拟五粮液的 Tick 数据（触发持仓偏离）
     logger.info("\n>>> 发布五粮液 TickEvent（当前权重 32%，目标 25%，偏离 7%）")
@@ -275,6 +277,7 @@ def main() -> None:
     logger.info(f"TickEvent 订阅者数量: {event_bus.get_subscriber_count(TickEvent)}")
     logger.info(f"TimerEvent 订阅者数量: {event_bus.get_subscriber_count(TimerEvent)}")
     logger.info(f"SignalEvent 订阅者数量: {event_bus.get_subscriber_count(SignalEvent)}")
+    logger.info(f"保持存活的触发器数量: {len(triggers)}")
 
     logger.info("\n" + "=" * 80)
     logger.info("CEP 规则触发系统演示完成")

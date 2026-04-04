@@ -27,6 +27,29 @@ class SignalType(str, Enum):
     RISK_ALERT         = "RISK_ALERT"          # 风控预警（预留）
 
 
+class OrderSide(str, Enum):
+    """订单方向。"""
+
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+class OrderType(str, Enum):
+    """订单类型。"""
+
+    MARKET = "MARKET"
+    LIMIT = "LIMIT"
+
+
+class OrderStatus(str, Enum):
+    """订单状态。"""
+
+    SUBMITTED = "SUBMITTED"
+    FILLED = "FILLED"
+    CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
+
+
 # ---------------------------------------------------------------------------
 # 基类
 # ---------------------------------------------------------------------------
@@ -158,3 +181,44 @@ class SignalEvent(BaseEvent):
     signal_type: SignalType = SignalType.TRADE_OPPORTUNITY
     payload:     dict[str, Any] = field(default_factory=dict)
     rule_id:     str        = ""
+
+
+@dataclass(frozen=True)
+class OrderEvent(BaseEvent):
+    """
+    回测/实盘统一订单事件。
+
+    订单事件用于表达“订单已提交/已成交/已撤销”等执行链路状态，
+    以便下游账本、绩效模块和调试工具统一监听。
+    """
+
+    order_id: str = ""
+    symbol: str = ""
+    side: OrderSide = OrderSide.BUY
+    order_type: OrderType = OrderType.MARKET
+    status: OrderStatus = OrderStatus.SUBMITTED
+    quantity: float = 0.0
+    price: float = 0.0
+    source: str = ""
+    signal_event_id: str = ""
+    payload: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class TradeEvent(BaseEvent):
+    """
+    成交事件。
+
+    TradeEvent 是对订单执行结果的最终表达，组合账本应以该事件为准更新仓位和资金。
+    """
+
+    trade_id: str = ""
+    order_id: str = ""
+    symbol: str = ""
+    side: OrderSide = OrderSide.BUY
+    quantity: float = 0.0
+    price: float = 0.0
+    commission: float = 0.0
+    source: str = ""
+    signal_event_id: str = ""
+    payload: dict[str, Any] = field(default_factory=dict)

@@ -1,0 +1,119 @@
+"""回测引擎编排层。"""
+
+from __future__ import annotations
+
+from typing import Any, Iterable, Optional
+
+from cep.core.context import DEFAULT_INDICATOR_REGISTRY, LocalContext
+from cep.core.event_bus import EventBus
+from cep.core.events import BarEvent, TickEvent
+from cep.engine.ast_engine import Node
+from cep.triggers.triggers import AstRuleTrigger
+
+from .aggregation import MultiTimeframeBarAggregator
+from .broker import SimulatedBroker
+from .models import BacktestResult
+from .parser import HistoricalDataParser
+from .portfolio import PortfolioLedger
+from .queue import Dispatcher, EventQueue
+from .recorder import PerformanceRecorder
+
+
+class BacktestEngine:
+    """真实事件驱动语义下的回测引擎。"""
+
+    def __init__(
+        self,
+        initial_cash: float = 1_000_000.0,
+        base_bar_freq: str = "1m",
+        aggregate_freqs: Optional[list[str]] = None,
+        contract_multipliers: Optional[dict[str, float]] = None,
+        default_order_quantity: float = 1.0,
+        commission_rate: float = 0.0,
+    ) -> None:
+        self.event_bus = EventBus()
+        self.event_queue = EventQueue()
+        self.parser = HistoricalDataParser()
+        self.dispatcher = Dispatcher(self.event_bus)
+        self.portfolio = PortfolioLedger(
+            event_bus=self.event_bus,
+            initial_cash=initial_cash,
+            contract_multipliers=contract_multipliers,
+        )
+        self.recorder = PerformanceRecorder(self.event_bus, self.portfolio)
+        self.broker = SimulatedBroker(
+            event_bus=self.event_bus,
+            default_quantity=default_order_quantity,
+            commission_rate=commission_rate,
+        )
+        self.aggregator = MultiTimeframeBarAggregator(
+            event_bus=self.event_bus,
+            base_freq=base_bar_freq,
+            target_freqs=aggregate_freqs,
+        )
+
+        # EventBus 保存弱引用，必须显式持有这些对象。
+        self._components = [self.portfolio, self.recorder, self.broker, self.aggregator]
+        self._triggers: list[AstRuleTrigger] = []
+        self._contexts: dict[str, LocalContext] = {}
+
+    def register_ast_rule(
+        self,
+        symbol: str,
+        rule_tree: Node,
+        trigger_id: str,
+        rule_id: str = "",
+        bar_freq: str | None = "1m",
+        window_size: int = 100,
+    ) -> AstRuleTrigger:
+        """注册一个基于 AST 的回测规则。"""
+        local_context = LocalContext(
+            symbol=symbol,
+            window_size=window_size,
+            indicator_registry=DEFAULT_INDICATOR_REGISTRY,
+        )
+        trigger = AstRuleTrigger(
+            event_bus=self.event_bus,
+            trigger_id=trigger_id,
+            rule_tree=rule_tree,
+            local_context=local_context,
+            rule_id=rule_id or trigger_id,
+            bar_freq=bar_freq,
+        )
+        trigger.register()
+
+        self._contexts[symbol] = local_context
+        self._triggers.append(trigger)
+        return trigger
+
+    def ingest_bars(self, raw_bars: Iterable[BarEvent | dict[str, Any]]) -> None:
+        """导入历史 Bar 到事件队列。"""
+        self.event_queue.extend(self.parser.parse_bars(raw_bars))
+
+    def get_context(self, symbol: str) -> Optional[LocalContext]:
+        """返回指定标的对应的 LocalContext。"""
+        return self._contexts.get(symbol)
+
+    def run(self) -> BacktestResult:
+        """运行回测。"""
+        market_events_processed = 0
+
+        while not self.event_queue.empty():
+            event = self.dispatcher.dispatch_next(self.event_queue)
+
+            if isinstance(event, (BarEvent, TickEvent)):
+                market_events_processed += 1
+                self.recorder.capture_snapshot(event.timestamp)
+
+        return BacktestResult(
+            market_events_processed=market_events_processed,
+            signals=list(self.recorder.signals),
+            orders=list(self.recorder.orders),
+            trades=list(self.recorder.trades),
+            snapshots=list(self.recorder.snapshots),
+            final_cash=self.portfolio.cash,
+            final_market_value=self.portfolio.market_value,
+            final_equity=self.portfolio.equity,
+            realized_pnl=self.portfolio.realized_pnl,
+            positions=self.portfolio.snapshot_positions(),
+        )
