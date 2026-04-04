@@ -73,14 +73,25 @@ class PortfolioContext:
 
     核心功能：
       1. 管理目标权重配置
-      2. 管理当前持仓信息
+      2. 管理当前持仓信息（支持从外部数据源同步）
       3. 管理合约基础信息
       4. 管理账户资金信息
       5. 管理最新行情价格
+
+    持仓数据源：
+      - 可以从迅投 GT API、CTP API 等外部系统同步持仓
+      - 使用 set_position_source() 设置数据源
+      - 使用 sync_positions_from_source() 同步持仓
     """
 
-    def __init__(self) -> None:
-        """初始化组合上下文。"""
+    def __init__(self, position_source=None) -> None:
+        """
+        初始化组合上下文。
+
+        Args:
+            position_source: 持仓数据源（可选），用于从外部系统同步持仓
+                           例如：XunTouPositionSource, CTPPositionSource
+        """
         # 目标权重配置：{symbol: weight}
         self._target_weights: dict[str, float] = {}
 
@@ -97,6 +108,9 @@ class PortfolioContext:
         self._total_nav: float = 0.0          # 总净值
         self._available_cash: float = 0.0     # 可用资金
         self._margin_used: float = 0.0        # 已用保证金
+
+        # 持仓数据源（用于从外部系统同步持仓）
+        self._position_source = position_source
 
         logger.info("PortfolioContext initialized.")
 
@@ -126,9 +140,57 @@ class PortfolioContext:
     # 持仓管理
     # -----------------------------------------------------------------------
 
+    def set_position_source(self, position_source) -> None:
+        """
+        设置持仓数据源。
+
+        Args:
+            position_source: 持仓数据源对象（如 XunTouPositionSource）
+        """
+        self._position_source = position_source
+        logger.info(f"Position source set: {type(position_source).__name__}")
+
+    def sync_positions_from_source(self) -> bool:
+        """
+        从外部数据源同步持仓信息。
+
+        从迅投 GT API、CTP API 等外部系统拉取最新持仓，
+        并更新到 PortfolioContext 中。
+
+        Returns:
+            同步是否成功
+        """
+        if not self._position_source:
+            logger.warning("No position source configured, cannot sync positions")
+            return False
+
+        try:
+            # 从数据源获取所有持仓
+            positions = self._position_source.fetch_positions()
+
+            # 更新到上下文
+            self._positions = positions
+            logger.info(f"Synced {len(positions)} positions from source")
+
+            # 同步账户信息
+            account_info = self._position_source.fetch_account_info()
+            self._total_nav = account_info.get('total_nav', 0.0)
+            self._available_cash = account_info.get('available_cash', 0.0)
+            self._margin_used = account_info.get('margin_used', 0.0)
+            logger.info(
+                f"Synced account info: NAV={self._total_nav:,.2f}, "
+                f"Available={self._available_cash:,.2f}, Margin={self._margin_used:,.2f}"
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to sync positions from source: {e}")
+            return False
+
     def update_position(self, position: Position) -> None:
         """
-        更新持仓信息。
+        更新持仓信息（手动更新，不从数据源同步）。
 
         Args:
             position: 持仓对象
@@ -225,7 +287,7 @@ class PortfolioContext:
 
     def calculate_current_weight(self, symbol: str) -> float:
         """
-        计算指定品种的当前权重。
+        计算指定品种的当前权重（基于最新价格动态计算）。
 
         Args:
             symbol: 合约代码
@@ -240,11 +302,21 @@ class PortfolioContext:
         if not position:
             return 0.0
 
-        return position.market_value / self._total_nav
+        # 使用最新价格动态计算市值
+        latest_price = self._latest_prices.get(symbol)
+        if latest_price is None:
+            # 如果没有最新价格，使用持仓记录的市值
+            return position.market_value / self._total_nav
+
+        contract = self._contract_info.get(symbol)
+        multiplier = contract.multiplier if contract else 1.0
+
+        current_market_value = position.quantity * latest_price * multiplier
+        return current_market_value / self._total_nav
 
     def calculate_all_current_weights(self) -> dict[str, float]:
         """
-        计算所有品种的当前权重。
+        计算所有品种的当前权重（基于最新价格动态计算）。
 
         Returns:
             当前权重字典 {symbol: weight}
@@ -252,7 +324,19 @@ class PortfolioContext:
         if self._total_nav <= 0:
             return {}
 
-        return {
-            symbol: pos.market_value / self._total_nav
-            for symbol, pos in self._positions.items()
-        }
+        weights = {}
+        for symbol, pos in self._positions.items():
+            # 使用最新价格动态计算市值
+            latest_price = self._latest_prices.get(symbol)
+            if latest_price is None:
+                # 如果没有最新价格，使用持仓记录的市值
+                weights[symbol] = pos.market_value / self._total_nav
+                continue
+
+            contract = self._contract_info.get(symbol)
+            multiplier = contract.multiplier if contract else 1.0
+
+            current_market_value = pos.quantity * latest_price * multiplier
+            weights[symbol] = current_market_value / self._total_nav
+
+        return weights

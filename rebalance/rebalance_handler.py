@@ -176,7 +176,7 @@ class RebalanceHandler:
         new_market_value = new_quantity * order.estimated_price * contract_info.multiplier
 
         # 更新持仓
-        from portfolio_context import Position
+        from rebalance.portfolio_context import Position
         new_position = Position(
             symbol=order.symbol,
             quantity=new_quantity,

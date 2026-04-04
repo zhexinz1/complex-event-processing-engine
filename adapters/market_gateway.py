@@ -15,12 +15,22 @@ market_gateway.py — 行情网关适配器
 from __future__ import annotations
 
 import logging
+import os
+import threading
 from abc import ABC, abstractmethod
+from dataclasses import dataclass as _dataclass
 from datetime import datetime
 from typing import Callable, Optional
 
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent, BarEvent
+
+try:
+    from openctp_ctp import mdapi
+    _CTP_AVAILABLE = True
+except ImportError:
+    mdapi = None
+    _CTP_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -100,16 +110,106 @@ class MarketGateway(ABC):
 # CTP 行情网关（期货）
 # ---------------------------------------------------------------------------
 
+@_dataclass
+class _BarAccumulator:
+    """每个订阅合约维护一个实例，用差分法将 CTP 累计量转换为分钟增量。"""
+    symbol: str
+    open: float = 0.0
+    high: float = 0.0
+    low: float = 0.0
+    close: float = 0.0
+    volume: int = 0
+    turnover: float = 0.0
+    bar_minute: Optional[datetime] = None  # 当前 Bar 所属分钟（秒/微秒置 0）
+    last_cum_vol: int = 0                  # 上一 Tick 的累计成交量
+    last_cum_to: float = 0.0              # 上一 Tick 的累计成交额
+    initialized: bool = False
+
+
+class CTPMdSpi(mdapi.CThostFtdcMdSpi if _CTP_AVAILABLE else object):
+    """
+    CTP 行情回调处理器（SPI）。
+
+    职责纯粹：解码 CTP 原始回调，通过注入的回调函数转发给 Gateway。
+    不直接操作 EventBus，保持职责分离。
+    """
+
+    def __init__(
+        self,
+        api: object,
+        broker_id: str,
+        user_id: str,
+        password: str,
+        login_event: threading.Event,
+        on_tick_callback: Callable,
+    ):
+        if _CTP_AVAILABLE:
+            super().__init__()
+        self._api = api
+        self._broker_id = broker_id
+        self._user_id = user_id
+        self._password = password
+        self._login_event = login_event
+        self._on_tick_callback = on_tick_callback
+        self.login_success: bool = False
+
+    def OnFrontConnected(self) -> None:
+        """前置连接成功，立即发起登录。"""
+        logger.info("CTP: 前置连接成功，发起登录...")
+        req = mdapi.CThostFtdcReqUserLoginField()
+        req.BrokerID = self._broker_id
+        req.UserID = self._user_id
+        req.Password = self._password
+        self._api.ReqUserLogin(req, 0)
+
+    def OnFrontDisconnected(self, nReason: int) -> None:
+        """前置断开（CTP 会自动重连，无需手动处理）。"""
+        logger.warning(f"CTP: 前置断开，原因码={nReason}，等待自动重连...")
+        self.login_success = False
+
+    def OnRspUserLogin(self, pRspUserLogin, pRspInfo, nRequestID: int, bIsLast: bool) -> None:
+        """登录响应：设置结果标志并解除 connect() 阻塞。"""
+        if pRspInfo is not None and pRspInfo.ErrorID != 0:
+            logger.error(f"CTP: 登录失败，ErrorID={pRspInfo.ErrorID}，Msg={pRspInfo.ErrorMsg}")
+            self.login_success = False
+        else:
+            logger.info("CTP: 登录成功")
+            self.login_success = True
+        self._login_event.set()
+
+    def OnRspSubMarketData(self, pSpecificInstrument, pRspInfo, nRequestID: int, bIsLast: bool) -> None:
+        if pRspInfo is not None and pRspInfo.ErrorID != 0:
+            logger.error(f"CTP: 订阅失败 {pSpecificInstrument.InstrumentID}，Msg={pRspInfo.ErrorMsg}")
+        else:
+            logger.info(f"CTP: 订阅成功 {pSpecificInstrument.InstrumentID}")
+
+    def OnRspUnSubMarketData(self, pSpecificInstrument, pRspInfo, nRequestID: int, bIsLast: bool) -> None:
+        if pRspInfo is not None and pRspInfo.ErrorID != 0:
+            logger.error(f"CTP: 取消订阅失败 {pSpecificInstrument.InstrumentID}，Msg={pRspInfo.ErrorMsg}")
+        else:
+            logger.info(f"CTP: 取消订阅成功 {pSpecificInstrument.InstrumentID}")
+
+    def OnRtnDepthMarketData(self, pDepthMarketData) -> None:
+        """深度行情回调：直接转发原始数据给 Gateway 处理。"""
+        try:
+            self._on_tick_callback(pDepthMarketData)
+        except Exception:
+            logger.exception("CTP: _on_tick_callback 处理异常")
+
+
 class CTPMarketGateway(MarketGateway):
     """
     CTP 行情网关实现。
 
-    对接上期技术 CTP 接口，用于期货行情接入。
+    对接上期技术 CTP 接口（通过 openctp-ctp 库），用于期货行情接入。
+    支持 Tick 实时推送和自动聚合为 1 分钟 Bar。
 
-    TODO: 实现 CTP API 对接
-    - 引入 openctp 或 vnpy 的 CTP 封装
-    - 实现 OnRtnDepthMarketData 回调
-    - 处理断线重连逻辑
+    连接流程：
+      主线程调用 connect() → 启动子线程运行 api.Init()（阻塞）
+      → OnFrontConnected → ReqUserLogin → OnRspUserLogin → login_event.set()
+      → connect() 解除阻塞，返回登录结果
+
+    注意：需要先安装 `pip install openctp-ctp`
     """
 
     def __init__(
@@ -118,7 +218,10 @@ class CTPMarketGateway(MarketGateway):
         front_addr: str,
         broker_id: str,
         user_id: str,
-        password: str
+        password: str,
+        app_id: str = "simnow_client_test",
+        auth_code: str = "0000000000000000",
+        flow_path: str = "./ctp_flow/",
     ):
         """
         初始化 CTP 行情网关。
@@ -129,61 +232,265 @@ class CTPMarketGateway(MarketGateway):
             broker_id:   经纪商代码
             user_id:     用户账号
             password:    密码
+            app_id:      客户端应用 ID（SimNow 用默认值即可）
+            auth_code:   客户端认证码（SimNow 用默认值即可）
+            flow_path:   CTP 流文件存放目录
         """
         super().__init__(event_bus)
         self.front_addr = front_addr
         self.broker_id = broker_id
         self.user_id = user_id
         self.password = password
+        self.app_id = app_id
+        self.auth_code = auth_code
+        self.flow_path = flow_path
 
-        # TODO: 初始化 CTP API
-        # self.md_api = MdApi()
+        self._api: Optional[object] = None
+        self._spi: Optional[CTPMdSpi] = None
+        self._api_thread: Optional[threading.Thread] = None
+        self._login_event: threading.Event = threading.Event()
+        self._bar_accumulators: dict[str, _BarAccumulator] = {}
+        self._bar_lock: threading.Lock = threading.Lock()
+        self._connected: bool = False
+
+        if not _CTP_AVAILABLE:
+            logger.warning("openctp-ctp 未安装，CTPMarketGateway 将不可用。请运行: pip install openctp-ctp")
 
         logger.info(f"CTPMarketGateway initialized: {front_addr}")
 
     def connect(self) -> bool:
-        """连接到 CTP 行情服务器。"""
-        # TODO: 实现 CTP 连接逻辑
-        logger.warning("CTP connection not implemented yet")
-        return False
+        """
+        连接到 CTP 行情服务器（同步，最多等待 10 秒）。
+
+        Returns:
+            True 表示连接并登录成功，False 表示失败或超时。
+        """
+        if not _CTP_AVAILABLE:
+            logger.error("openctp-ctp 未安装，无法连接")
+            return False
+
+        os.makedirs(self.flow_path, exist_ok=True)
+        self._login_event.clear()
+
+        self._api = mdapi.CThostFtdcMdApi.CreateFtdcMdApi(self.flow_path)
+        self._spi = CTPMdSpi(
+            api=self._api,
+            broker_id=self.broker_id,
+            user_id=self.user_id,
+            password=self.password,
+            login_event=self._login_event,
+            on_tick_callback=self._on_depth_market_data,
+        )
+        self._api.RegisterFront(self.front_addr)
+        self._api.RegisterSpi(self._spi)
+
+        # api.Init() 会阻塞，必须在子线程中运行
+        self._api_thread = threading.Thread(target=self._api.Init, daemon=True, name="ctp-md-thread")
+        self._api_thread.start()
+
+        if not self._login_event.wait(timeout=10):
+            logger.error("CTP: 登录超时（10 秒），请检查前置地址和网络")
+            return False
+
+        self._connected = self._spi.login_success
+        return self._connected
 
     def disconnect(self) -> None:
-        """断开 CTP 连接。"""
-        # TODO: 实现断开逻辑
-        logger.info("CTP disconnected")
+        """断开 CTP 连接，释放 API 资源。"""
+        if self._api is not None:
+            try:
+                self._api.Release()
+            except Exception:
+                logger.exception("CTP: Release 异常")
+        self._connected = False
+        logger.info("CTP: 已断开连接")
 
     def subscribe(self, symbols: list[str]) -> bool:
-        """订阅 CTP 行情。"""
-        # TODO: 调用 CTP API 订阅
-        # self.md_api.SubscribeMarketData(symbols)
+        """
+        订阅 CTP 行情并初始化 Bar 聚合器。
+
+        Args:
+            symbols: 合约代码列表，如 ["AU2506", "RB2510"]
+
+        Returns:
+            True 表示请求已发送（实际订阅结果见 OnRspSubMarketData 日志）
+        """
+        if not self._connected:
+            logger.error("CTP: 未连接，无法订阅")
+            return False
+
+        # 初始化每个合约的 Bar 聚合器
+        with self._bar_lock:
+            for sym in symbols:
+                if sym not in self._bar_accumulators:
+                    self._bar_accumulators[sym] = _BarAccumulator(symbol=sym)
+
         self._subscribed_symbols.update(symbols)
-        logger.info(f"Subscribed to CTP market data: {symbols}")
+        sym_bytes = [s.encode("utf-8") for s in symbols]
+        self._api.SubscribeMarketData(sym_bytes, len(sym_bytes))
+        logger.info(f"CTP: 已发送订阅请求: {symbols}")
         return True
 
     def unsubscribe(self, symbols: list[str]) -> bool:
-        """取消订阅 CTP 行情。"""
-        # TODO: 调用 CTP API 取消订阅
-        self._subscribed_symbols.difference_update(symbols)
-        logger.info(f"Unsubscribed from CTP market data: {symbols}")
-        return True
-
-    def _on_tick(self, data: dict) -> None:
         """
-        CTP Tick 回调处理。
+        取消订阅 CTP 行情并清理 Bar 聚合器。
 
         Args:
-            data: CTP 行情数据字典
+            symbols: 合约代码列表
+
+        Returns:
+            True 表示请求已发送
         """
+        if not self._connected:
+            logger.error("CTP: 未连接，无法取消订阅")
+            return False
+
+        with self._bar_lock:
+            for sym in symbols:
+                self._bar_accumulators.pop(sym, None)
+
+        self._subscribed_symbols.difference_update(symbols)
+        sym_bytes = [s.encode("utf-8") for s in symbols]
+        self._api.UnSubscribeMarketData(sym_bytes, len(sym_bytes))
+        logger.info(f"CTP: 已发送取消订阅请求: {symbols}")
+        return True
+
+    def _on_depth_market_data(self, d) -> None:
+        """
+        处理 CTP OnRtnDepthMarketData 原始回调。
+
+        步骤一：解析并发布 TickEvent（成交量取差分增量）
+        步骤二：将 Tick 聚合为 1 分钟 BarEvent
+        """
+        symbol: str = d.InstrumentID
+        last_price: float = d.LastPrice
+
+        # 过滤无效价格（CTP 用 1.7976931348623157e+308 表示无效值）
+        if last_price <= 0 or last_price > 1e15:
+            return
+
+        # --- 解析时间 ---
+        try:
+            # TradingDay: "20240101"，UpdateTime: "09:30:00"，UpdateMillisec: 500
+            trading_day: str = d.TradingDay          # "YYYYMMDD"
+            update_time: str = d.UpdateTime          # "HH:MM:SS"
+            ms: int = d.UpdateMillisec
+            tick_time = datetime.strptime(
+                f"{trading_day} {update_time}", "%Y%m%d %H:%M:%S"
+            ).replace(microsecond=ms * 1000)
+        except (ValueError, AttributeError):
+            tick_time = datetime.now()
+
+        # --- 步骤一：发布 TickEvent（增量成交量）---
+        with self._bar_lock:
+            acc = self._bar_accumulators.get(symbol)
+
+        if acc is None:
+            return  # 未订阅的品种，忽略
+
+        # 期货夜盘换日时累计量会归零，检测并重置
+        cum_vol: int = d.Volume
+        if cum_vol < acc.last_cum_vol:
+            acc.last_cum_vol = 0
+            acc.last_cum_to = 0.0
+
+        delta_vol: int = cum_vol - acc.last_cum_vol
+        delta_to: float = d.Turnover - acc.last_cum_to
+
+        # [DEBUG] 打印 CTP 原始五档数据（验证是否为无效值）
+        logger.debug(f"CTP原始数据 {symbol}: BidPrice2={d.BidPrice2:.2e}, AskPrice2={d.AskPrice2:.2e}, BidVol2={d.BidVolume2}")
+
+        # 解析五档买卖价格和数量（价格和数量配套过滤：价格无效时数量也置0）
+        bid_price_1 = d.BidPrice1 if d.BidPrice1 < 1e15 else 0.0
+        bid_price_2 = d.BidPrice2 if d.BidPrice2 < 1e15 else 0.0
+        bid_price_3 = d.BidPrice3 if d.BidPrice3 < 1e15 else 0.0
+        bid_price_4 = d.BidPrice4 if d.BidPrice4 < 1e15 else 0.0
+        bid_price_5 = d.BidPrice5 if d.BidPrice5 < 1e15 else 0.0
+
+        bid_prices = (bid_price_1, bid_price_2, bid_price_3, bid_price_4, bid_price_5)
+        bid_volumes = (
+            d.BidVolume1 if bid_price_1 > 0 else 0,
+            d.BidVolume2 if bid_price_2 > 0 else 0,
+            d.BidVolume3 if bid_price_3 > 0 else 0,
+            d.BidVolume4 if bid_price_4 > 0 else 0,
+            d.BidVolume5 if bid_price_5 > 0 else 0,
+        )
+
+        ask_price_1 = d.AskPrice1 if d.AskPrice1 < 1e15 else 0.0
+        ask_price_2 = d.AskPrice2 if d.AskPrice2 < 1e15 else 0.0
+        ask_price_3 = d.AskPrice3 if d.AskPrice3 < 1e15 else 0.0
+        ask_price_4 = d.AskPrice4 if d.AskPrice4 < 1e15 else 0.0
+        ask_price_5 = d.AskPrice5 if d.AskPrice5 < 1e15 else 0.0
+
+        ask_prices = (ask_price_1, ask_price_2, ask_price_3, ask_price_4, ask_price_5)
+        ask_volumes = (
+            d.AskVolume1 if ask_price_1 > 0 else 0,
+            d.AskVolume2 if ask_price_2 > 0 else 0,
+            d.AskVolume3 if ask_price_3 > 0 else 0,
+            d.AskVolume4 if ask_price_4 > 0 else 0,
+            d.AskVolume5 if ask_price_5 > 0 else 0,
+        )
+
         tick = TickEvent(
-            symbol=data["InstrumentID"],
-            last_price=data["LastPrice"],
-            bid=data["BidPrice1"],
-            ask=data["AskPrice1"],
-            volume=data["Volume"],
-            turnover=data["Turnover"],
-            timestamp=datetime.now()
+            symbol=symbol,
+            last_price=last_price,
+            bid_prices=bid_prices,
+            bid_volumes=bid_volumes,
+            ask_prices=ask_prices,
+            ask_volumes=ask_volumes,
+            volume=delta_vol,
+            turnover=delta_to,
+            timestamp=tick_time,
         )
         self._publish_tick(tick)
+
+        # --- 步骤二：Tick → 1 分钟 Bar 聚合 ---
+        current_minute = tick_time.replace(second=0, microsecond=0)
+
+        with self._bar_lock:
+            if not acc.initialized:
+                # 第一个 Tick：初始化 Bar
+                acc.open = acc.high = acc.low = acc.close = last_price
+                acc.volume = delta_vol
+                acc.turnover = delta_to
+                acc.bar_minute = current_minute
+                acc.last_cum_vol = cum_vol
+                acc.last_cum_to = d.Turnover
+                acc.initialized = True
+
+            elif current_minute > acc.bar_minute:
+                # 新分钟到来：封闭旧 Bar 并发布
+                bar = BarEvent(
+                    symbol=symbol,
+                    freq="1m",
+                    open=acc.open,
+                    high=acc.high,
+                    low=acc.low,
+                    close=acc.close,
+                    volume=acc.volume,
+                    turnover=acc.turnover,
+                    bar_time=acc.bar_minute,
+                    timestamp=tick_time,
+                )
+                self._publish_bar(bar)
+
+                # 重置为新分钟
+                acc.open = acc.high = acc.low = acc.close = last_price
+                acc.volume = delta_vol
+                acc.turnover = delta_to
+                acc.bar_minute = current_minute
+                acc.last_cum_vol = cum_vol
+                acc.last_cum_to = d.Turnover
+
+            else:
+                # 同一分钟内更新 Bar
+                acc.high = max(acc.high, last_price)
+                acc.low = min(acc.low, last_price)
+                acc.close = last_price
+                acc.volume += delta_vol
+                acc.turnover += delta_to
+                acc.last_cum_vol = cum_vol
+                acc.last_cum_to = d.Turnover
 
 
 # ---------------------------------------------------------------------------
@@ -235,8 +542,10 @@ class MockMarketGateway(MarketGateway):
         self,
         symbol: str,
         last_price: float,
-        bid: float = 0.0,
-        ask: float = 0.0,
+        bid_prices: tuple[float, ...] = None,
+        bid_volumes: tuple[int, ...] = None,
+        ask_prices: tuple[float, ...] = None,
+        ask_volumes: tuple[int, ...] = None,
         volume: int = 0,
         turnover: float = 0.0
     ) -> None:
@@ -244,12 +553,14 @@ class MockMarketGateway(MarketGateway):
         手动推送 Tick 数据（用于测试）。
 
         Args:
-            symbol:     合约代码
-            last_price: 最新价
-            bid:        买一价
-            ask:        卖一价
-            volume:     成交量
-            turnover:   成交额
+            symbol:      合约代码
+            last_price:  最新价
+            bid_prices:  五档买价（可选，默认全 0）
+            bid_volumes: 五档买量（可选，默认全 0）
+            ask_prices:  五档卖价（可选，默认全 0）
+            ask_volumes: 五档卖量（可选，默认全 0）
+            volume:      成交量
+            turnover:    成交额
         """
         if symbol not in self._subscribed_symbols:
             logger.warning(f"Symbol {symbol} not subscribed, ignoring tick")
@@ -258,8 +569,10 @@ class MockMarketGateway(MarketGateway):
         tick = TickEvent(
             symbol=symbol,
             last_price=last_price,
-            bid=bid,
-            ask=ask,
+            bid_prices=bid_prices or (0.0,) * 5,
+            bid_volumes=bid_volumes or (0,) * 5,
+            ask_prices=ask_prices or (0.0,) * 5,
+            ask_volumes=ask_volumes or (0,) * 5,
             volume=volume,
             turnover=turnover,
             timestamp=datetime.now()

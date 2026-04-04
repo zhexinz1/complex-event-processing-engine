@@ -51,22 +51,45 @@ class BaseEvent:
 @dataclass(frozen=True)
 class TickEvent(BaseEvent):
     """
-    Level-1 逐笔行情事件，由行情网关在每个 Tick 到达时发布。
+    Level-2 五档行情事件，由行情网关在每个 Tick 到达时发布。
 
     Attributes:
-        symbol:     标的代码，如 "600519.SH"。
-        last_price: 最新成交价。
-        bid:        买一价。
-        ask:        卖一价。
-        volume:     本 Tick 成交量（手）。
-        turnover:   本 Tick 成交额（元）。
+        symbol:      标的代码，如 "600519.SH"。
+        last_price:  最新成交价。
+        bid_prices:  五档买价 (bid_prices[0] 是买一价，最优买价)。
+        bid_volumes: 五档买量 (对应 bid_prices 的挂单量，单位：手)。
+        ask_prices:  五档卖价 (ask_prices[0] 是卖一价，最优卖价)。
+        ask_volumes: 五档卖量 (对应 ask_prices 的挂单量，单位：手)。
+        volume:      本 Tick 成交量（手）。
+        turnover:    本 Tick 成交额（元）。
+
+    向后兼容：
+        可通过 .bid 和 .ask 属性访问买一价和卖一价（等价于 bid_prices[0] 和 ask_prices[0]）。
     """
-    symbol:     str   = ""
-    last_price: float = 0.0
-    bid:        float = 0.0
-    ask:        float = 0.0
-    volume:     int   = 0
-    turnover:   float = 0.0
+    symbol:      str   = ""
+    last_price:  float = 0.0
+
+    # 五档买盘 (bid_prices[0] 是最优买价)
+    bid_prices:  tuple[float, ...] = field(default_factory=lambda: (0.0,) * 5)
+    bid_volumes: tuple[int, ...]   = field(default_factory=lambda: (0,) * 5)
+
+    # 五档卖盘 (ask_prices[0] 是最优卖价)
+    ask_prices:  tuple[float, ...] = field(default_factory=lambda: (0.0,) * 5)
+    ask_volumes: tuple[int, ...]   = field(default_factory=lambda: (0,) * 5)
+
+    volume:      int   = 0
+    turnover:    float = 0.0
+
+    # 向后兼容的属性
+    @property
+    def bid(self) -> float:
+        """买一价（最优买价），等价于 bid_prices[0]。"""
+        return self.bid_prices[0] if self.bid_prices else 0.0
+
+    @property
+    def ask(self) -> float:
+        """卖一价（最优卖价），等价于 ask_prices[0]。"""
+        return self.ask_prices[0] if self.ask_prices else 0.0
 
 
 @dataclass(frozen=True)
