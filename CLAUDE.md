@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Manage dependencies with uv. If not installed, install with `curl -LsSf https://astral.sh/uv/install.sh | sh`.
 
 ```bash
+uv sync
 # Run the full integration example (requires being in the repo root)
 uv run -m examples.example_usage
 

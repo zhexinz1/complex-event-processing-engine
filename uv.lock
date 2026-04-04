@@ -75,7 +75,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.50.0" },
-    { name = "openctp-ctp", specifier = "==6.3.15.*" },
+    { name = "openctp-ctp", specifier = "==6.7.11.0" },
     { name = "pyright", specifier = ">=1.1.408" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "ruff", specifier = ">=0.15.9" },
@@ -216,15 +216,15 @@ wheels = [
 
 [[package]]
 name = "openctp-ctp"
-version = "6.3.15.7"
+version = "6.7.11.0"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
 wheels = [
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/56/f2/ee748336f8f17265621463254451daaf15890c8f4265367fe282cad7b87f/openctp_ctp-6.3.15.7-cp313-cp313-win32.whl", hash = "sha256:fafd507b8fcb188e51464bf47a1c2e8b6edae417e3ad4d5c8f78fb8a2498b37e", size = 4722425, upload-time = "2025-08-21T15:17:36.019Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/21/e8/6cab4b1cdbec1eeb573a36d1ccae8cb553608dd10c06bc59613b31db9477/openctp_ctp-6.3.15.7-cp313-cp313-win_amd64.whl", hash = "sha256:48e03771ea20e0714da03be829e0c9ba15b1248d58fb49a0bcf23b5a2025c512", size = 6578930, upload-time = "2025-08-21T15:18:01.725Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/4d/24/273b9db7ad79e5c5f9c08b92820e03dee23e73a17ad574e64cf009d09050/openctp_ctp-6.3.15.7-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:d263adc4c7df75e994f481beb813b657ad0c718168abef2b750799884b643b21", size = 7874161, upload-time = "2026-03-25T05:11:46.66Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/69/3e/f2e0e02048dd952d5f886b481f8f87ffac983df9f20ac9f280fcc71a13b8/openctp_ctp-6.3.15.7-cp314-cp314-win32.whl", hash = "sha256:a1da989e055ab2cb701bbdb9ba039519d4184218c1bb031bdb8a38dc40b048b9", size = 4792435, upload-time = "2025-10-28T07:41:50.573Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/c1/83/2de591778cc6cc023d0f77c3f0422d33cde155448ec6f496d29c213f86ad/openctp_ctp-6.3.15.7-cp314-cp314-win_amd64.whl", hash = "sha256:8f6bdbeedc096e03e7151279968649f92272257eea36127f61abb3ba5a19d2f8", size = 6622746, upload-time = "2025-10-28T07:41:58.795Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/1f/7d/5aa966364d5d5d4fb9e0bdf69c2bb619b6d5bd707558daa640faa0225246/openctp_ctp-6.3.15.7-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:922ff772982ef16c6b79db0e39b721790e50ab2ea9a72cdca72eaae8938e750f", size = 7868394, upload-time = "2025-08-21T14:17:49.176Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/29/64/b119ae4fe7ca110d31b0ef5a4cec3e292f4e8216364143b8507caa9cbe36/openctp_ctp-6.7.11.0-cp313-cp313-win32.whl", hash = "sha256:0d1ffa282fa16d2a080d5f154254f6b960a01c3fc9d6ec40dceab22157697551", size = 5713338, upload-time = "2025-08-18T13:53:04.522Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/cd/45/5c04e775b1b8c2a7a1112753519db3eb331569dd3c2378c83505119831c0/openctp_ctp-6.7.11.0-cp313-cp313-win_amd64.whl", hash = "sha256:68fb8af3bb1d8c797a1dee6a1b8b8ddd2a14f285204044e822a521a68e4cbfe1", size = 8136435, upload-time = "2025-08-18T13:53:59.937Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/1e/5c/021e318c1f2f1c53cf5188cdaf502038d6affe2922bd1a9be356360fdbe6/openctp_ctp-6.7.11.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:a55309c6de687223e893523b59ec567680860909e88a3e9d1188bb4bcba4550d", size = 9612415, upload-time = "2026-03-25T05:11:53.612Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/d3/c8/6cec261d68bc3172b589515bb57c112fb46b06bfa0e4ffd03df5071234fb/openctp_ctp-6.7.11.0-cp314-cp314-win32.whl", hash = "sha256:c4f60cd3d442925e7d01974282680c7fc395750de9ef65dfaed8661bafa75c06", size = 5828121, upload-time = "2025-10-28T07:44:11.609Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/ea/24/ed1156732bffde01eff8d930229ee542d5a776dfa497638b8627e0858855/openctp_ctp-6.7.11.0-cp314-cp314-win_amd64.whl", hash = "sha256:8d7e3424b71ad3235fb2cca0f1341c60ccee3f8285e3cade5676f5e6bfe89bf3", size = 8223294, upload-time = "2025-10-28T07:44:20.093Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/d4/17/d260d67f38aa005e0ff38def2f44126d8a9627d2d48b1a741db3889b73bd/openctp_ctp-6.7.11.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5780d2a4e927a0c553e0c226764d270708f932d42eae1857ab694febbf2a4eac", size = 9601183, upload-time = "2025-08-21T14:19:33.368Z" },
 ]
 
 [[package]]
