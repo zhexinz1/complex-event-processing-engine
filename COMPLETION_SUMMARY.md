@@ -28,8 +28,14 @@ CEP/
 
 #### 2.1 行情网关 (`market_gateway.py`)
 - ✅ 抽象接口 `MarketGateway`
-- ✅ CTP 行情网关 `CTPMarketGateway`（预留）
+- ✅ CTP 行情网关 `CTPMarketGateway`（部分实现）
 - ✅ 模拟行情网关 `MockMarketGateway`（已实现）
+- ⏳ XTP 股票行情网关（尚未实现）
+
+**当前状态**：
+- `CTPMarketGateway` 已包含 `connect()` / `subscribe()` / `unsubscribe()` 及 `OnRtnDepthMarketData` 回调处理逻辑
+- 已支持将 CTP Tick 聚合为 1 分钟 `BarEvent`
+- 断线重连、XTP 接入等能力仍待实现
 
 **核心方法**：
 - `connect()` - 连接到行情服务器
@@ -70,11 +76,15 @@ CREATE TABLE contract_info (
 ```
 
 #### 2.3 前端 API 接口 (`frontend_api.py`)
-- ✅ 完整的 RESTful API 接口
+- ✅ 前端服务层接口（可供 Flask/FastAPI 封装）
 - ✅ 用户入金接口 `submit_fund_inflow()`
 - ✅ 手动触发再平衡 `trigger_rebalance()`
 - ✅ 查询组合状态 `get_portfolio_status()`
 - ✅ 查询权重偏离 `get_weight_deviation()`
+
+**说明**：
+- 当前仓库中实现的是 `FrontendAPI` 服务类
+- 文档中的 RESTful 端点为建议封装方式，仓库内尚未提供可直接启动的 Flask/FastAPI 应用
 
 **API 端点列表**：
 | 端点 | 方法 | 说明 |
@@ -156,9 +166,9 @@ PENDING → SUBMITTED → PARTIAL_FILLED → FILLED
 
 | 接口 | 状态 | 文件位置 | 说明 |
 |------|------|----------|------|
-| ✅ 行情接入 | 已留白 | `adapters/market_gateway.py` | 支持 CTP/XTP/模拟行情 |
+| ✅ 行情接入 | 部分实现 + 预留 | `adapters/market_gateway.py` | 已实现 CTP/模拟行情，XTP 尚未实现 |
 | ✅ 数据库读取权重 | 已留白 | `adapters/config_source.py` | 支持数据库/文件，含表结构 |
-| ✅ 前端入金接口 | 已留白 | `adapters/frontend_api.py` | 完整的 RESTful API |
+| ✅ 前端入金接口 | 服务层已实现 | `adapters/frontend_api.py` | 已实现业务接口，HTTP API 需由 Flask/FastAPI 另行封装 |
 | ✅ 下单到迅投 GT | 已留白 | `adapters/order_gateway.py` | 支持迅投 GT/CTP/模拟柜台 |
 
 ---
@@ -167,7 +177,6 @@ PENDING → SUBMITTED → PARTIAL_FILLED → FILLED
 
 ### 行情网关
 - [ ] 引入 CTP SDK（openctp 或 vnpy）
-- [ ] 实现 `OnRtnDepthMarketData` 回调
 - [ ] 实现断线重连机制
 - [ ] 实现 XTP 股票行情网关
 
@@ -249,9 +258,9 @@ response = frontend_api.submit_fund_inflow(FundInFlowRequest(amount=2_000_000.0)
 经过本次重构，CEP 项目现在具备：
 
 1. ✅ **清晰的模块边界** - 按功能划分的目录结构
-2. ✅ **完整的外部接口** - 所有关键接口都已预留
+2. ✅ **外部接口骨架** - 关键接口已完成抽象与分层，部分模块已有基础实现
 3. ✅ **可扩展的架构** - 抽象接口 + 具体实现
 4. ✅ **完善的文档** - 详细的集成指南和示例代码
 5. ✅ **可测试性** - Mock 实现支持单元测试
 
-**所有你提出的关键功能都已经完整预留，可以直接对接外部系统！** 🚀
+**当前代码库已经完成外部接口分层与主要骨架搭建，可在此基础上继续对接真实外部系统。** 🚀
