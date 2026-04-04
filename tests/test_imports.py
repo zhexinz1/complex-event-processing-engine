@@ -5,18 +5,21 @@
 def test_core_imports():
     """测试核心模块导入"""
     from cep.core import EventBus, TickEvent, BarEvent, GlobalContext, LocalContext
+    assert all((EventBus, TickEvent, BarEvent, GlobalContext, LocalContext))
     print("✓ 核心模块导入成功")
 
 
 def test_engine_imports():
     """测试引擎模块导入"""
     from cep.engine import Node, Operator, LogicalOp
+    assert all((Node, Operator, LogicalOp))
     print("✓ 引擎模块导入成功")
 
 
 def test_triggers_imports():
     """测试触发器模块导入"""
     from cep.triggers import AstRuleTrigger, DeviationTrigger, CronTrigger
+    assert all((AstRuleTrigger, DeviationTrigger, CronTrigger))
     print("✓ 触发器模块导入成功")
 
 
@@ -30,12 +33,23 @@ def test_rebalance_imports():
         MonthlyRebalanceTrigger,
         PortfolioDeviationTrigger,
     )
+    assert all(
+        (
+            RebalanceEngine,
+            PortfolioContext,
+            RebalanceHandler,
+            FundFlowTrigger,
+            MonthlyRebalanceTrigger,
+            PortfolioDeviationTrigger,
+        )
+    )
     print("✓ 再平衡模块导入成功")
 
 
 def test_nlp_imports():
     """测试 NLP 模块导入"""
     from nlp import parse_natural_language, validate_and_suggest, IndicatorMeta
+    assert all((parse_natural_language, validate_and_suggest, IndicatorMeta))
     print("✓ NLP 模块导入成功")
 
 

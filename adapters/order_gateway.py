@@ -71,8 +71,8 @@ class Order:
     status: OrderStatus = OrderStatus.PENDING
     filled_quantity: float = 0.0
     avg_filled_price: float = 0.0
-    submit_time: datetime = None
-    update_time: datetime = None
+    submit_time: datetime | None = None
+    update_time: datetime | None = None
     error_msg: str = ""
 
 

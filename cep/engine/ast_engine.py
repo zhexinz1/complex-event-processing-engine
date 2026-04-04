@@ -203,7 +203,7 @@ class IndicatorNode(Node):
             AttributeError: 若指标未注册。
             ValueError: 若数据不足或参数错误。
         """
-        from indicator_meta import find_indicator
+        from nlp.indicator_meta import find_indicator
 
         # 查找指标元数据
         meta = find_indicator(self.name)
@@ -226,6 +226,8 @@ class IndicatorNode(Node):
 
         # 计算指标
         bars = list(context.bar_window)
+        if meta.compute_func is None:
+            raise ValueError(f"Indicator '{self.name}' has no compute function registered")
         result = meta.compute_func(bars, **final_params)
 
         # 处理多值指标的组件提取

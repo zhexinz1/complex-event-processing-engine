@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import Callable, Type, TypeVar
+from typing import Any, Callable, Type, TypeVar
 
 from cep.core.events import BaseEvent
 
@@ -53,7 +53,6 @@ class EventBus:
                       使用 Multi-level dict 避免 O(N) 的全量遍历漏洞。
                       弱引用集合避免忘记取消订阅导致的内存泄漏。
         """
-        from collections import defaultdict
         self._subscribers: dict[Type[BaseEvent], dict[str, set[Any]]] = defaultdict(lambda: defaultdict(set))
         logger.info("EventBus initialized with Topic(Symbol) routing and WeakRefs.")
 
@@ -207,7 +206,8 @@ class EventBus:
         Returns:
             订阅者数量。
         """
-        return len(self._subscribers.get(event_type, []))
+        subscriber_groups = self._subscribers.get(event_type, {})
+        return sum(len(refs) for refs in subscriber_groups.values())
 
 
 # ---------------------------------------------------------------------------
