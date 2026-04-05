@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, time
 from typing import Optional
 
 from cep.engine.ast_engine import Node

@@ -10,13 +10,12 @@
 """
 
 import logging
-from datetime import datetime
+import time
 
 from cep.core.event_bus import EventBus
-from cep.core.events import TickEvent
 from adapters.market_gateway import MockMarketGateway
 from adapters.config_source import FileConfigSource
-from adapters.order_gateway import MockOrderGateway
+from adapters.order_gateway import MockOrderGateway, Order
 from adapters.frontend_api import FrontendAPI, FundInFlowRequest, RebalanceRequest
 from rebalance.portfolio_context import PortfolioContext, ContractInfo, Position
 from rebalance.rebalance_handler import RebalanceHandler
@@ -31,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main():
+def main() -> None:
     """完整系统集成示例。"""
 
     logger.info("=" * 80)
@@ -86,7 +85,7 @@ def main():
     order_gateway.connect()
 
     # 设置订单回调
-    def on_order_update(order):
+    def on_order_update(order: Order) -> None:
         logger.info(f"📋 订单更新: {order.order_id} {order.symbol} {order.status}")
 
     order_gateway.set_order_callback(on_order_update)
@@ -134,23 +133,22 @@ def main():
     # -----------------------------------------------------------------------
 
     # 创建再平衡处理器
-    rebalance_handler = RebalanceHandler(event_bus, portfolio_ctx)
-    rebalance_handler.register()
+    RebalanceHandler(event_bus, portfolio_ctx).register()
 
     # 创建资金流触发器
     fund_flow_trigger = FundFlowTrigger(
         event_bus=event_bus,
-        portfolio_ctx=portfolio_ctx
+        trigger_id="FUND_FLOW_MANUAL",
     )
     fund_flow_trigger.register()
 
     # 创建组合偏离触发器
-    deviation_trigger = PortfolioDeviationTrigger(
+    PortfolioDeviationTrigger(
         event_bus=event_bus,
+        trigger_id="PORTFOLIO_DEVIATION",
         portfolio_ctx=portfolio_ctx,
         threshold=0.05  # 5% 偏离阈值
-    )
-    deviation_trigger.register()
+    ).register()
 
     # -----------------------------------------------------------------------
     # 5. 模拟行情推送
@@ -194,7 +192,6 @@ def main():
     logger.info(f"API 响应: {response.message}")
 
     # 等待再平衡处理完成（实际系统中是异步的）
-    import time
     time.sleep(1)
 
     # -----------------------------------------------------------------------

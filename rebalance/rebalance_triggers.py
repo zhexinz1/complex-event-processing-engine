@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 
 from cep.core.event_bus import EventBus
-from cep.core.events import BaseEvent, SignalEvent, SignalType, TickEvent, TimerEvent
-from rebalance.portfolio_context import PortfolioContext
+from cep.core.events import BaseEvent, SignalType, TickEvent, TimerEvent
 from cep.triggers.triggers import BaseTrigger
+from rebalance.portfolio_context import PortfolioContext
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +287,6 @@ class PortfolioDeviationTrigger(BaseTrigger):
         self.portfolio_ctx.update_price(event.symbol, event.last_price)
 
         # 2. 防抖检查：是否到达冷却期
-        import time
         current_time = time.time()
         if current_time - self._last_check_time < self.cooldown:
             # 冷却期内，跳过偏离度检查

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from datetime import datetime
 from typing import Any, Callable, Deque, Optional
 
 from cep.core.events import BarEvent, TickEvent

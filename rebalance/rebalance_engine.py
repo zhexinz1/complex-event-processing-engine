@@ -17,11 +17,10 @@ rebalance_engine.py — 再平衡核心计算引擎
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any
 
-from rebalance.portfolio_context import ContractInfo, PortfolioContext, Position
+from rebalance.portfolio_context import PortfolioContext
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ class RebalanceResult:
     """
     orders: list[RebalanceOrder]
     total_margin_needed: float
-    calculation_details: dict[str, any]
+    calculation_details: dict[str, Any]
 
 
 # ---------------------------------------------------------------------------

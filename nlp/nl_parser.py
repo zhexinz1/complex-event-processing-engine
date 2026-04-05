@@ -26,9 +26,10 @@ logger = logging.getLogger(__name__)
 
 # 尝试导入 anthropic，如果不可用则提供降级方案
 try:
-    import anthropic
+    import anthropic  # pyright: ignore[reportMissingImports]
     ANTHROPIC_AVAILABLE = True
 except ImportError:
+    anthropic = None
     ANTHROPIC_AVAILABLE = False
     logger.warning("Anthropic SDK not available. Natural language parsing will be disabled.")
 
@@ -150,6 +151,8 @@ def parse_natural_language(
         )
 
     # 调用 Claude API
+    if anthropic is None:
+        raise ValueError("Anthropic SDK import failed unexpectedly")
     client = anthropic.Anthropic(api_key=api_key)
 
     try:
@@ -205,7 +208,7 @@ def validate_and_suggest(text: str, api_key: Optional[str] = None) -> dict[str, 
             "suggestions": {...}
         }
     """
-    from indicator_meta import find_indicator, suggest_similar_indicators
+    from nlp.indicator_meta import find_indicator, suggest_similar_indicators
 
     # 解析规则
     ast_dict = parse_natural_language(text, api_key)
