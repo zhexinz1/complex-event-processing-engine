@@ -4,15 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Running & Testing
 
+Manage dependencies with uv. If not installed, install with `curl -LsSf https://astral.sh/uv/install.sh | sh`.
+
 ```bash
+uv sync
 # Run the full integration example (requires being in the repo root)
-python -m examples.example_usage
+uv run -m examples.example_usage
 
 # Run import tests
-python tests/test_imports.py
+uv run tests/test_imports.py
 
 # Run a specific example
-python -m examples.full_integration_example
+uv run -m examples.full_integration_example
 ```
 
 All Python files use absolute module imports (e.g., `from cep.core.events import ...`), so always run from the project root `/home/ubuntu/CEP`.
@@ -112,3 +115,8 @@ Public APIs are re-exported via `__init__.py` files:
 - `from cep.triggers import AstRuleTrigger, DeviationTrigger, CronTrigger`
 - `from rebalance import RebalanceEngine, PortfolioContext, RebalanceHandler, FundFlowTrigger, MonthlyRebalanceTrigger, PortfolioDeviationTrigger`
 - `from nlp import parse_natural_language, validate_and_suggest, IndicatorMeta`
+
+## Coding Guidelines
+- Run `ruff` and `pyright` before every commit, and fix all reported errors.
+- A change is not ready to commit if `ruff` reports violations or `pyright` reports type-checking errors.
+- Recommended pre-commit verification from the repo root:

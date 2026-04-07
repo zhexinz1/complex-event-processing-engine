@@ -18,7 +18,6 @@ rebalance_handler.py — 再平衡信号处理器
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from cep.core.event_bus import EventBus
 from cep.core.events import SignalEvent, SignalType
@@ -147,7 +146,7 @@ class RebalanceHandler:
             # 模拟订单执行成功，更新持仓（实际应等待柜台回报）
             self._simulate_order_execution(order)
 
-        logger.info(f"✅ All orders executed successfully.")
+        logger.info("✅ All orders executed successfully.")
 
     def _simulate_order_execution(self, order: RebalanceOrder) -> None:
         """

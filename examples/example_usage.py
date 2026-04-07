@@ -163,7 +163,7 @@ def main() -> None:
     # -----------------------------------------------------------------------
 
     # 3.1 AST 规则触发器（监听贵州茅台的 BarEvent）
-    ast_trigger = create_ast_trigger(
+    create_ast_trigger(
         event_bus=event_bus,
         trigger_id="AST_MAOTAI_RSI_SMA",
         rule_tree=rule_tree_maotai,
@@ -172,7 +172,7 @@ def main() -> None:
     )
 
     # 3.2 持仓偏离触发器（监听五粮液的 TickEvent）
-    deviation_trigger = create_deviation_trigger(
+    create_deviation_trigger(
         event_bus=event_bus,
         trigger_id="DEVIATION_WULIANGYE",
         local_context=local_context_wuliangye,
@@ -181,7 +181,7 @@ def main() -> None:
     )
 
     # 3.3 定时触发器（监听每日 14:30 的资金分配指令）
-    cron_trigger = create_cron_trigger(
+    create_cron_trigger(
         event_bus=event_bus,
         trigger_id="CRON_DAILY_ALLOCATION",
         timer_id="DAILY_REBALANCE_1430",
@@ -194,7 +194,7 @@ def main() -> None:
     # 订阅 SignalEvent，根据 signal_type 路由到不同的处理器
     def signal_router(signal: SignalEvent) -> None:
         """信号路由器：根据信号类型分发到对应处理器。"""
-        from events import SignalType
+        from cep.core.events import SignalType
 
         if signal.signal_type == SignalType.TRADE_OPPORTUNITY:
             on_trade_opportunity(signal)
@@ -250,8 +250,8 @@ def main() -> None:
     tick = TickEvent(
         symbol="000858.SZ",
         last_price=180.5,
-        bid=180.4,
-        ask=180.6,
+        bid_prices=(180.4, 180.3, 180.2, 180.1, 180.0),
+        ask_prices=(180.6, 180.7, 180.8, 180.9, 181.0),
         volume=500,
     )
     event_bus.publish(tick)

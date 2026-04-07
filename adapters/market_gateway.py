@@ -20,17 +20,21 @@ import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass as _dataclass
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent, BarEvent
 
 try:
-    from openctp_ctp import mdapi
+    from openctp_ctp import mdapi as _mdapi  # pyright: ignore[reportMissingImports]
+
+    mdapi: Any = _mdapi
     _CTP_AVAILABLE = True
+    _CTP_MD_SPI_BASE = cast(type[object], _mdapi.CThostFtdcMdSpi)
 except ImportError:
     mdapi = None
     _CTP_AVAILABLE = False
+    _CTP_MD_SPI_BASE = object
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +130,14 @@ class _BarAccumulator:
     initialized: bool = False
 
 
-class CTPMdSpi(mdapi.CThostFtdcMdSpi if _CTP_AVAILABLE else object):
+def _get_mdapi() -> Any:
+    """Return the imported CTP mdapi module or raise a clear runtime error."""
+    if mdapi is None:
+        raise RuntimeError("openctp-ctp is not installed")
+    return mdapi
+
+
+class CTPMdSpi(_CTP_MD_SPI_BASE):
     """
     CTP 行情回调处理器（SPI）。
 
@@ -136,7 +147,7 @@ class CTPMdSpi(mdapi.CThostFtdcMdSpi if _CTP_AVAILABLE else object):
 
     def __init__(
         self,
-        api: object,
+        api: Any,
         broker_id: str,
         user_id: str,
         password: str,
@@ -156,7 +167,8 @@ class CTPMdSpi(mdapi.CThostFtdcMdSpi if _CTP_AVAILABLE else object):
     def OnFrontConnected(self) -> None:
         """前置连接成功，立即发起登录。"""
         logger.info("CTP: 前置连接成功，发起登录...")
-        req = mdapi.CThostFtdcReqUserLoginField()
+        ctp_mdapi = _get_mdapi()
+        req = ctp_mdapi.CThostFtdcReqUserLoginField()
         req.BrokerID = self._broker_id
         req.UserID = self._user_id
         req.Password = self._password
@@ -245,7 +257,7 @@ class CTPMarketGateway(MarketGateway):
         self.auth_code = auth_code
         self.flow_path = flow_path
 
-        self._api: Optional[object] = None
+        self._api: Any = None
         self._spi: Optional[CTPMdSpi] = None
         self._api_thread: Optional[threading.Thread] = None
         self._login_event: threading.Event = threading.Event()
@@ -272,7 +284,8 @@ class CTPMarketGateway(MarketGateway):
         os.makedirs(self.flow_path, exist_ok=True)
         self._login_event.clear()
 
-        self._api = mdapi.CThostFtdcMdApi.CreateFtdcMdApi(self.flow_path)
+        ctp_mdapi = _get_mdapi()
+        self._api = ctp_mdapi.CThostFtdcMdApi.CreateFtdcMdApi(self.flow_path)
         self._spi = CTPMdSpi(
             api=self._api,
             broker_id=self.broker_id,
@@ -458,7 +471,7 @@ class CTPMarketGateway(MarketGateway):
                 acc.last_cum_to = d.Turnover
                 acc.initialized = True
 
-            elif current_minute > acc.bar_minute:
+            elif acc.bar_minute is not None and current_minute > acc.bar_minute:
                 # 新分钟到来：封闭旧 Bar 并发布
                 bar = BarEvent(
                     symbol=symbol,
@@ -542,10 +555,10 @@ class MockMarketGateway(MarketGateway):
         self,
         symbol: str,
         last_price: float,
-        bid_prices: tuple[float, ...] = None,
-        bid_volumes: tuple[int, ...] = None,
-        ask_prices: tuple[float, ...] = None,
-        ask_volumes: tuple[int, ...] = None,
+        bid_prices: tuple[float, ...] | None = None,
+        bid_volumes: tuple[int, ...] | None = None,
+        ask_prices: tuple[float, ...] | None = None,
+        ask_volumes: tuple[int, ...] | None = None,
         volume: int = 0,
         turnover: float = 0.0
     ) -> None:

@@ -16,7 +16,7 @@ frontend_api.py — 前端 API 接口
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
@@ -45,9 +45,9 @@ class FundInFlowRequest:
     amount: float
     remark: str = ""
     operator: str = "system"
-    timestamp: datetime = None
+    timestamp: datetime | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.timestamp is None:
             self.timestamp = datetime.now()
 
@@ -194,7 +194,7 @@ class FrontendAPI:
                 message=f"入金申请已提交，金额：{request.amount:,.2f} 元",
                 data={
                     "amount": request.amount,
-                    "timestamp": request.timestamp.isoformat()
+                    "timestamp": request.timestamp.isoformat() if request.timestamp else None
                 }
             )
 
@@ -225,9 +225,9 @@ class FrontendAPI:
             # 过滤日期范围
             history = self._fund_inflow_history
             if start_date:
-                history = [r for r in history if r.timestamp >= start_date]
+                history = [r for r in history if r.timestamp and r.timestamp >= start_date]
             if end_date:
-                history = [r for r in history if r.timestamp <= end_date]
+                history = [r for r in history if r.timestamp and r.timestamp <= end_date]
 
             # 转换为字典列表
             data = [
@@ -235,7 +235,7 @@ class FrontendAPI:
                     "amount": r.amount,
                     "remark": r.remark,
                     "operator": r.operator,
-                    "timestamp": r.timestamp.isoformat()
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else None
                 }
                 for r in history
             ]
