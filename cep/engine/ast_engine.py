@@ -402,10 +402,14 @@ def build_comparison(
     Returns:
         OperatorNode 实例。
     """
+    # 文档中的常见写法如 build_comparison("close", Operator.GT, "sma")
+    # 约定字符串右值表示从 Context 读取的变量，而非字面量常量。
+    right_node = VariableNode(value) if isinstance(value, str) else ConstantNode(value)
+
     return OperatorNode(
         op=op,
         left=VariableNode(var_name),
-        right=ConstantNode(value),
+        right=right_node,
     )
 
 

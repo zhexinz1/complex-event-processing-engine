@@ -15,7 +15,7 @@ dependencies = [
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-include = ["adapters", "cep", "examples", "nlp", "rebalance", "tests"]
+include = ["adapters", "backtest", "cep", "examples", "nlp", "rebalance", "tests"]
 extraPaths = ["."]
 pythonVersion = "3.13"
 

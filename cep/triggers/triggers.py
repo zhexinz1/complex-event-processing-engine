@@ -146,6 +146,7 @@ class AstRuleTrigger(BaseTrigger):
         rule_tree: Node,
         local_context: LocalContext,
         rule_id: str = "",
+        bar_freq: str | None = None,
     ) -> None:
         """
         初始化 AST 规则触发器。
@@ -161,6 +162,7 @@ class AstRuleTrigger(BaseTrigger):
         self.rule_tree = rule_tree
         self.local_context = local_context
         self.rule_id = rule_id or trigger_id
+        self.bar_freq = bar_freq
 
     def register(self) -> None:
         """订阅 BarEvent（利用 EventBus 的 Topic 机制精准路由）。"""
@@ -179,6 +181,10 @@ class AstRuleTrigger(BaseTrigger):
 
         # 过滤：仅处理目标品种的 Bar
         if event.symbol != self.local_context.symbol:
+            return
+
+        # 可选：仅处理指定周期的 Bar
+        if self.bar_freq is not None and event.freq != self.bar_freq:
             return
 
         # 更新 LocalContext（触发指标缓存失效）
@@ -203,6 +209,10 @@ class AstRuleTrigger(BaseTrigger):
                     },
                     rule_id=self.rule_id,
                 )
+        except (TypeError, ValueError) as e:
+            logger.debug(
+                f"Rule '{self.rule_id}' skipped on {event.symbol} during warm-up: {e}"
+            )
         except Exception as e:
             logger.exception(
                 f"Rule evaluation failed for '{self.rule_id}' on {event.symbol}: {e}"
@@ -420,6 +430,7 @@ def create_ast_trigger(
     rule_tree: Node,
     local_context: LocalContext,
     rule_id: str = "",
+    bar_freq: str | None = None,
 ) -> AstRuleTrigger:
     """
     工厂函数：创建并注册 AST 规则触发器。
@@ -434,7 +445,14 @@ def create_ast_trigger(
     Returns:
         已注册的 AstRuleTrigger 实例。
     """
-    trigger = AstRuleTrigger(event_bus, trigger_id, rule_tree, local_context, rule_id)
+    trigger = AstRuleTrigger(
+        event_bus,
+        trigger_id,
+        rule_tree,
+        local_context,
+        rule_id,
+        bar_freq,
+    )
     trigger.register()
     return trigger
 

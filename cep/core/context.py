@@ -219,6 +219,15 @@ class LocalContext:
             # 避免与内部属性冲突
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
+        # 0. 暴露最新 Bar/Tick 的常用字段，便于规则直接引用 close/high/last_price 等变量
+        if self.bar_window:
+            latest_bar = self.bar_window[-1]
+            if hasattr(latest_bar, name):
+                return getattr(latest_bar, name)
+
+        if self.latest_tick and hasattr(self.latest_tick, name):
+            return getattr(self.latest_tick, name)
+
         # 1. 检查缓存
         if name in self._cache:
             logger.debug(f"Cache hit for indicator '{name}' on {self.symbol}")
