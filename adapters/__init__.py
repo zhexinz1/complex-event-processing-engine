@@ -9,7 +9,7 @@
 """
 
 from .market_gateway import MarketGateway, CTPMarketGateway, MockMarketGateway
-from .config_source import ConfigSource, DatabaseConfigSource, FileConfigSource
+from .config_source import ConfigSource, DatabaseConfigSource, FileConfigSource, MySQLConfigSource
 from .order_gateway import OrderGateway, XunTouGTGateway, MockOrderGateway
 from .frontend_api import FrontendAPI
 
@@ -20,6 +20,7 @@ __all__ = [
     "ConfigSource",
     "DatabaseConfigSource",
     "FileConfigSource",
+    "MySQLConfigSource",
     "OrderGateway",
     "XunTouGTGateway",
     "MockOrderGateway",

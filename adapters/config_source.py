@@ -358,3 +358,118 @@ class FileConfigSource(ConfigSource):
         """重新加载配置文件（支持热更新）。"""
         logger.info("Reloading config file...")
         self._load_file()
+
+
+# ---------------------------------------------------------------------------
+# MySQL 配置源（连接阿里云 FOF 数据库）
+# ---------------------------------------------------------------------------
+
+class MySQLConfigSource(ConfigSource):
+    """
+    MySQL 配置源，读取 target_allocations 表中的目标仓位配置。
+
+    load_target_weights 返回指定产品在最新日期下的权重字典，
+    供 RebalanceEngine 直接使用。
+    """
+
+    DB_HOST = "120.25.245.137"
+    DB_PORT = 23306
+    DB_NAME = "fof"
+    DB_USER = "cx"
+    DB_PASS = "iyykiho4#0HO"
+
+    CREATE_TABLE_SQL = """
+    CREATE TABLE IF NOT EXISTS target_allocations (
+        id            INT PRIMARY KEY AUTO_INCREMENT,
+        target_date   DATE         NOT NULL,
+        product_name  VARCHAR(100) NOT NULL,
+        asset_code    VARCHAR(50)  NOT NULL,
+        weight_ratio  DECIMAL(12, 6) NOT NULL,
+        algo_type     VARCHAR(20)  NOT NULL DEFAULT 'TWAP',
+        created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        updated_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_date_product_asset (target_date, product_name, asset_code)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+
+    def __init__(self) -> None:
+        import pymysql
+        self._pymysql = pymysql
+        self._ensure_table()
+        logger.info("MySQLConfigSource initialized: %s:%s/%s", self.DB_HOST, self.DB_PORT, self.DB_NAME)
+
+    def _connect(self):
+        return self._pymysql.connect(
+            host=self.DB_HOST,
+            port=self.DB_PORT,
+            database=self.DB_NAME,
+            user=self.DB_USER,
+            password=self.DB_PASS,
+            charset="utf8mb4",
+            cursorclass=self._pymysql.cursors.DictCursor,
+            autocommit=False,
+        )
+
+    def _ensure_table(self) -> None:
+        """建表（幂等）。"""
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(self.CREATE_TABLE_SQL)
+            conn.commit()
+
+    # ------------------------------------------------------------------
+    # ConfigSource 接口实现
+    # ------------------------------------------------------------------
+
+    def load_target_weights(self, strategy_id: str) -> dict[str, float]:
+        """
+        返回 strategy_id（即 product_name）在最新 target_date 下的权重字典。
+
+        Returns:
+            {"AU2606": 0.2561, "IC2606": 0.2048, ...}
+        """
+        sql = """
+            SELECT asset_code, weight_ratio
+            FROM target_allocations
+            WHERE product_name = %s
+              AND target_date = (
+                  SELECT MAX(target_date)
+                  FROM target_allocations
+                  WHERE product_name = %s
+              )
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (strategy_id, strategy_id))
+                rows = cur.fetchall()
+
+        result = {row["asset_code"]: float(row["weight_ratio"]) for row in rows}
+        logger.info("Loaded %d weights for '%s'", len(result), strategy_id)
+        return result
+
+    def save_target_weights(self, strategy_id: str, weights: dict[str, float]) -> bool:
+        """
+        将权重字典以今日日期写入 target_allocations（冲突则覆盖）。
+        """
+        from datetime import date
+        today = date.today().isoformat()
+        sql = """
+            INSERT INTO target_allocations (target_date, product_name, asset_code, weight_ratio)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE weight_ratio = VALUES(weight_ratio), updated_at = NOW()
+        """
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    for asset_code, ratio in weights.items():
+                        cur.execute(sql, (today, strategy_id, asset_code, ratio))
+                conn.commit()
+            logger.info("Saved %d weights for '%s'", len(weights), strategy_id)
+            return True
+        except Exception:
+            logger.exception("Failed to save weights for '%s'", strategy_id)
+            return False
+
+    def load_contract_info(self, symbol: str) -> Optional[dict]:
+        """target_allocations 表不含合约信息，返回 None。"""
+        return None
