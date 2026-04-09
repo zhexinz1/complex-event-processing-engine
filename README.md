@@ -185,6 +185,30 @@ class MyCustomTrigger(BaseTrigger):
 - abc (抽象基类)
 - logging (日志)
 
+## Troubleshooting
+
+### CTP 环境前置检查
+
+ `openctp-ctp`包含本地 C++ 扩展，在部分 Linux 主机上会依赖系统 locale `zh_CN.GB18030`。如果该 locale 未安装，程序可能在示例启动早期直接退出，并打印：
+
+```text
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  locale::facet::_S_create_c_locale name not valid
+Aborted (core dumped)
+```
+
+建议在运行 CTP 示例前先检查：
+
+```bash
+locale -a | grep -i zh_CN
+```
+
+若结果中没有 `zh_CN.GB18030`，请先在宿主机生成 locale，再启动程序：
+
+```bash
+sudo locale-gen zh_CN.GB18030
+```
+
 ## 许可证
 
 MIT License
