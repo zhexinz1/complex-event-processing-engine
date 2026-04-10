@@ -10,6 +10,8 @@ dependencies = [
     "pytest>=8.4.2",
     "pyright>=1.1.408",
     "ruff>=0.15.9",
+    "flask>=3.0.0",
+    "pymysql>=1.1.0",
 ]
 
 [tool.pyright]
