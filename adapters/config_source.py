@@ -376,7 +376,7 @@ class MySQLConfigSource(ConfigSource):
     DB_PORT = 23306
     DB_NAME = "fof"
     DB_USER = "cx"
-    DB_PASS = "iyykiho4#0HO"
+    DB_PASS = "cC3z#,2?od)gn7Nhd2L1"
 
     CREATE_TABLE_SQL = """
     CREATE TABLE IF NOT EXISTS target_allocations (

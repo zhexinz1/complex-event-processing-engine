@@ -7,6 +7,10 @@ Endpoints:
     GET  /api/weights          查询（支持 target_date / product_name 过滤）
     POST /api/weights          新增或覆盖更新
     DELETE /api/weights/<id>   删除单条记录
+    GET  /api/products         获取产品名称列表
+    GET  /api/assets           获取资产代码白名单
+    POST /api/assets           新增资产代码
+    DELETE /api/assets/<code>  删除资产代码
     GET  /                     前端大屏页面
 """
 
@@ -30,7 +34,7 @@ DB_CONFIG = dict(
     port=23306,
     database="fof",
     user="cx",
-    password="iyykiho4#0HO",
+    password="cC3z#,2?od)gn7Nhd2L1",
     charset="utf8mb4",
     cursorclass=pymysql.cursors.DictCursor,
     autocommit=False,
@@ -50,6 +54,15 @@ CREATE TABLE IF NOT EXISTS target_allocations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
+CREATE_ASSETS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS allowed_assets (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    asset_code  VARCHAR(50)  NOT NULL,
+    created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_asset_code (asset_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
 
@@ -62,8 +75,9 @@ def init_db() -> None:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(CREATE_TABLE_SQL)
+            cur.execute(CREATE_ASSETS_TABLE_SQL)
         conn.commit()
-    logger.info("DB table target_allocations ready.")
+    logger.info("DB tables target_allocations and allowed_assets ready.")
 
 
 # ---------------------------------------------------------------------------
@@ -204,5 +218,78 @@ def create_app() -> Flask:
         except Exception:
             return jsonify({"success": True, "data": []})
         return jsonify({"success": True, "data": [r["product_name"] for r in rows]})
+
+    # -----------------------------------------------------------------------
+    # GET /api/assets  — 获取资产代码白名单
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/assets", methods=["GET"])
+    def get_assets():
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT asset_code, created_at FROM allowed_assets ORDER BY asset_code"
+                    )
+                    rows = cur.fetchall()
+        except Exception as e:
+            return jsonify({"success": False, "message": f"数据库连接失败: {e}", "data": []}), 503
+        for row in rows:
+            if row.get("created_at"):
+                row["created_at"] = str(row["created_at"])
+        return jsonify({"success": True, "data": rows})
+
+    # -----------------------------------------------------------------------
+    # POST /api/assets  — 新增资产代码
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/assets", methods=["POST"])
+    def add_asset():
+        body = request.get_json(force=True)
+        asset_code = (body.get("asset_code") or "").strip().upper()
+        if not asset_code:
+            return jsonify({"success": False, "message": "asset_code 不能为空"}), 400
+
+        # TODO: 校验品种是否存在（未来挂载 CTP/实盘接口查验交易所品种）
+        # is_valid = ctp_gateway.check_symbol(asset_code)
+        # if not is_valid:
+        #     return jsonify({"success": False, "message": f"品种 {asset_code} 在交易所不存在"}), 422
+
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO allowed_assets (asset_code) VALUES (%s)",
+                        (asset_code,),
+                    )
+                conn.commit()
+        except pymysql.err.IntegrityError:
+            return jsonify({"success": False, "message": f"资产代码 {asset_code} 已存在"}), 409
+        except Exception as e:
+            return jsonify({"success": False, "message": f"数据库错误: {e}"}), 503
+
+        return jsonify({"success": True, "message": f"已添加资产代码 {asset_code}"}), 201
+
+    # -----------------------------------------------------------------------
+    # DELETE /api/assets/<asset_code>  — 删除资产代码
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/assets/<asset_code>", methods=["DELETE"])
+    def delete_asset(asset_code: str):
+        asset_code = asset_code.upper()
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM allowed_assets WHERE asset_code = %s", (asset_code,)
+                    )
+                    affected = cur.rowcount
+                conn.commit()
+        except Exception as e:
+            return jsonify({"success": False, "message": f"数据库连接失败: {e}"}), 503
+
+        if affected == 0:
+            return jsonify({"success": False, "message": "资产代码不存在"}), 404
+        return jsonify({"success": True, "message": f"已删除资产代码 {asset_code}"})
 
     return app

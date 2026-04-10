@@ -6,7 +6,7 @@ run_ui_server.py — 一键启动目标仓位配置大屏
     # 或
     python examples/run_ui_server.py
 
-启动后访问 http://localhost:5000
+启动后访问 http://43.160.206.71:5000
 """
 
 import logging
@@ -32,5 +32,5 @@ if __name__ == "__main__":
 
     app = create_app()
     print("\n  CEP 目标仓位配置大屏已启动")
-    print("  访问地址: http://localhost:5000\n")
+    print("  访问地址: http://43.160.206.71:5000\n")
     app.run(host="0.0.0.0", port=5000, debug=False)

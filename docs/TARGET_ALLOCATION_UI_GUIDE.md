@@ -60,6 +60,19 @@ CREATE TABLE IF NOT EXISTS target_allocations (
 
 `(target_date, product_name, asset_code)` — 同一日期、同一产品、同一资产只能有一条记录。
 
+### 资产代码白名单库 (allowed_assets)
+
+```sql
+CREATE TABLE IF NOT EXISTS allowed_assets (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    asset_code  VARCHAR(50)  NOT NULL,
+    created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_asset_code (asset_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+为了防止操作员配置时拼写错误（Typo），系统强制维护一份可交易品种资产白名单字典库。前端仅允许从这些经过备案的品种进行选取配置。
+
 ---
 
 ## 后端实现
@@ -123,6 +136,9 @@ WHERE product_name = %s
 | POST | `/api/weights` | 新增/更新 | `{target_date, product_name, asset_code, weight_ratio, algo_type?}` | JSON |
 | DELETE | `/api/weights/<id>` | 删除 | - | JSON |
 | GET | `/api/products` | 产品列表 | - | JSON |
+| GET | `/api/assets` | 资产代码白名单列表 | - | JSON |
+| POST | `/api/assets` | 新增资产代码 | `{asset_code}` | JSON |
+| DELETE| `/api/assets/<asset_code>` | 删除资产代码 | - | JSON |
 
 **响应格式**：
 
@@ -287,7 +303,14 @@ async function saveRow() {
 }
 ```
 
-#### 4. 数据库状态指示器
+#### 4. 资产字典库模块（防呆选单）
+
+**特性**：
+- **产品组合防错**：下拉控制产品名称只允许选择系统固有的几个基金组合（如“明钺全天候1号”等）。
+- **资产录入强校验**：目标核心配置界面不再允许主观手动拼写配置资产，必须通过系统内部存储的“资产字典”进行预备录入后拉取。
+- **UI 操作独立流**：在页面头部提供了一个单独的弹窗界面，独立调用 `/api/assets` 接口进行资产字典白名单维护。
+
+#### 5. 数据库状态指示器
 
 **位置**：右上角
 
@@ -515,6 +538,10 @@ Access denied for user 'cx'@'<IP>' (using password: YES)
 
 当配置变更时，自动推送到所有在线用户，无需手动刷新。
 
+### 7. 品种真实性校验 (CTP / 本地行情网关接口)
+
+**【TODO】** 目前 `allowed_assets` 白名单品种的录入在 `flask_app.py` 内部仅做了重名防重提交（抛 409 异常）。未来在 `/api/assets` 录入操作（POST）内，应当实际连接底层的 CTP 或迅投行情 API 进行即时校验。如品种由于摘牌/写错在物理引擎内找不到实体时应予以抛 422 状态码拒绝。
+
 ---
 
 ## 代码规范
@@ -609,12 +636,19 @@ pyproject.toml             (更新依赖)
 
 ## 更新日志
 
+### v1.1.0 (2026-04-10)
+
+- ✅ 完成企业级浅白浅灰专业视觉换标与重构 (Light Mode UI Re-design)
+- ✅ 优化前端下拉框强验证设计，封堵操作员输入 Typo
+- ✅ 新增资产字典库表结构 (`allowed_assets`)
+- ✅ 提供 `/api/assets` 对外配套管理 API 组件服务
+
 ### v1.0.0 (2026-04-08)
 
 - ✅ 初始版本发布
 - ✅ 实现 MySQLConfigSource 类
 - ✅ 实现 Flask REST API
-- ✅ 实现深色金融大屏 UI
+- ✅ 实现赛博金融大屏极客风 UI
 - ✅ 修复 DB 状态指示器误报问题
 - ✅ 添加完整的错误处理和友好提示
 

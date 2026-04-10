@@ -1,573 +1,903 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CEP · 目标仓位配置</title>
-<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  :root {
-    --bg: #080c14;
-    --surface: rgba(255,255,255,0.035);
-    --border: rgba(99,179,237,0.15);
-    --cyan: #00d4ff;
-    --green: #00ff88;
-    --amber: #ffaa00;
-    --red: #ff4d6d;
-    --text: #cdd9e5;
-    --muted: #6b7a8d;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; min-height: 100vh; }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CEP · 目标仓位配置</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f9fafb;
+      --surface: #ffffff;
+      --border: #e5e7eb;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+    }
 
-  /* scrollbar */
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 2px; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-  /* glass card */
-  .glass {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 12px;
-  }
+    body {
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
 
-  /* glow text */
-  .glow-cyan { color: var(--cyan); text-shadow: 0 0 12px rgba(0,212,255,0.6); }
-  .glow-green { color: var(--green); text-shadow: 0 0 12px rgba(0,255,136,0.5); }
+    /* scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
 
-  /* table */
-  table { width: 100%; border-collapse: collapse; }
-  thead th {
-    padding: 10px 14px;
-    text-align: left;
-    font-size: 11px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  tbody tr {
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    transition: background .15s;
-  }
-  tbody tr:hover { background: rgba(0,212,255,0.04); }
-  tbody td { padding: 10px 14px; font-size: 13px; }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
 
-  /* weight bar */
-  .weight-bar-bg {
-    background: rgba(255,255,255,0.06);
-    border-radius: 4px;
-    height: 6px;
-    overflow: hidden;
-    min-width: 80px;
-  }
-  .weight-bar-fill {
-    height: 100%;
-    border-radius: 4px;
-    transition: width .4s ease;
-  }
+    ::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 3px;
+    }
 
-  /* badge */
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: .05em;
-  }
-  .badge-twap { background: rgba(0,212,255,0.12); color: var(--cyan); border: 1px solid rgba(0,212,255,0.25); }
-  .badge-vwap { background: rgba(0,255,136,0.12); color: var(--green); border: 1px solid rgba(0,255,136,0.25); }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #9ca3af;
+    }
 
-  /* modal overlay */
-  .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.7);
-    backdrop-filter: blur(4px);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 100;
-  }
-  .modal-box {
-    background: #0d1520;
-    border: 1px solid rgba(0,212,255,0.25);
-    border-radius: 16px;
-    padding: 28px 32px;
-    width: 480px;
-    max-width: 95vw;
-    box-shadow: 0 0 60px rgba(0,212,255,0.08);
-  }
+    /* card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    }
 
-  /* input */
-  .inp {
-    width: 100%;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(99,179,237,0.2);
-    border-radius: 8px;
-    padding: 9px 12px;
-    color: var(--text);
-    font-size: 13px;
-    font-family: inherit;
-    outline: none;
-    transition: border-color .2s;
-  }
-  .inp:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(0,212,255,0.1); }
-  .inp option { background: #0d1520; }
+    /* table */
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
 
-  /* btn */
-  .btn {
-    padding: 8px 18px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-family: inherit;
-    font-weight: 600;
-    cursor: pointer;
-    border: none;
-    transition: all .2s;
-  }
-  .btn-primary {
-    background: linear-gradient(135deg, #0099cc, #00d4ff);
-    color: #000;
-    box-shadow: 0 0 16px rgba(0,212,255,0.3);
-  }
-  .btn-primary:hover { box-shadow: 0 0 24px rgba(0,212,255,0.5); transform: translateY(-1px); }
-  .btn-ghost {
-    background: rgba(255,255,255,0.05);
-    color: var(--muted);
-    border: 1px solid rgba(255,255,255,0.1);
-  }
-  .btn-ghost:hover { background: rgba(255,255,255,0.09); color: var(--text); }
-  .btn-danger { background: rgba(255,77,109,0.15); color: var(--red); border: 1px solid rgba(255,77,109,0.3); }
-  .btn-danger:hover { background: rgba(255,77,109,0.25); }
-  .btn-sm { padding: 5px 12px; font-size: 12px; }
+    thead th {
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background-color: #f3f4f6;
+      border-bottom: 1px solid var(--border);
+      border-top: 1px solid var(--border);
+      white-space: nowrap;
+    }
 
-  /* stat card */
-  .stat-card {
-    padding: 16px 20px;
-    position: relative;
-    overflow: hidden;
-  }
-  .stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
-    opacity: .6;
-  }
+    tbody tr {
+      transition: background-color 0.15s;
+    }
 
-  /* scan line animation */
-  @keyframes scan {
-    0% { transform: translateY(-100%); }
-    100% { transform: translateY(100vh); }
-  }
-  .scan-line {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(0,212,255,0.15), transparent);
-    animation: scan 8s linear infinite;
-    pointer-events: none;
-    z-index: 999;
-  }
+    tbody tr:hover {
+      background-color: #f9fafb;
+    }
 
-  /* pulse dot */
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-  .pulse-dot { animation: pulse 2s ease-in-out infinite; }
+    tbody td {
+      padding: 12px 16px;
+      font-size: 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+    }
 
-  /* fade transition */
-  .fade-enter-active, .fade-leave-active { transition: opacity .2s, transform .2s; }
-  .fade-enter-from, .fade-leave-to { opacity: 0; transform: scale(.97); }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
 
-  /* toast */
-  .toast {
-    position: fixed;
-    bottom: 28px; right: 28px;
-    padding: 12px 20px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    z-index: 200;
-    pointer-events: none;
-  }
-  .toast-success { background: rgba(0,255,136,0.15); border: 1px solid rgba(0,255,136,0.4); color: var(--green); }
-  .toast-error   { background: rgba(255,77,109,0.15); border: 1px solid rgba(255,77,109,0.4); color: var(--red); }
-</style>
+    /* weight bar */
+    .weight-bar-bg {
+      background: #e5e7eb;
+      border-radius: 9999px;
+      height: 8px;
+      overflow: hidden;
+      min-width: 100px;
+    }
+
+    .weight-bar-fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.4s ease;
+    }
+
+    /* badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .badge-twap {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+    }
+
+    .badge-vwap {
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+
+    /* input */
+    .inp {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text-main);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+    }
+
+    .inp:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .inp::placeholder {
+      color: #9ca3af;
+    }
+
+    /* btn */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+      outline: none;
+    }
+
+    .btn:focus-visible {
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4);
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-default {
+      background-color: white;
+      color: #374151;
+      border-color: #d1d5db;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+    }
+
+    .btn-default:hover {
+      background-color: #f9fafb;
+      border-color: #9ca3af;
+    }
+
+    .btn-text {
+      background: transparent;
+      color: var(--primary);
+      padding: 4px 8px;
+    }
+
+    .btn-text:hover {
+      background: #eff6ff;
+    }
+
+    .btn-danger-text {
+      background: transparent;
+      color: var(--danger);
+      padding: 4px 8px;
+    }
+
+    .btn-danger-text:hover {
+      background: #fef2f2;
+    }
+
+    /* modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.4);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal-box {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 24px;
+      width: 480px;
+      max-width: 95vw;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+
+    /* stat header */
+    .stat-block {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-top: 2px;
+    }
+
+    /* transitions */
+    .fade-enter-active,
+    .fade-leave-active {
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .fade-enter-from,
+    .fade-leave-to {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.98);
+    }
+
+    /* toast */
+    .toast {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toast-success {
+      background: white;
+      color: #111827;
+      border-left: 4px solid var(--success);
+    }
+
+    .toast-error {
+      background: white;
+      color: #111827;
+      border-left: 4px solid var(--danger);
+    }
+  </style>
 </head>
+
 <body>
-<div id="app">
-  <div class="scan-line"></div>
+  <div id="app">
 
-  <!-- ── Header ── -->
-  <header class="glass" style="margin:16px 20px 0;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;">
-    <div style="display:flex;align-items:center;gap:14px;">
-      <div style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#003d5c,#00d4ff22);border:1px solid rgba(0,212,255,0.3);display:flex;align-items:center;justify-content:center;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      </div>
-      <div>
-        <div style="font-size:15px;font-weight:700;letter-spacing:.04em;" class="glow-cyan">CEP · 目标仓位配置</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:1px;">Target Allocation Management</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:20px;">
-      <div style="font-size:11px;color:var(--muted);">{{ currentTime }}</div>
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;">
-        <span class="pulse-dot" :style="{color: dbOk ? 'var(--green)' : 'var(--red)'}">●</span>
-        <span :style="{color: dbOk ? 'var(--green)' : 'var(--red)'}">{{ dbOk ? 'DB CONNECTED' : 'DB ERROR' }}</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- ── Stat Cards ── -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:12px 20px;">
-    <div class="glass stat-card">
-      <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;">总记录数</div>
-      <div style="font-size:28px;font-weight:700;margin-top:4px;" class="glow-cyan">{{ rows.length }}</div>
-    </div>
-    <div class="glass stat-card">
-      <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;">产品数量</div>
-      <div style="font-size:28px;font-weight:700;margin-top:4px;" class="glow-green">{{ productCount }}</div>
-    </div>
-    <div class="glass stat-card">
-      <div style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;">最新日期</div>
-      <div style="font-size:22px;font-weight:700;margin-top:4px;color:#e2e8f0;">{{ latestDate || '—' }}</div>
-    </div>
-  </div>
-
-  <!-- ── Toolbar ── -->
-  <div class="glass" style="margin:0 20px 12px;padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-    <input type="date" v-model="filterDate" class="inp" style="width:160px;" placeholder="日期筛选" />
-    <select v-model="filterProduct" class="inp" style="width:200px;">
-      <option value="">全部产品</option>
-      <option v-for="p in products" :key="p" :value="p">{{ p }}</option>
-    </select>
-    <button class="btn btn-ghost" @click="fetchData">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;margin-right:5px;vertical-align:-1px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>刷新
-    </button>
-    <div style="flex:1;"></div>
-    <button class="btn btn-primary" @click="openModal(null)">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;margin-right:5px;vertical-align:-1px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>新增配置
-    </button>
-  </div>
-
-  <!-- ── Data Table ── -->
-  <div class="glass" style="margin:0 20px 20px;overflow:hidden;">
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>日期</th>
-            <th>产品名称</th>
-            <th>资产代码</th>
-            <th style="min-width:180px;">目标比例</th>
-            <th>执行算法</th>
-            <th>更新时间</th>
-            <th style="text-align:right;">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading">
-            <td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="display:inline;animation:spin 1s linear infinite;vertical-align:-4px;margin-right:8px;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>加载中...
-            </td>
-          </tr>
-          <tr v-else-if="filteredRows.length === 0">
-            <td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">暂无数据</td>
-          </tr>
-          <tr v-for="row in filteredRows" :key="row.id">
-            <td style="color:var(--cyan);font-size:12px;">{{ row.target_date }}</td>
-            <td style="font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="row.product_name">{{ row.product_name }}</td>
-            <td style="font-weight:700;letter-spacing:.04em;color:#e2e8f0;">{{ row.asset_code }}</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div class="weight-bar-bg" style="flex:1;">
-                  <div class="weight-bar-fill" :style="weightBarStyle(row.weight_ratio)"></div>
-                </div>
-                <span style="font-size:13px;font-weight:700;min-width:52px;text-align:right;" :style="{color: weightColor(row.weight_ratio)}">
-                  {{ (row.weight_ratio * 100).toFixed(2) }}%
-                </span>
-              </div>
-            </td>
-            <td>
-              <span class="badge" :class="row.algo_type === 'VWAP' ? 'badge-vwap' : 'badge-twap'">{{ row.algo_type }}</span>
-            </td>
-            <td style="font-size:11px;color:var(--muted);">{{ row.updated_at ? row.updated_at.slice(0,16) : '—' }}</td>
-            <td style="text-align:right;">
-              <button class="btn btn-ghost btn-sm" style="margin-right:6px;" @click="openModal(row)">编辑</button>
-              <button class="btn btn-danger btn-sm" @click="deleteRow(row)">删除</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ── Modal ── -->
-  <transition name="fade">
-    <div class="modal-overlay" v-if="showModal" @click.self="closeModal">
-      <div class="modal-box">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;">
-          <div style="font-size:16px;font-weight:700;" class="glow-cyan">{{ editingRow ? '编辑配置' : '新增配置' }}</div>
-          <button class="btn btn-ghost btn-sm" @click="closeModal">✕</button>
+    <!-- ── Header ── -->
+    <header class="card"
+      style="margin:20px 24px 0; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; border-radius:8px 8px 0 0; border-bottom:none;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <!-- Logo Container -->
+        <div
+          style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+          <img src="/logo.png" alt="Logo" style="width:100%; height:100%; object-fit:contain;" />
         </div>
-
-        <div style="display:grid;gap:14px;">
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.05em;">目标日期</label>
-            <input type="date" v-model="form.target_date" class="inp" />
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.05em;">产品名称</label>
-            <input type="text" v-model="form.product_name" class="inp" placeholder="如：明诚全天候1号" list="product-list" />
-            <datalist id="product-list">
-              <option v-for="p in products" :key="p" :value="p" />
-            </datalist>
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.05em;">资产代码</label>
-            <input type="text" v-model="form.asset_code" class="inp" placeholder="如：AU2606" style="text-transform:uppercase;" />
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.05em;">目标比例（%）</label>
-            <input type="number" v-model="form.weight_pct" class="inp" placeholder="如：25.61" step="0.01" min="0" max="100" />
-            <div v-if="totalWarning" style="margin-top:5px;font-size:11px;color:var(--amber);">
-              ⚠ 当前产品合计已达 {{ totalPct.toFixed(2) }}%（含本条）
+        <div>
+          <h1 style="font-size:18px; font-weight:700; color:var(--text-main); margin:0;">目标仓位配置</h1>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Target Allocation Management</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:24px;">
+        <button class="btn btn-default" @click="showAssetModal = true" style="font-size:13px; padding:6px 12px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l-4.2 4.2m13.2-5.2h-6m-6 0H1m13.2 5.2l-4.2-4.2m0-6l-4.2-4.2">
+            </path>
+          </svg>
+          目标资产库
+        </button>
+        <div style="text-align:right;">
+          <div style="font-size:13px; font-weight:500; color:var(--text-main);">{{ currentTime }}</div>
+          <div
+            style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:2px; justify-content:flex-end;">
+            <div
+              :style="{ width:'8px', height:'8px', borderRadius:'50%', backgroundColor: dbOk ? 'var(--success)' : 'var(--danger)' }">
             </div>
+            <span :style="{ color: 'var(--text-muted)' }">{{ dbOk ? '数据库已连接' : '失去连接' }}</span>
           </div>
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.05em;">执行算法</label>
-            <select v-model="form.algo_type" class="inp">
-              <option value="TWAP">TWAP</option>
-              <option value="VWAP">VWAP</option>
-              <option value="MKT">MKT</option>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── Overview / Toolbar ── -->
+    <div class="card"
+      style="margin:0 24px 20px; padding:20px 24px; border-radius:0 0 8px 8px; display:flex; flex-direction:column; gap:20px;">
+
+      <div
+        style="display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; padding-bottom:20px; border-bottom:1px solid var(--border);">
+        <div class="stat-block">
+          <span class="stat-label">总记录数</span>
+          <span class="stat-value">{{ rows.length }}</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">涉及产品数量</span>
+          <span class="stat-value" style="color:var(--primary);">{{ productCount }}</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">最新交易日配置</span>
+          <span class="stat-value" style="color:#4b5563;">{{ latestDate || '暂无数据' }}</span>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="position:relative;">
+            <input type="date" v-model="filterDate" class="inp" title="按日期筛选" style="width:180px;" />
+          </div>
+          <div style="position:relative;">
+            <select v-model="filterProduct" class="inp" style="width:200px;">
+              <option value="">所有产品组合</option>
+              <option v-for="p in products" :key="p" :value="p">{{ p }}</option>
             </select>
           </div>
-        </div>
-
-        <div style="display:flex;gap:10px;margin-top:24px;justify-content:flex-end;">
-          <button class="btn btn-ghost" @click="closeModal">取消</button>
-          <button class="btn btn-primary" @click="saveRow" :disabled="saving">
-            {{ saving ? '保存中...' : '确认保存' }}
+          <button class="btn btn-default" @click="fetchData">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            刷新数据
           </button>
         </div>
+        <button class="btn btn-primary" @click="openModal(null)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          添加新配置
+        </button>
       </div>
     </div>
-  </transition>
 
-  <!-- ── Toast ── -->
-  <transition name="fade">
-    <div class="toast" :class="toast.type === 'success' ? 'toast-success' : 'toast-error'" v-if="toast.show">
-      {{ toast.message }}
+    <!-- ── Data Table ── -->
+    <div class="card" style="margin:0 24px 32px; overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 140px;">生效日期</th>
+              <th>产品组合名称</th>
+              <th style="width: 120px;">资产代码</th>
+              <th style="width: 240px;">分配比例</th>
+              <th style="width: 120px;">执行算法</th>
+              <th style="width: 160px;">最后更新</th>
+              <th style="width: 140px; text-align:right;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="loading">
+              <td colspan="7" style="text-align:center; padding:60px 0; color:var(--text-muted);">
+                <svg class="animate-spin"
+                  style="animation: spin 1s linear infinite; display:inline-block; margin-right:8px; vertical-align:middle; width:20px; height:20px; color:var(--primary);"
+                  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                  </path>
+                </svg>
+                正在加载配置数据...
+              </td>
+            </tr>
+            <tr v-else-if="filteredRows.length === 0">
+              <td colspan="7" style="text-align:center; padding:60px 0; color:var(--text-muted);">暂无匹配的数据记录</td>
+            </tr>
+            <tr v-for="row in filteredRows" :key="row.id">
+              <td style="color:#4b5563;">{{ row.target_date }}</td>
+              <td style="font-weight:500;">{{ row.product_name }}</td>
+              <td style="font-family:'Fira Code', monospace; font-size:13px; font-weight:500;">{{ row.asset_code }}</td>
+              <td>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div class="weight-bar-bg" style="flex:1;">
+                    <div class="weight-bar-fill" :style="weightBarStyle(row.weight_ratio)"></div>
+                  </div>
+                  <span
+                    style="font-size:13px; font-weight:600; min-width:56px; text-align:right; color:var(--text-main);">
+                    {{ (row.weight_ratio * 100).toFixed(2) }}%
+                  </span>
+                </div>
+              </td>
+              <td>
+                <span class="badge" :class="row.algo_type === 'VWAP' ? 'badge-vwap' : 'badge-twap'">{{ row.algo_type
+                  }}</span>
+              </td>
+              <td style="font-size:13px; color:var(--text-muted);">{{ row.updated_at ? row.updated_at.slice(0,16) : '—'
+                }}</td>
+              <td style="text-align:right;">
+                <button class="btn btn-text" @click="openModal(row)">编辑</button>
+                <button class="btn btn-danger-text" @click="deleteRow(row)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </transition>
-</div>
 
-<style>
-@keyframes spin { to { transform: rotate(360deg); } }
-</style>
+    <!-- ── Modal ── -->
+    <transition name="fade">
+      <div class="modal-overlay" v-if="showModal" @click.self="closeModal">
+        <div class="modal-box">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+            <h2 style="font-size:18px; font-weight:600; color:var(--text-main); margin:0;">
+              {{ editingRow ? '修改仓位配置' : '新增仓位配置' }}
+            </h2>
+            <button class="btn-text" style="color:var(--text-muted); padding:4px;" @click="closeModal">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
 
-<script>
-const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div>
+              <label
+                style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">生效日期</label>
+              <input type="date" v-model="form.target_date" class="inp" />
+            </div>
+            <div>
+              <label
+                style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">产品组合名称</label>
+              <select v-model="form.product_name" class="inp">
+                <option value="" disabled>请选择产品组合</option>
+                <option value="明钺全天候1号">明钺全天候1号</option>
+                <option value="明钺多资产1号">明钺多资产1号</option>
+                <option value="明钺多资产2号">明钺多资产2号</option>
+              </select>
+            </div>
+            <div>
+              <label
+                style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">资产代码</label>
+              <select v-model="form.asset_code" class="inp" :disabled="allowedAssets.length === 0">
+                <option value="" disabled>{{ allowedAssets.length === 0 ? '请先在目标资产库中添加品种' : '请选择资产代码' }}</option>
+                <option v-for="a in allowedAssets" :key="a.asset_code" :value="a.asset_code">{{ a.asset_code }}</option>
+              </select>
+              <div v-if="allowedAssets.length === 0"
+                style="margin-top:6px; font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:4px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                请先点击右上角「目标资产库」添加可交易品种
+              </div>
+            </div>
+            <div>
+              <label
+                style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">分配比例
+                (%)</label>
+              <div style="position:relative;">
+                <input type="number" v-model="form.weight_pct" class="inp" placeholder="0.00" step="0.01" min="0"
+                  max="100" style="padding-right:30px;" />
+                <span style="position:absolute; right:12px; top:10px; color:var(--text-muted); font-size:14px;">%</span>
+              </div>
+              <div v-if="totalWarning"
+                style="margin-top:6px; font-size:12px; color:var(--warning); display:flex; align-items:center; gap:4px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
+                  </path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                提醒：当前产品合计比例已达 {{ totalPct.toFixed(2) }}%
+              </div>
+            </div>
+            <div>
+              <label
+                style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">执行算法</label>
+              <select v-model="form.algo_type" class="inp">
+                <option value="TWAP">TWAP (时间加权)</option>
+                <option value="VWAP">VWAP (成交量加权)</option>
+                <option value="MKT">MKT (市价即时)</option>
+              </select>
+            </div>
+          </div>
 
-createApp({
-  setup() {
-    const rows = ref([]);
-    const products = ref([]);
-    const loading = ref(false);
-    const dbOk = ref(true);
-    const filterDate = ref('');
-    const filterProduct = ref('');
-    const showModal = ref(false);
-    const editingRow = ref(null);
-    const saving = ref(false);
-    const currentTime = ref('');
-    const toast = ref({ show: false, message: '', type: 'success' });
+          <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:32px;">
+            <button class="btn btn-default" @click="closeModal">取消本次编辑</button>
+            <button class="btn btn-primary" @click="saveRow" :disabled="saving">
+              {{ saving ? '正在提交...' : '确认保存配置' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
-    const form = ref({
-      target_date: '',
-      product_name: '',
-      asset_code: '',
-      weight_pct: '',
-      algo_type: 'TWAP',
-    });
+    <!-- ── Toast ── -->
+    <transition name="fade">
+      <div class="toast" :class="toast.type === 'success' ? 'toast-success' : 'toast-error'" v-if="toast.show">
+        <svg v-if="toast.type === 'success'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="15" y1="9" x2="9" y2="15"></line>
+          <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+        {{ toast.message }}
+      </div>
+    </transition>
 
-    // ── computed ──
-    const filteredRows = computed(() => {
-      return rows.value.filter(r => {
-        if (filterDate.value && r.target_date !== filterDate.value) return false;
-        if (filterProduct.value && r.product_name !== filterProduct.value) return false;
-        return true;
-      });
-    });
+    <!-- ── Asset Dictionary Modal ── -->
+    <transition name="fade">
+      <div class="modal-overlay" v-if="showAssetModal" @click.self="showAssetModal = false">
+        <div class="modal-box">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+            <h2 style="font-size:18px; font-weight:600; color:var(--text-main); margin:0;">
+              资产代码字典库
+            </h2>
+            <button class="btn-text" style="color:var(--text-muted); padding:4px;" @click="showAssetModal = false">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
 
-    const productCount = computed(() => new Set(rows.value.map(r => r.product_name)).size);
-    const latestDate = computed(() => rows.value.length ? rows.value[0].target_date : null);
+          <!-- Add new asset -->
+          <div style="display:flex; gap:8px; margin-bottom:20px;">
+            <input type="text" v-model="newAssetCode" class="inp" placeholder="输入资产代码，如 AU2606"
+              style="flex:1; text-transform:uppercase;" @keyup.enter="addAsset" />
+            <button class="btn btn-primary" @click="addAsset" :disabled="addingAsset">
+              {{ addingAsset ? '添加中...' : '添加' }}
+            </button>
+          </div>
 
-    // total pct for current product+date in modal (for warning)
-    const totalPct = computed(() => {
-      if (!form.value.product_name || !form.value.target_date) return 0;
-      const others = rows.value.filter(r =>
-        r.product_name === form.value.product_name &&
-        r.target_date === form.value.target_date &&
-        r.asset_code !== form.value.asset_code
-      );
-      const otherSum = others.reduce((s, r) => s + r.weight_ratio * 100, 0);
-      return otherSum + (parseFloat(form.value.weight_pct) || 0);
-    });
-    const totalWarning = computed(() => totalPct.value > 100);
+          <!-- Asset list -->
+          <div style="max-height:320px; overflow-y:auto; border:1px solid var(--border); border-radius:6px;">
+            <div v-if="allowedAssets.length === 0"
+              style="padding:40px 20px; text-align:center; color:var(--text-muted); font-size:14px;">
+              暂无资产代码，请先添加
+            </div>
+            <div v-for="asset in allowedAssets" :key="asset.asset_code"
+              style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border);">
+              <div>
+                <div
+                  style="font-family:'Fira Code', monospace; font-size:14px; font-weight:500; color:var(--text-main);">
+                  {{ asset.asset_code }}
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                  添加于 {{ asset.created_at ? asset.created_at.slice(0, 16) : '—' }}
+                </div>
+              </div>
+              <button class="btn btn-danger-text" @click="deleteAsset(asset.asset_code)">删除</button>
+            </div>
+          </div>
 
-    // ── helpers ──
-    function weightBarStyle(ratio) {
-      const pct = Math.min(ratio * 100, 100);
-      let color;
-      if (pct >= 30) color = 'linear-gradient(90deg,#00d4ff,#0099cc)';
-      else if (pct >= 15) color = 'linear-gradient(90deg,#00ff88,#00cc66)';
-      else color = 'linear-gradient(90deg,#ffaa00,#ff8800)';
-      return { width: pct + '%', background: color };
-    }
+          <div
+            style="margin-top:20px; padding:12px; background:#f9fafb; border-radius:6px; font-size:12px; color:var(--text-muted);">
+            <strong style="color:var(--text-main);">提示：</strong>
+            只有在此字典库中的资产代码才能用于配置目标仓位。未来将接入 CTP 接口自动校验品种有效性。
+          </div>
+        </div>
+      </div>
+    </transition>
+  </div>
 
-    function weightColor(ratio) {
-      const pct = ratio * 100;
-      if (pct >= 30) return 'var(--cyan)';
-      if (pct >= 15) return 'var(--green)';
-      return 'var(--amber)';
-    }
-
-    function showToast(message, type = 'success') {
-      toast.value = { show: true, message, type };
-      setTimeout(() => { toast.value.show = false; }, 3000);
-    }
-
-    // ── API ──
-    async function fetchData() {
-      loading.value = true;
-      try {
-        const res = await fetch('/api/weights');
-        const json = await res.json();
-        if (json.success) {
-          rows.value = json.data || [];
-          dbOk.value = true;
-        } else {
-          dbOk.value = false;
-          showToast(json.message || '数据加载失败', 'error');
-        }
-      } catch (e) {
-        dbOk.value = false;
-        showToast('数据加载失败: ' + e.message, 'error');
-      } finally {
-        loading.value = false;
+  <style>
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
       }
     }
+  </style>
 
-    async function fetchProducts() {
-      try {
-        const res = await fetch('/api/products');
-        const json = await res.json();
-        products.value = json.data || [];
-      } catch {}
-    }
+  <script>
+    const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
 
-    function openModal(row) {
-      editingRow.value = row;
-      if (row) {
-        form.value = {
-          target_date: row.target_date,
-          product_name: row.product_name,
-          asset_code: row.asset_code,
-          weight_pct: (row.weight_ratio * 100).toFixed(4),
-          algo_type: row.algo_type,
-        };
-      } else {
-        const today = new Date().toISOString().slice(0, 10);
-        form.value = { target_date: today, product_name: filterProduct.value, asset_code: '', weight_pct: '', algo_type: 'TWAP' };
-      }
-      showModal.value = true;
-    }
+    createApp({
+      setup() {
+        const rows = ref([]);
+        const products = ref([]);
+        const allowedAssets = ref([]);
+        const loading = ref(false);
+        const dbOk = ref(true);
+        const filterDate = ref('');
+        const filterProduct = ref('');
+        const showModal = ref(false);
+        const showAssetModal = ref(false);
+        const editingRow = ref(null);
+        const saving = ref(false);
+        const addingAsset = ref(false);
+        const newAssetCode = ref('');
+        const currentTime = ref('');
+        const toast = ref({ show: false, message: '', type: 'success' });
 
-    function closeModal() {
-      showModal.value = false;
-      editingRow.value = null;
-    }
-
-    async function saveRow() {
-      const { target_date, product_name, asset_code, weight_pct, algo_type } = form.value;
-      if (!target_date || !product_name || !asset_code || weight_pct === '') {
-        showToast('请填写所有必填字段', 'error'); return;
-      }
-      saving.value = true;
-      try {
-        const res = await fetch('/api/weights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            target_date,
-            product_name,
-            asset_code: asset_code.toUpperCase(),
-            weight_ratio: parseFloat(weight_pct) / 100,
-            algo_type,
-          }),
+        const form = ref({
+          target_date: '',
+          product_name: '',
+          asset_code: '',
+          weight_pct: '',
+          algo_type: 'TWAP',
         });
-        const json = await res.json();
-        if (json.success) {
-          showToast('保存成功');
-          closeModal();
-          await fetchData();
-          await fetchProducts();
-        } else {
-          showToast(json.message || '保存失败', 'error');
+
+        // ── computed ──
+        const filteredRows = computed(() => {
+          return rows.value.filter(r => {
+            if (filterDate.value && r.target_date !== filterDate.value) return false;
+            if (filterProduct.value && r.product_name !== filterProduct.value) return false;
+            return true;
+          });
+        });
+
+        const productCount = computed(() => new Set(rows.value.map(r => r.product_name)).size);
+        const latestDate = computed(() => rows.value.length ? rows.value[0].target_date : null);
+
+        // total pct for warning
+        const totalPct = computed(() => {
+          if (!form.value.product_name || !form.value.target_date) return 0;
+          const others = rows.value.filter(r =>
+            r.product_name === form.value.product_name &&
+            r.target_date === form.value.target_date &&
+            r.asset_code !== form.value.asset_code
+          );
+          const otherSum = others.reduce((s, r) => s + r.weight_ratio * 100, 0);
+          return otherSum + (parseFloat(form.value.weight_pct) || 0);
+        });
+        const totalWarning = computed(() => totalPct.value > 100);
+
+        // ── helpers ──
+        function weightBarStyle(ratio) {
+          const pct = Math.min(ratio * 100, 100);
+          // Corporate blue gradient
+          let bg = 'linear-gradient(90deg, #3b82f6, #2563eb)';
+          return { width: pct + '%', background: bg };
         }
-      } catch (e) {
-        showToast('请求失败: ' + e.message, 'error');
-      } finally {
-        saving.value = false;
-      }
-    }
 
-    async function deleteRow(row) {
-      if (!confirm(`确认删除 ${row.product_name} / ${row.asset_code} 的配置？`)) return;
-      try {
-        const res = await fetch(`/api/weights/${row.id}`, { method: 'DELETE' });
-        const json = await res.json();
-        if (json.success) {
-          showToast('删除成功');
-          await fetchData();
-          await fetchProducts();
-        } else {
-          showToast(json.message || '删除失败', 'error');
+        function showToast(message, type = 'success') {
+          toast.value = { show: true, message, type };
+          setTimeout(() => { toast.value.show = false; }, 3000);
         }
-      } catch (e) {
-        showToast('请求失败: ' + e.message, 'error');
+
+        // ── API ──
+        async function fetchData() {
+          loading.value = true;
+          try {
+            const res = await fetch('/api/weights');
+            const json = await res.json();
+            if (json.success) {
+              rows.value = json.data || [];
+              dbOk.value = true;
+            } else {
+              dbOk.value = false;
+              showToast(json.message || '加载配置数据失败', 'error');
+            }
+          } catch (e) {
+            dbOk.value = false;
+            showToast('服务器连接断开: ' + e.message, 'error');
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        async function fetchProducts() {
+          try {
+            const res = await fetch('/api/products');
+            const json = await res.json();
+            products.value = json.data || [];
+          } catch { }
+        }
+
+        async function fetchAssets() {
+          try {
+            const res = await fetch('/api/assets');
+            const json = await res.json();
+            if (json.success) {
+              allowedAssets.value = json.data || [];
+            }
+          } catch (e) {
+            showToast('加载目标资产失败: ' + e.message, 'error');
+          }
+        }
+
+        async function addAsset() {
+          const code = newAssetCode.value.trim().toUpperCase();
+          if (!code) {
+            showToast('请输入资产代码', 'error');
+            return;
+          }
+          addingAsset.value = true;
+          try {
+            const res = await fetch('/api/assets', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ asset_code: code }),
+            });
+            const json = await res.json();
+            if (json.success) {
+              showToast(`已添加资产代码 ${code}`);
+              newAssetCode.value = '';
+              await fetchAssets();
+            } else {
+              showToast(json.message || '添加失败', 'error');
+            }
+          } catch (e) {
+            showToast('请求异常: ' + e.message, 'error');
+          } finally {
+            addingAsset.value = false;
+          }
+        }
+
+        async function deleteAsset(assetCode) {
+          if (!confirm(`确认删除资产代码 ${assetCode}？删除后将无法在配置中使用该品种。`)) return;
+          try {
+            const res = await fetch(`/api/assets/${assetCode}`, { method: 'DELETE' });
+            const json = await res.json();
+            if (json.success) {
+              showToast(`已删除资产代码 ${assetCode}`);
+              await fetchAssets();
+            } else {
+              showToast(json.message || '删除失败', 'error');
+            }
+          } catch (e) {
+            showToast('请求异常: ' + e.message, 'error');
+          }
+        }
+
+        function openModal(row) {
+          editingRow.value = row;
+          if (row) {
+            form.value = {
+              target_date: row.target_date,
+              product_name: row.product_name,
+              asset_code: row.asset_code,
+              weight_pct: (row.weight_ratio * 100).toFixed(4),
+              algo_type: row.algo_type,
+            };
+          } else {
+            // Find latest date to prefill if exists
+            const d = filterDate.value || latestDate.value || new Date().toISOString().slice(0, 10);
+            form.value = { target_date: d, product_name: filterProduct.value, asset_code: '', weight_pct: '', algo_type: 'TWAP' };
+          }
+          showModal.value = true;
+        }
+
+        function closeModal() {
+          showModal.value = false;
+          editingRow.value = null;
+        }
+
+        async function saveRow() {
+          const { target_date, product_name, asset_code, weight_pct, algo_type } = form.value;
+          if (!target_date || !product_name || !asset_code || weight_pct === '') {
+            showToast('请将表单信息填写完整', 'error'); return;
+          }
+          saving.value = true;
+          try {
+            const res = await fetch('/api/weights', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                target_date,
+                product_name,
+                asset_code: asset_code.toUpperCase(),
+                weight_ratio: parseFloat(weight_pct) / 100,
+                algo_type,
+              }),
+            });
+            const json = await res.json();
+            if (json.success) {
+              showToast('成功更新仓位配置');
+              closeModal();
+              await fetchData();
+              await fetchProducts();
+            } else {
+              showToast(json.message || '配置记录保存失败', 'error');
+            }
+          } catch (e) {
+            showToast('请求异常: ' + e.message, 'error');
+          } finally {
+            saving.value = false;
+          }
+        }
+
+        async function deleteRow(row) {
+          if (!confirm(`正在删除 ${row.product_name} / ${row.asset_code} 的记录，不可撤销，确认继续？`)) return;
+          try {
+            const res = await fetch(`/api/weights/${row.id}`, { method: 'DELETE' });
+            const json = await res.json();
+            if (json.success) {
+              showToast('已删除记录');
+              await fetchData();
+              await fetchProducts();
+            } else {
+              showToast(json.message || '删除请求失败', 'error');
+            }
+          } catch (e) {
+            showToast('请求异常: ' + e.message, 'error');
+          }
+        }
+
+        // ── clock ──
+        let clockTimer;
+        function updateClock() {
+          const now = new Date();
+          const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+          currentTime.value = now.toLocaleString('zh-CN', options).replace(/\//g, '-');
+        }
+
+        onMounted(() => {
+          fetchData();
+          fetchProducts();
+          fetchAssets();
+          updateClock();
+          clockTimer = setInterval(updateClock, 1000);
+        });
+
+        onUnmounted(() => clearInterval(clockTimer));
+
+        return {
+          rows, products, allowedAssets, loading, dbOk, filterDate, filterProduct,
+          showModal, showAssetModal, editingRow, saving, addingAsset, newAssetCode,
+          form, currentTime, toast,
+          filteredRows, productCount, latestDate, totalPct, totalWarning,
+          fetchData, openModal, closeModal, saveRow, deleteRow,
+          fetchAssets, addAsset, deleteAsset,
+          weightBarStyle,
+        };
       }
-    }
-
-    // ── clock ──
-    let clockTimer;
-    function updateClock() {
-      currentTime.value = new Date().toLocaleString('zh-CN', { hour12: false });
-    }
-
-    onMounted(() => {
-      fetchData();
-      fetchProducts();
-      updateClock();
-      clockTimer = setInterval(updateClock, 1000);
-    });
-
-    onUnmounted(() => clearInterval(clockTimer));
-
-    return {
-      rows, products, loading, dbOk, filterDate, filterProduct,
-      showModal, editingRow, saving, form, currentTime, toast,
-      filteredRows, productCount, latestDate, totalPct, totalWarning,
-      fetchData, openModal, closeModal, saveRow, deleteRow,
-      weightBarStyle, weightColor,
-    };
-  }
-}).mount('#app');
-</script>
+    }).mount('#app');
+  </script>
 </body>
+
 </html>
