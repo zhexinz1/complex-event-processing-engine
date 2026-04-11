@@ -15,8 +15,8 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_PROVIDER_DIR = PROJECT_ROOT / "data_provider"
 DEFAULT_DB_PATH = DATA_PROVIDER_DIR / "stock_index.sqlite"
-SHE_FILE = PROJECT_ROOT / "SHE.xls"
-SZSE_FILE = PROJECT_ROOT / "SZSE.xlsx"
+SHE_FILE = DATA_PROVIDER_DIR / "SHE.xls"
+SZSE_FILE = DATA_PROVIDER_DIR / "SZSE.xlsx"
 
 
 @dataclass(frozen=True)

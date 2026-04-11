@@ -212,15 +212,11 @@
                 </div>
                 <div>
                   <div class="stat-label">标的</div>
-                  <div style="font-size:14px; font-weight:600;">{{ selectedPreset.symbol }}</div>
+                  <div style="font-size:14px; font-weight:600;">{{ formatPresetSymbols(selectedPreset) }}</div>
                 </div>
-                <div>
-                  <div class="stat-label">PBX 参数</div>
-                  <div style="font-size:14px; font-weight:600;">M1={{ selectedPreset.parameters.pbx_period }}</div>
-                </div>
-                <div>
-                  <div class="stat-label">MA$1</div>
-                  <div style="font-size:14px; font-weight:600;">MA{{ selectedPreset.parameters.ma_period }}</div>
+                <div v-for="param in selectedPresetParameters" :key="param.label">
+                  <div class="stat-label">{{ param.label }}</div>
+                  <div style="font-size:14px; font-weight:600;">{{ param.value }}</div>
                 </div>
               </div>
             </div>
@@ -231,7 +227,9 @@
                   style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">行情数据源</label>
                 <select v-model="backtestDataSource" class="inp">
                   <option value="mock">内置 mock 数据</option>
-                  <option value="tushare">Tushare A股日线</option>
+                  <option value="tushare" :disabled="!presetSupportsDataSource(selectedPreset, 'tushare')">
+                    Tushare A股日线
+                  </option>
                 </select>
               </div>
 
@@ -321,8 +319,8 @@
                       <th>标的</th>
                       <th>方向</th>
                       <th>价格</th>
-                      <th>PBX1</th>
-                      <th>MA$1</th>
+                      <th>指标</th>
+                      <th>参考</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -335,9 +333,9 @@
                           {{ signal.payload.side }}
                         </span>
                       </td>
-                      <td>{{ signal.payload.close.toFixed(2) }}</td>
-                      <td>{{ signal.payload.pbx1.toFixed(2) }}</td>
-                      <td>{{ signal.payload.ma1.toFixed(2) }}</td>
+                      <td>{{ signalPrice(signal) }}</td>
+                      <td>{{ signalMetric(signal) }}</td>
+                      <td>{{ signalReference(signal) }}</td>
                     </tr>
                     <tr v-if="backtestResult.signals.length === 0">
                       <td colspan="7" style="text-align:center; color:var(--text-muted);">没有触发信号</td>

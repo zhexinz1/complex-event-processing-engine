@@ -53,6 +53,12 @@ createApp({
     const selectedPreset = computed(() => {
       return backtestPresets.value.find(p => p.id === selectedStrategyId.value) || null;
     });
+    const selectedPresetParameters = computed(() => {
+      const preset = selectedPreset.value;
+      if (!preset) return [];
+      if (Array.isArray(preset.parameter_summary)) return preset.parameter_summary;
+      return Object.entries(preset.parameters || {}).map(([label, value]) => ({ label, value }));
+    });
     const sampledEquityCurve = computed(() => {
       if (!backtestResult.value || !backtestResult.value.equity_curve) return [];
       const points = backtestResult.value.equity_curve;
@@ -102,6 +108,39 @@ createApp({
       const max = Math.max(...values);
       if (max === min) return 50;
       return 12 + ((equity - min) / (max - min)) * 88;
+    }
+
+    function formatPresetSymbols(preset) {
+      if (!preset) return '';
+      if (Array.isArray(preset.symbols)) return preset.symbols.join(', ');
+      return preset.symbol || '';
+    }
+
+    function presetSupportsDataSource(preset, dataSource) {
+      if (!preset || !Array.isArray(preset.data_sources)) return true;
+      return preset.data_sources.includes(dataSource);
+    }
+
+    function signalPrice(signal) {
+      return Number(signal.payload.close || signal.payload.price || 0).toFixed(2);
+    }
+
+    function signalMetric(signal) {
+      const payload = signal.payload || {};
+      if (payload.score !== undefined) return Number(payload.score).toFixed(4);
+      if (payload.pbx1 !== undefined) return Number(payload.pbx1).toFixed(2);
+      return '-';
+    }
+
+    function signalReference(signal) {
+      const payload = signal.payload || {};
+      if (payload.winner) return payload.winner;
+      if (payload.ma1 !== undefined) return Number(payload.ma1).toFixed(2);
+      return payload.reason || '-';
+    }
+
+    function isTushareCode(value) {
+      return /^(\d{6}|\d{6}\.(SZ|SH|BJ))$/i.test(value.trim());
     }
 
     function toTushareDate(value) {
@@ -169,6 +208,10 @@ createApp({
       }
       if (backtestDataSource.value === 'tushare' && (!backtestTsCode.value || !backtestStartDate.value || !backtestEndDate.value)) {
         showToast('请填写股票代码和日期范围', 'error');
+        return;
+      }
+      if (backtestDataSource.value === 'tushare' && !isTushareCode(backtestTsCode.value)) {
+        showToast('请选择搜索结果，或输入 6 位股票代码 / 完整 ts_code', 'error');
         return;
       }
       backtestLoading.value = true;
@@ -385,6 +428,12 @@ createApp({
       }, 350);
     });
 
+    watch(selectedStrategyId, () => {
+      if (!presetSupportsDataSource(selectedPreset.value, backtestDataSource.value)) {
+        backtestDataSource.value = 'mock';
+      }
+    });
+
     function updateClock() {
       const now = new Date();
       const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
@@ -412,12 +461,14 @@ createApp({
       loading, backtestLoading, stockSearchLoading, dbOk, filterDate, filterProduct,
       showModal, showAssetModal, editingRow, saving, addingAsset, newAssetCode,
       form, currentTime, toast,
-      filteredRows, productCount, latestDate, selectedPreset, sampledEquityCurve,
+      filteredRows, productCount, latestDate, selectedPreset, selectedPresetParameters,
+      sampledEquityCurve,
       totalPct, totalWarning,
       fetchData, openModal, closeModal, saveRow, deleteRow,
       fetchAssets, addAsset, deleteAsset, fetchBacktestPresets, runBacktest,
       searchStocks, selectStock, closeStockSearchSoon,
-      weightBarStyle, formatMoney, equityBarHeight,
+      weightBarStyle, formatMoney, equityBarHeight, formatPresetSymbols,
+      presetSupportsDataSource, signalPrice, signalMetric, signalReference,
     };
   }
 }).mount('#app');

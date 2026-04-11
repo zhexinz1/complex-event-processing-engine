@@ -78,6 +78,27 @@ def test_backtest_api_runs_pbx_ma_with_tushare_source(monkeypatch) -> None:
     assert payload["data"]["signals"][0]["symbol"] == "000001.SZ"
 
 
+def test_backtest_api_runs_cross_section_momentum_preset() -> None:
+    app = create_app()
+    client = app.test_client()
+
+    response = client.post(
+        "/api/backtests/run",
+        json={"strategy_id": "cross_section_momentum", "data_source": "mock"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+
+    data = payload["data"]
+    assert data["market_events_processed"] == 60
+    assert data["signals"]
+    assert data["trades"]
+    assert data["signals"][0]["payload"]["side"] == "BUY"
+    assert {signal["symbol"] for signal in data["signals"]} >= {"000001.SZ", "600000.SH"}
+
+
 def test_stock_search_api_returns_indexed_matches(monkeypatch) -> None:
     def fake_search_stocks(keyword: str, limit: int = 20):
         assert keyword == "600000"
