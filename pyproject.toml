@@ -12,12 +12,13 @@ dependencies = [
     "ruff>=0.15.9",
     "flask>=3.0.0",
     "pymysql>=1.1.0",
+    "tushare>=1.4.29",
 ]
 
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-include = ["adapters", "backtest", "cep", "examples", "nlp", "rebalance", "tests"]
+include = ["adapters", "backtest", "cep", "data_provider", "examples", "nlp", "rebalance", "tests"]
 extraPaths = ["."]
 pythonVersion = "3.13"
 

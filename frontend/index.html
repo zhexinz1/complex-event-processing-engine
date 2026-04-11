@@ -589,6 +589,41 @@
                 </div>
               </div>
             </div>
+
+            <div style="margin-top:18px; display:flex; flex-direction:column; gap:14px;">
+              <div>
+                <label
+                  style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">行情数据源</label>
+                <select v-model="backtestDataSource" class="inp">
+                  <option value="mock">内置 mock 数据</option>
+                  <option value="tushare">Tushare A股日线</option>
+                </select>
+              </div>
+
+              <div v-if="backtestDataSource === 'tushare'" style="display:flex; flex-direction:column; gap:14px;">
+                <div>
+                  <label
+                    style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">股票代码</label>
+                  <input type="text" v-model="backtestTsCode" class="inp" placeholder="000001 或 000001.SZ"
+                    style="text-transform:uppercase;" />
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                  <div>
+                    <label
+                      style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">开始日期</label>
+                    <input type="date" v-model="backtestStartDate" class="inp" />
+                  </div>
+                  <div>
+                    <label
+                      style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">结束日期</label>
+                    <input type="date" v-model="backtestEndDate" class="inp" />
+                  </div>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">
+                  使用 Tushare daily 未复权日线。需要本机已配置可访问 daily 接口的 token。
+                </div>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -850,6 +885,10 @@
         const allowedAssets = ref([]);
         const backtestPresets = ref([]);
         const selectedStrategyId = ref('pbx_ma');
+        const backtestDataSource = ref('mock');
+        const backtestTsCode = ref('000001.SZ');
+        const backtestStartDate = ref('2024-01-01');
+        const backtestEndDate = ref(new Date().toISOString().slice(0, 10));
         const backtestResult = ref(null);
         const loading = ref(false);
         const backtestLoading = ref(false);
@@ -938,6 +977,10 @@
           return 12 + ((equity - min) / (max - min)) * 88;
         }
 
+        function toTushareDate(value) {
+          return String(value || '').replaceAll('-', '');
+        }
+
         // ── API ──
         async function fetchData() {
           loading.value = true;
@@ -1001,12 +1044,25 @@
             showToast('请选择预设策略', 'error');
             return;
           }
+          if (backtestDataSource.value === 'tushare' && (!backtestTsCode.value || !backtestStartDate.value || !backtestEndDate.value)) {
+            showToast('请填写股票代码和日期范围', 'error');
+            return;
+          }
           backtestLoading.value = true;
           try {
+            const payload = {
+              strategy_id: selectedStrategyId.value,
+              data_source: backtestDataSource.value,
+            };
+            if (backtestDataSource.value === 'tushare') {
+              payload.ts_code = backtestTsCode.value.trim().toUpperCase();
+              payload.start_date = toTushareDate(backtestStartDate.value);
+              payload.end_date = toTushareDate(backtestEndDate.value);
+            }
             const res = await fetch('/api/backtests/run', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ strategy_id: selectedStrategyId.value }),
+              body: JSON.stringify(payload),
             });
             const json = await res.json();
             if (json.success) {
@@ -1161,6 +1217,7 @@
 
         return {
           activeTab, rows, products, allowedAssets, backtestPresets, selectedStrategyId,
+          backtestDataSource, backtestTsCode, backtestStartDate, backtestEndDate,
           backtestResult, loading, backtestLoading, dbOk, filterDate, filterProduct,
           showModal, showAssetModal, editingRow, saving, addingAsset, newAssetCode,
           form, currentTime, toast,

@@ -12,7 +12,9 @@ Endpoints:
     POST /api/assets           新增资产代码
     DELETE /api/assets/<code>  删除资产代码
     GET  /api/backtests/presets 获取可回测预设策略列表
-    POST /api/backtests/run     运行指定预设策略回测（body: {"strategy_id": "pbx_ma"}）
+    POST /api/backtests/run     运行预设策略回测；mock body: {"strategy_id": "pbx_ma"}
+                                tushare body: {"strategy_id": "pbx_ma", "data_source": "tushare",
+                                "ts_code": "000001.SZ", "start_date": "20240101", "end_date": "20241231"}
     GET  /                     前端大屏页面
 """
 
@@ -316,15 +318,45 @@ def create_app() -> Flask:
     @app.route("/api/backtests/run", methods=["POST"])
     def run_backtest():
         body = request.get_json(force=True, silent=True) or {}
-        strategy_id = body.get("strategy_id", "pbx_ma")
+        strategy_id = str(body.get("strategy_id", "pbx_ma")).strip()
+        data_source = str(body.get("data_source", "mock")).strip().lower()
+        ts_code = body.get("ts_code")
+        start_date = body.get("start_date")
+        end_date = body.get("end_date")
+        logger.info(
+            "Backtest API request: strategy_id=%s, data_source=%s, ts_code=%s, "
+            "start_date=%s, end_date=%s, raw_body=%s",
+            strategy_id,
+            data_source,
+            ts_code,
+            start_date,
+            end_date,
+            body,
+        )
         try:
-            result = run_preset_backtest(strategy_id)
+            result = run_preset_backtest(
+                strategy_id=strategy_id,
+                data_source=data_source,
+                ts_code=ts_code,
+                start_date=start_date,
+                end_date=end_date,
+            )
         except ValueError as e:
             return jsonify({"success": False, "message": str(e)}), 400
         except Exception as e:
             logger.exception("Preset backtest failed: %s", e)
             return jsonify({"success": False, "message": f"回测失败: {e}"}), 500
 
+        logger.info(
+            "Backtest API result: strategy_id=%s, data_source=%s, "
+            "market_events=%s, signals=%s, trades=%s, final_equity=%.2f",
+            strategy_id,
+            data_source,
+            result.market_events_processed,
+            len(result.signals),
+            len(result.trades),
+            result.final_equity,
+        )
         return jsonify(
             {
                 "success": True,

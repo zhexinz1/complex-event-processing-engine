@@ -7,6 +7,7 @@ from typing import Any
 
 from cep.core.events import BarEvent, BaseEvent, OrderSide, SignalEvent, SignalType
 from cep.triggers import BaseTrigger
+from data_provider import fetch_tushare_daily_bars, normalize_ts_code
 
 from .engine import BacktestEngine
 from .models import BacktestResult
@@ -24,7 +25,7 @@ PRESET_STRATEGIES = {
         "id": "pbx_ma",
         "name": "PBX1 + MA$1 情绪周期",
         "description": "PBX1 瀑布线短线情绪轨配合 MA$1 参照线，使用预设 mock 数据回测启动与退潮信号。",
-        "dataset": "emotion_cycle_mock",
+        "dataset": "emotion_cycle_mock / tushare_daily",
         "symbol": "600519.SH",
         "parameters": {
             "pbx_period": 4,
@@ -171,7 +172,42 @@ class PbxMaEmotionTrigger(BaseTrigger):
         self.event_bus.publish(signal)
 
 
-def run_preset_backtest(strategy_id: str) -> BacktestResult:
+def run_pbx_ma_backtest(
+    bars: list[BarEvent],
+    symbol: str,
+    initial_cash: float = 1_000_000.0,
+    quantity: float = 100.0,
+    pbx_period: int = 4,
+    ma_period: int = 10,
+    bar_freq: str = "1m",
+) -> BacktestResult:
+    """Run PBX/MA strategy on caller-provided bars."""
+    engine = BacktestEngine(
+        initial_cash=initial_cash,
+        default_order_quantity=quantity,
+        commission_rate=0.0003,
+    )
+    trigger = PbxMaEmotionTrigger(
+        engine=engine,
+        symbol=symbol,
+        pbx_period=pbx_period,
+        ma_period=ma_period,
+        quantity=quantity,
+        bar_freq=bar_freq,
+    )
+    trigger.register()
+
+    engine.ingest_bars(bars)
+    return engine.run()
+
+
+def run_preset_backtest(
+    strategy_id: str,
+    data_source: str = "mock",
+    ts_code: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> BacktestResult:
     """Run a supported preset strategy against its preset dataset."""
     if strategy_id != "pbx_ma":
         raise ValueError(f"Unsupported preset strategy: {strategy_id}")
@@ -179,23 +215,28 @@ def run_preset_backtest(strategy_id: str) -> BacktestResult:
     preset = PRESET_STRATEGIES[strategy_id]
     parameters = preset["parameters"]
     symbol = str(preset["symbol"])
+    bar_freq = "1m"
 
-    engine = BacktestEngine(
-        initial_cash=float(parameters["initial_cash"]),
-        default_order_quantity=float(parameters["quantity"]),
-        commission_rate=0.0003,
-    )
-    trigger = PbxMaEmotionTrigger(
-        engine=engine,
+    if data_source == "mock":
+        bars = make_mock_bars(symbol, PBX_MA_PRESET_CLOSES)
+    elif data_source == "tushare":
+        if not ts_code or not start_date or not end_date:
+            raise ValueError("Tushare 回测需要 ts_code、start_date、end_date")
+        symbol = normalize_ts_code(ts_code)
+        bars = fetch_tushare_daily_bars(symbol, start_date, end_date)
+        bar_freq = "1d"
+    else:
+        raise ValueError(f"Unsupported backtest data source: {data_source}")
+
+    return run_pbx_ma_backtest(
+        bars=bars,
         symbol=symbol,
+        initial_cash=float(parameters["initial_cash"]),
+        quantity=float(parameters["quantity"]),
         pbx_period=int(parameters["pbx_period"]),
         ma_period=int(parameters["ma_period"]),
-        quantity=float(parameters["quantity"]),
+        bar_freq=bar_freq,
     )
-    trigger.register()
-
-    engine.ingest_bars(make_mock_bars(symbol, PBX_MA_PRESET_CLOSES))
-    return engine.run()
 
 
 def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
