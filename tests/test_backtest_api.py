@@ -76,3 +76,30 @@ def test_backtest_api_runs_pbx_ma_with_tushare_source(monkeypatch) -> None:
     assert payload["success"] is True
     assert payload["data"]["market_events_processed"] == 38
     assert payload["data"]["signals"][0]["symbol"] == "000001.SZ"
+
+
+def test_stock_search_api_returns_indexed_matches(monkeypatch) -> None:
+    def fake_search_stocks(keyword: str, limit: int = 20):
+        assert keyword == "600000"
+        assert limit == 5
+        return [
+            {
+                "ts_code": "600000.SH",
+                "symbol": "600000",
+                "name": "浦发银行",
+                "exchange": "SH",
+            }
+        ]
+
+    monkeypatch.setattr("adapters.flask_app.search_stocks", fake_search_stocks)
+
+    app = create_app()
+    client = app.test_client()
+
+    response = client.get("/api/stocks/search", query_string={"q": "600000", "limit": "5"})
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"][0]["ts_code"] == "600000.SH"
+    assert payload["data"][0]["name"] == "浦发银行"

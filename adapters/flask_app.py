@@ -15,6 +15,7 @@ Endpoints:
     POST /api/backtests/run     运行预设策略回测；mock body: {"strategy_id": "pbx_ma"}
                                 tushare body: {"strategy_id": "pbx_ma", "data_source": "tushare",
                                 "ts_code": "000001.SZ", "start_date": "20240101", "end_date": "20241231"}
+    GET  /api/stocks/search     搜索本地 A 股股票索引（query: q, limit）
     GET  /                     前端大屏页面
 """
 
@@ -33,6 +34,7 @@ from backtest.preset_strategies import (
     run_preset_backtest,
     serialize_backtest_result,
 )
+from data_provider import search_stocks
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +312,28 @@ def create_app() -> Flask:
     @app.route("/api/backtests/presets", methods=["GET"])
     def get_backtest_presets():
         return jsonify({"success": True, "data": list(PRESET_STRATEGIES.values())})
+
+    # -----------------------------------------------------------------------
+    # GET /api/stocks/search — 搜索本地 A 股股票索引
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/stocks/search", methods=["GET"])
+    def search_stock_index():
+        keyword = request.args.get("q", "").strip()
+        raw_limit = request.args.get("limit", "20")
+        try:
+            limit = int(raw_limit)
+        except ValueError:
+            return jsonify({"success": False, "message": "limit 必须是整数", "data": []}), 400
+
+        try:
+            rows = search_stocks(keyword, limit=limit)
+        except Exception as e:
+            logger.exception("Stock search failed: %s", e)
+            return jsonify({"success": False, "message": f"股票搜索失败: {e}", "data": []}), 500
+
+        logger.info("Stock search: q=%s, limit=%s, results=%s", keyword, limit, len(rows))
+        return jsonify({"success": True, "data": rows, "total": len(rows)})
 
     # -----------------------------------------------------------------------
     # POST /api/backtests/run — 运行预设策略回测
