@@ -1,4 +1,4 @@
-const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
+const { createApp, ref, computed, onMounted, onUnmounted, watch } = Vue;
 const api = window.CepApi;
 
 createApp({
@@ -9,13 +9,16 @@ createApp({
     const allowedAssets = ref([]);
     const backtestPresets = ref([]);
     const selectedStrategyId = ref('pbx_ma');
-    const backtestDataSource = ref('mock');
+    const backtestDataSource = ref('tushare');
     const backtestTsCode = ref('000001.SZ');
     const backtestStartDate = ref('2024-01-01');
     const backtestEndDate = ref(new Date().toISOString().slice(0, 10));
     const backtestResult = ref(null);
+    const stockSearchResults = ref([]);
+    const stockSearchOpen = ref(false);
     const loading = ref(false);
     const backtestLoading = ref(false);
+    const stockSearchLoading = ref(false);
     const dbOk = ref(true);
     const filterDate = ref('');
     const filterProduct = ref('');
@@ -193,6 +196,57 @@ createApp({
       }
     }
 
+    async function searchStocks({ silent = false } = {}) {
+      const keyword = backtestTsCode.value.trim();
+      if (!keyword) {
+        stockSearchResults.value = [];
+        stockSearchOpen.value = false;
+        if (!silent) showToast('请输入股票代码或名称关键词', 'error');
+        return;
+      }
+      stockSearchLoading.value = true;
+      const requestId = ++stockSearchRequestId;
+      try {
+        const json = await api.searchStocks(keyword, 20);
+        if (requestId !== stockSearchRequestId) return;
+        if (json.success) {
+          stockSearchResults.value = json.data || [];
+          stockSearchOpen.value = stockSearchResults.value.length > 0;
+          if (!silent && stockSearchResults.value.length === 0) {
+            showToast('没有找到匹配股票', 'error');
+          }
+        } else {
+          stockSearchResults.value = [];
+          stockSearchOpen.value = false;
+          if (!silent) showToast(json.message || '股票搜索失败', 'error');
+        }
+      } catch (e) {
+        if (requestId !== stockSearchRequestId) return;
+        stockSearchResults.value = [];
+        stockSearchOpen.value = false;
+        if (!silent) showToast('股票搜索请求失败: ' + e.message, 'error');
+      } finally {
+        if (requestId === stockSearchRequestId) {
+          stockSearchLoading.value = false;
+        }
+      }
+    }
+
+    function selectStock(stock) {
+      stockSearchRequestId += 1;
+      stockSearchLoading.value = false;
+      selectedStockCode = stock.ts_code;
+      backtestTsCode.value = stock.ts_code;
+      stockSearchResults.value = [];
+      stockSearchOpen.value = false;
+    }
+
+    function closeStockSearchSoon() {
+      setTimeout(() => {
+        stockSearchOpen.value = false;
+      }, 160);
+    }
+
     async function addAsset() {
       const code = newAssetCode.value.trim().toUpperCase();
       if (!code) {
@@ -301,6 +355,36 @@ createApp({
 
     // ── clock ──
     let clockTimer;
+    let stockSearchTimer;
+    let stockSearchRequestId = 0;
+    let selectedStockCode = backtestTsCode.value;
+
+    watch([backtestTsCode, backtestDataSource], ([query, dataSource]) => {
+      clearTimeout(stockSearchTimer);
+      if (dataSource !== 'tushare') {
+        stockSearchRequestId += 1;
+        stockSearchLoading.value = false;
+        stockSearchResults.value = [];
+        stockSearchOpen.value = false;
+        return;
+      }
+
+      const keyword = query.trim();
+      if (keyword === selectedStockCode) return;
+      selectedStockCode = '';
+      if (keyword.length < 2) {
+        stockSearchRequestId += 1;
+        stockSearchLoading.value = false;
+        stockSearchResults.value = [];
+        stockSearchOpen.value = false;
+        return;
+      }
+
+      stockSearchTimer = setTimeout(() => {
+        searchStocks({ silent: true });
+      }, 350);
+    });
+
     function updateClock() {
       const now = new Date();
       const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
@@ -316,18 +400,23 @@ createApp({
       clockTimer = setInterval(updateClock, 1000);
     });
 
-    onUnmounted(() => clearInterval(clockTimer));
+    onUnmounted(() => {
+      clearInterval(clockTimer);
+      clearTimeout(stockSearchTimer);
+    });
 
     return {
       activeTab, rows, products, allowedAssets, backtestPresets, selectedStrategyId,
       backtestDataSource, backtestTsCode, backtestStartDate, backtestEndDate,
-      backtestResult, loading, backtestLoading, dbOk, filterDate, filterProduct,
+      backtestResult, stockSearchResults, stockSearchOpen,
+      loading, backtestLoading, stockSearchLoading, dbOk, filterDate, filterProduct,
       showModal, showAssetModal, editingRow, saving, addingAsset, newAssetCode,
       form, currentTime, toast,
       filteredRows, productCount, latestDate, selectedPreset, sampledEquityCurve,
       totalPct, totalWarning,
       fetchData, openModal, closeModal, saveRow, deleteRow,
       fetchAssets, addAsset, deleteAsset, fetchBacktestPresets, runBacktest,
+      searchStocks, selectStock, closeStockSearchSoon,
       weightBarStyle, formatMoney, equityBarHeight,
     };
   }

@@ -44,6 +44,11 @@ const CepApi = {
     return this.requestJson('/api/backtests/presets');
   },
 
+  searchStocks(keyword, limit = 20) {
+    const params = new URLSearchParams({ q: keyword, limit: String(limit) });
+    return this.requestJson(`/api/stocks/search?${params.toString()}`);
+  },
+
   runBacktest(payload) {
     return this.requestJson('/api/backtests/run', {
       method: 'POST',

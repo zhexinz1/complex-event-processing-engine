@@ -239,8 +239,24 @@
                 <div>
                   <label
                     style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">股票代码</label>
-                  <input type="text" v-model="backtestTsCode" class="inp" placeholder="000001 或 000001.SZ"
-                    style="text-transform:uppercase;" />
+                  <div class="stock-combobox">
+                    <input type="text" v-model="backtestTsCode" class="inp" placeholder="输入代码、简称或公司名"
+                      style="text-transform:uppercase;" @focus="stockSearchOpen = stockSearchResults.length > 0"
+                      @blur="closeStockSearchSoon" @keyup.enter="searchStocks" />
+                    <div v-if="stockSearchLoading" class="stock-combobox-status">搜索中...</div>
+                    <div v-if="stockSearchOpen" class="stock-combobox-menu">
+                      <button v-for="stock in stockSearchResults" :key="stock.ts_code" type="button"
+                        class="stock-combobox-option" @mousedown.prevent="selectStock(stock)">
+                        <span class="stock-combobox-row">
+                          <span class="stock-combobox-title">{{ stock.ts_code }} · {{ stock.name }}</span>
+                          <span class="stock-combobox-meta">{{ stock.exchange }} {{ stock.board }}</span>
+                        </span>
+                        <span class="stock-combobox-detail">
+                          {{ stock.industry || stock.full_name || stock.english_name || '暂无详情' }}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                   <div>
