@@ -99,6 +99,85 @@ def test_backtest_api_runs_cross_section_momentum_preset() -> None:
     assert {signal["symbol"] for signal in data["signals"]} >= {"000001.SZ", "600000.SH"}
 
 
+def test_backtest_api_runs_cross_section_momentum_with_tushare_source(monkeypatch) -> None:
+    close_map = {
+        "000001.SZ": [
+            10.0, 10.1, 10.0, 10.2, 10.1, 10.3, 10.5, 10.7, 11.0, 11.4,
+            11.8, 12.1, 12.4, 12.8, 13.1, 13.3,
+        ],
+        "600000.SH": [
+            9.8, 9.9, 10.0, 10.1, 10.2, 10.3, 10.2, 10.1, 10.0, 9.9,
+            9.8, 9.9, 10.0, 10.2, 10.5, 10.9,
+        ],
+    }
+
+    def fake_fetch_tushare_daily_bars(ts_code: str, start_date: str, end_date: str):
+        assert start_date == "20240101"
+        assert end_date == "20240131"
+
+        start = datetime(2024, 1, 1, 15, 0)
+        return [
+            BarEvent(
+                symbol=ts_code,
+                freq="1d",
+                open=close,
+                high=close + 0.2,
+                low=close - 0.2,
+                close=close,
+                volume=1000 + index,
+                turnover=close * (1000 + index),
+                bar_time=start + timedelta(days=index),
+                timestamp=start + timedelta(days=index),
+            )
+            for index, close in enumerate(close_map[ts_code])
+        ]
+
+    monkeypatch.setattr(
+        "backtest.preset_strategies.fetch_tushare_daily_bars",
+        fake_fetch_tushare_daily_bars,
+    )
+
+    app = create_app()
+    client = app.test_client()
+    response = client.post(
+        "/api/backtests/run",
+        json={
+            "strategy_id": "cross_section_momentum",
+            "data_source": "tushare",
+            "symbols": ["000001", "600000.SH"],
+            "start_date": "20240101",
+            "end_date": "20240131",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["market_events_processed"] == 32
+    assert payload["data"]["signals"]
+    assert {signal["symbol"] for signal in payload["data"]["signals"]} <= set(close_map)
+
+
+def test_backtest_api_rejects_too_many_cross_section_symbols() -> None:
+    app = create_app()
+    client = app.test_client()
+    response = client.post(
+        "/api/backtests/run",
+        json={
+            "strategy_id": "cross_section_momentum",
+            "data_source": "tushare",
+            "symbols": [f"{index:06d}.SZ" for index in range(51)],
+            "start_date": "20240101",
+            "end_date": "20240131",
+        },
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert "最多支持 50" in payload["message"]
+
+
 def test_stock_search_api_returns_indexed_matches(monkeypatch) -> None:
     def fake_search_stocks(keyword: str, limit: int = 20):
         assert keyword == "600000"

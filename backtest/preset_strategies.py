@@ -136,6 +136,49 @@ def symbol_order(symbol_closes: dict[str, list[float]], symbol: str) -> int:
     return list(symbol_closes).index(symbol)
 
 
+def normalize_symbol_group(raw_symbols: Any) -> list[str]:
+    """Normalize a dynamic stock universe for cross-sectional backtests."""
+    if raw_symbols is None:
+        raise ValueError("横截面动量策略需要 symbols / ts_codes 股票池")
+
+    if isinstance(raw_symbols, str):
+        candidates = [part.strip() for part in raw_symbols.split(",")]
+    elif isinstance(raw_symbols, list):
+        candidates = [str(part).strip() for part in raw_symbols]
+    else:
+        raise ValueError("symbols 必须是股票代码数组，或逗号分隔字符串")
+
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        symbol = normalize_ts_code(candidate)
+        if symbol in seen:
+            continue
+        seen.add(symbol)
+        symbols.append(symbol)
+
+    if len(symbols) < 2:
+        raise ValueError("横截面动量策略至少需要 2 只股票")
+    if len(symbols) > 50:
+        raise ValueError("横截面动量策略最多支持 50 只股票")
+    return symbols
+
+
+def fetch_cross_section_tushare_bars(
+    symbols: list[str],
+    start_date: str,
+    end_date: str,
+) -> list[BarEvent]:
+    """Fetch and merge daily bars for a dynamic stock universe."""
+    bars: list[BarEvent] = []
+    for symbol in symbols:
+        bars.extend(fetch_tushare_daily_bars(symbol, start_date, end_date))
+    bars.sort(key=lambda bar: (bar.timestamp, symbols.index(bar.symbol)))
+    return bars
+
+
 # This strategy is intentionally implemented as a Trigger instead of an AST rule.
 # The current AST engine evaluates point-in-time boolean expressions against the
 # latest LocalContext. PBX/MA emotion-cycle logic needs temporal state: previous
@@ -408,6 +451,7 @@ def run_preset_backtest(
     strategy_id: str,
     data_source: str = "mock",
     ts_code: str | None = None,
+    symbols: Any = None,
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> BacktestResult:
@@ -419,16 +463,26 @@ def run_preset_backtest(
     parameters = preset["parameters"]
 
     if strategy_id == "cross_section_momentum":
-        if data_source != "mock":
-            raise ValueError("横截面动量策略当前仅支持内置 mock 数据")
-        symbols = list(preset["symbols"])
-        bars = make_cross_section_mock_bars(CROSS_SECTION_MOMENTUM_CLOSES)
+        if data_source == "mock":
+            selected_symbols = list(preset["symbols"])
+            bars = make_cross_section_mock_bars(CROSS_SECTION_MOMENTUM_CLOSES)
+            bar_freq = "1m"
+        elif data_source == "tushare":
+            if not start_date or not end_date:
+                raise ValueError("Tushare 横截面回测需要 start_date、end_date")
+            selected_symbols = normalize_symbol_group(symbols)
+            bars = fetch_cross_section_tushare_bars(selected_symbols, start_date, end_date)
+            bar_freq = "1d"
+        else:
+            raise ValueError(f"Unsupported backtest data source: {data_source}")
+
         return run_cross_section_momentum_backtest(
             bars=bars,
-            symbols=symbols,
+            symbols=selected_symbols,
             initial_cash=float(parameters["initial_cash"]),
             quantity=float(parameters["quantity"]),
             lookback=int(parameters["lookback"]),
+            bar_freq=bar_freq,
         )
 
     if data_source == "mock":

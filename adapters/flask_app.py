@@ -345,14 +345,16 @@ def create_app() -> Flask:
         strategy_id = str(body.get("strategy_id", "pbx_ma")).strip()
         data_source = str(body.get("data_source", "mock")).strip().lower()
         ts_code = body.get("ts_code")
+        symbols = body.get("symbols", body.get("ts_codes"))
         start_date = body.get("start_date")
         end_date = body.get("end_date")
         logger.info(
-            "Backtest API request: strategy_id=%s, data_source=%s, ts_code=%s, "
+            "Backtest API request: strategy_id=%s, data_source=%s, ts_code=%s, symbols=%s, "
             "start_date=%s, end_date=%s, raw_body=%s",
             strategy_id,
             data_source,
             ts_code,
+            symbols,
             start_date,
             end_date,
             body,
@@ -362,6 +364,7 @@ def create_app() -> Flask:
                 strategy_id=strategy_id,
                 data_source=data_source,
                 ts_code=ts_code,
+                symbols=symbols,
                 start_date=start_date,
                 end_date=end_date,
             )
