@@ -11,6 +11,8 @@ Endpoints:
     GET  /api/assets           获取资产代码白名单
     POST /api/assets           新增资产代码
     DELETE /api/assets/<code>  删除资产代码
+    GET  /api/backtests/presets 获取可回测预设策略列表
+    POST /api/backtests/run     运行指定预设策略回测（body: {"strategy_id": "pbx_ma"}）
     GET  /                     前端大屏页面
 """
 
@@ -18,10 +20,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import pymysql
 import pymysql.cursors
 from flask import Flask, jsonify, request, send_from_directory
+
+from backtest.preset_strategies import (
+    PRESET_STRATEGIES,
+    run_preset_backtest,
+    serialize_backtest_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +38,7 @@ logger = logging.getLogger(__name__)
 # 数据库连接配置
 # ---------------------------------------------------------------------------
 
-DB_CONFIG = dict(
+DB_CONFIG: dict[str, Any] = dict(
     host="120.25.245.137",
     port=23306,
     database="fof",
@@ -66,7 +75,7 @@ CREATE TABLE IF NOT EXISTS allowed_assets (
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
 
-def get_conn():
+def get_conn() -> Any:
     return pymysql.connect(**DB_CONFIG)
 
 
@@ -130,7 +139,7 @@ def create_app() -> Flask:
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(sql, params)
-                    rows = cur.fetchall()
+                    rows = cast(list[dict[str, Any]], cur.fetchall())
         except Exception as e:
             return jsonify({"success": False, "message": f"数据库连接失败: {e}", "data": []}), 503
 
@@ -214,7 +223,7 @@ def create_app() -> Flask:
                     cur.execute(
                         "SELECT DISTINCT product_name FROM target_allocations ORDER BY product_name"
                     )
-                    rows = cur.fetchall()
+                    rows = cast(list[dict[str, Any]], cur.fetchall())
         except Exception:
             return jsonify({"success": True, "data": []})
         return jsonify({"success": True, "data": [r["product_name"] for r in rows]})
@@ -231,7 +240,7 @@ def create_app() -> Flask:
                     cur.execute(
                         "SELECT asset_code, created_at FROM allowed_assets ORDER BY asset_code"
                     )
-                    rows = cur.fetchall()
+                    rows = cast(list[dict[str, Any]], cur.fetchall())
         except Exception as e:
             return jsonify({"success": False, "message": f"数据库连接失败: {e}", "data": []}), 503
         for row in rows:
@@ -291,5 +300,37 @@ def create_app() -> Flask:
         if affected == 0:
             return jsonify({"success": False, "message": "资产代码不存在"}), 404
         return jsonify({"success": True, "message": f"已删除资产代码 {asset_code}"})
+
+    # -----------------------------------------------------------------------
+    # GET /api/backtests/presets — 获取可回测预设策略
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/backtests/presets", methods=["GET"])
+    def get_backtest_presets():
+        return jsonify({"success": True, "data": list(PRESET_STRATEGIES.values())})
+
+    # -----------------------------------------------------------------------
+    # POST /api/backtests/run — 运行预设策略回测
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/backtests/run", methods=["POST"])
+    def run_backtest():
+        body = request.get_json(force=True, silent=True) or {}
+        strategy_id = body.get("strategy_id", "pbx_ma")
+        try:
+            result = run_preset_backtest(strategy_id)
+        except ValueError as e:
+            return jsonify({"success": False, "message": str(e)}), 400
+        except Exception as e:
+            logger.exception("Preset backtest failed: %s", e)
+            return jsonify({"success": False, "message": f"回测失败: {e}"}), 500
+
+        return jsonify(
+            {
+                "success": True,
+                "message": "回测完成",
+                "data": serialize_backtest_result(result),
+            }
+        )
 
     return app

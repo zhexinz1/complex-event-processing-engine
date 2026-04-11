@@ -310,6 +310,69 @@
       color: #111827;
       border-left: 4px solid var(--danger);
     }
+
+    .tab-btn {
+      border: none;
+      background: transparent;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 4px 10px;
+    }
+
+    .tab-btn.active {
+      border-bottom-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .mini-chart {
+      align-items: end;
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      gap: 3px;
+      height: 140px;
+      padding: 12px;
+    }
+
+    .chart-bar {
+      background: #2563eb;
+      border-radius: 4px 4px 0 0;
+      flex: 1;
+      min-height: 4px;
+    }
+
+    .backtest-grid {
+      display: grid;
+      gap: 24px;
+      grid-template-columns: minmax(260px, 360px) 1fr;
+      margin-top: 24px;
+    }
+
+    .metric-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    @media (max-width: 900px) {
+      .backtest-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 
@@ -353,8 +416,18 @@
       </div>
     </header>
 
+    <nav class="card"
+      style="margin:0 24px; padding:0 24px; border-radius:0; display:flex; gap:28px; border-bottom:none;">
+      <button class="tab-btn" :class="{ active: activeTab === 'allocations' }" @click="activeTab = 'allocations'">
+        目标仓位配置
+      </button>
+      <button class="tab-btn" :class="{ active: activeTab === 'backtest' }" @click="activeTab = 'backtest'">
+        策略回测
+      </button>
+    </nav>
+
     <!-- ── Overview / Toolbar ── -->
-    <div class="card"
+    <div v-if="activeTab === 'allocations'" class="card"
       style="margin:0 24px 20px; padding:20px 24px; border-radius:0 0 8px 8px; display:flex; flex-direction:column; gap:20px;">
 
       <div
@@ -406,7 +479,7 @@
     </div>
 
     <!-- ── Data Table ── -->
-    <div class="card" style="margin:0 24px 32px; overflow:hidden;">
+    <div v-if="activeTab === 'allocations'" class="card" style="margin:0 24px 32px; overflow:hidden;">
       <div style="overflow-x:auto;">
         <table>
           <thead>
@@ -467,6 +540,130 @@
         </table>
       </div>
     </div>
+
+    <!-- ── Backtest Tab ── -->
+    <section v-if="activeTab === 'backtest'" style="margin:0 24px 32px;">
+      <div class="card" style="padding:24px; border-radius:0 0 8px 8px;">
+        <div style="display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap;">
+          <div style="max-width:640px;">
+            <h2 style="font-size:18px; font-weight:700; margin:0 0 6px;">策略回测</h2>
+            <p style="font-size:13px; color:var(--text-muted); line-height:1.6; margin:0;">
+              选择一个预设策略，使用内置 mock 行情运行事件驱动回测。
+            </p>
+          </div>
+          <button class="btn btn-primary" @click="runBacktest" :disabled="backtestLoading || !selectedStrategyId">
+            {{ backtestLoading ? '回测运行中...' : '运行回测' }}
+          </button>
+        </div>
+
+        <div class="backtest-grid">
+          <div>
+            <label
+              style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">预设策略</label>
+            <select v-model="selectedStrategyId" class="inp">
+              <option v-for="preset in backtestPresets" :key="preset.id" :value="preset.id">
+                {{ preset.name }}
+              </option>
+            </select>
+            <div v-if="selectedPreset"
+              style="margin-top:16px; padding:16px; background:#f9fafb; border:1px solid var(--border); border-radius:8px;">
+              <div style="font-size:13px; color:var(--text-muted); line-height:1.6;">
+                {{ selectedPreset.description }}
+              </div>
+              <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                  <div class="stat-label">数据集</div>
+                  <div style="font-size:14px; font-weight:600;">{{ selectedPreset.dataset }}</div>
+                </div>
+                <div>
+                  <div class="stat-label">标的</div>
+                  <div style="font-size:14px; font-weight:600;">{{ selectedPreset.symbol }}</div>
+                </div>
+                <div>
+                  <div class="stat-label">PBX 参数</div>
+                  <div style="font-size:14px; font-weight:600;">M1={{ selectedPreset.parameters.pbx_period }}</div>
+                </div>
+                <div>
+                  <div class="stat-label">MA$1</div>
+                  <div style="font-size:14px; font-weight:600;">MA{{ selectedPreset.parameters.ma_period }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div v-if="!backtestResult"
+              style="height:100%; min-height:220px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); background:#f9fafb; border:1px dashed #d1d5db; border-radius:8px;">
+              运行回测后查看信号、成交和权益结果
+            </div>
+
+            <div v-else style="display:flex; flex-direction:column; gap:20px;">
+              <div class="metric-grid">
+                <div class="stat-block">
+                  <span class="stat-label">最终权益</span>
+                  <span class="stat-value">{{ formatMoney(backtestResult.final_equity) }}</span>
+                </div>
+                <div class="stat-block">
+                  <span class="stat-label">已实现盈亏</span>
+                  <span class="stat-value"
+                    :style="{ color: backtestResult.realized_pnl >= 0 ? 'var(--success)' : 'var(--danger)' }">
+                    {{ formatMoney(backtestResult.realized_pnl) }}
+                  </span>
+                </div>
+                <div class="stat-block">
+                  <span class="stat-label">信号数</span>
+                  <span class="stat-value">{{ backtestResult.signals.length }}</span>
+                </div>
+                <div class="stat-block">
+                  <span class="stat-label">成交数</span>
+                  <span class="stat-value">{{ backtestResult.trades.length }}</span>
+                </div>
+              </div>
+
+              <div class="mini-chart">
+                <div v-for="(point, idx) in sampledEquityCurve" :key="idx" class="chart-bar"
+                  :style="{ height: equityBarHeight(point.equity) + '%' }" :title="formatMoney(point.equity)">
+                </div>
+              </div>
+
+              <div style="overflow-x:auto; border:1px solid var(--border); border-radius:8px;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width:120px;">类型</th>
+                      <th>时间</th>
+                      <th>标的</th>
+                      <th>方向</th>
+                      <th>价格</th>
+                      <th>PBX1</th>
+                      <th>MA$1</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="signal in backtestResult.signals" :key="signal.timestamp + signal.payload.side">
+                      <td>Signal</td>
+                      <td style="font-size:13px; color:var(--text-muted);">{{ signal.payload.bar_time }}</td>
+                      <td>{{ signal.symbol }}</td>
+                      <td>
+                        <span class="badge" :class="signal.payload.side === 'BUY' ? 'badge-vwap' : 'badge-twap'">
+                          {{ signal.payload.side }}
+                        </span>
+                      </td>
+                      <td>{{ signal.payload.close.toFixed(2) }}</td>
+                      <td>{{ signal.payload.pbx1.toFixed(2) }}</td>
+                      <td>{{ signal.payload.ma1.toFixed(2) }}</td>
+                    </tr>
+                    <tr v-if="backtestResult.signals.length === 0">
+                      <td colspan="7" style="text-align:center; color:var(--text-muted);">没有触发信号</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- ── Modal ── -->
     <transition name="fade">
@@ -647,10 +844,15 @@
 
     createApp({
       setup() {
+        const activeTab = ref('allocations');
         const rows = ref([]);
         const products = ref([]);
         const allowedAssets = ref([]);
+        const backtestPresets = ref([]);
+        const selectedStrategyId = ref('pbx_ma');
+        const backtestResult = ref(null);
         const loading = ref(false);
+        const backtestLoading = ref(false);
         const dbOk = ref(true);
         const filterDate = ref('');
         const filterProduct = ref('');
@@ -682,6 +884,16 @@
 
         const productCount = computed(() => new Set(rows.value.map(r => r.product_name)).size);
         const latestDate = computed(() => rows.value.length ? rows.value[0].target_date : null);
+        const selectedPreset = computed(() => {
+          return backtestPresets.value.find(p => p.id === selectedStrategyId.value) || null;
+        });
+        const sampledEquityCurve = computed(() => {
+          if (!backtestResult.value || !backtestResult.value.equity_curve) return [];
+          const points = backtestResult.value.equity_curve;
+          if (points.length <= 48) return points;
+          const step = Math.ceil(points.length / 48);
+          return points.filter((_, index) => index % step === 0 || index === points.length - 1);
+        });
 
         // total pct for warning
         const totalPct = computed(() => {
@@ -707,6 +919,23 @@
         function showToast(message, type = 'success') {
           toast.value = { show: true, message, type };
           setTimeout(() => { toast.value.show = false; }, 3000);
+        }
+
+        function formatMoney(value) {
+          return Number(value || 0).toLocaleString('zh-CN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+        }
+
+        function equityBarHeight(equity) {
+          const points = sampledEquityCurve.value;
+          if (!points.length) return 4;
+          const values = points.map(p => p.equity);
+          const min = Math.min(...values);
+          const max = Math.max(...values);
+          if (max === min) return 50;
+          return 12 + ((equity - min) / (max - min)) * 88;
         }
 
         // ── API ──
@@ -747,6 +976,49 @@
             }
           } catch (e) {
             showToast('加载目标资产失败: ' + e.message, 'error');
+          }
+        }
+
+        async function fetchBacktestPresets() {
+          try {
+            const res = await fetch('/api/backtests/presets');
+            const json = await res.json();
+            if (json.success) {
+              backtestPresets.value = json.data || [];
+              if (!selectedStrategyId.value && backtestPresets.value.length) {
+                selectedStrategyId.value = backtestPresets.value[0].id;
+              }
+            } else {
+              showToast(json.message || '加载回测策略失败', 'error');
+            }
+          } catch (e) {
+            showToast('加载回测策略失败: ' + e.message, 'error');
+          }
+        }
+
+        async function runBacktest() {
+          if (!selectedStrategyId.value) {
+            showToast('请选择预设策略', 'error');
+            return;
+          }
+          backtestLoading.value = true;
+          try {
+            const res = await fetch('/api/backtests/run', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ strategy_id: selectedStrategyId.value }),
+            });
+            const json = await res.json();
+            if (json.success) {
+              backtestResult.value = json.data;
+              showToast('回测完成');
+            } else {
+              showToast(json.message || '回测失败', 'error');
+            }
+          } catch (e) {
+            showToast('回测请求失败: ' + e.message, 'error');
+          } finally {
+            backtestLoading.value = false;
           }
         }
 
@@ -880,6 +1152,7 @@
           fetchData();
           fetchProducts();
           fetchAssets();
+          fetchBacktestPresets();
           updateClock();
           clockTimer = setInterval(updateClock, 1000);
         });
@@ -887,13 +1160,15 @@
         onUnmounted(() => clearInterval(clockTimer));
 
         return {
-          rows, products, allowedAssets, loading, dbOk, filterDate, filterProduct,
+          activeTab, rows, products, allowedAssets, backtestPresets, selectedStrategyId,
+          backtestResult, loading, backtestLoading, dbOk, filterDate, filterProduct,
           showModal, showAssetModal, editingRow, saving, addingAsset, newAssetCode,
           form, currentTime, toast,
-          filteredRows, productCount, latestDate, totalPct, totalWarning,
+          filteredRows, productCount, latestDate, selectedPreset, sampledEquityCurve,
+          totalPct, totalWarning,
           fetchData, openModal, closeModal, saveRow, deleteRow,
-          fetchAssets, addAsset, deleteAsset,
-          weightBarStyle,
+          fetchAssets, addAsset, deleteAsset, fetchBacktestPresets, runBacktest,
+          weightBarStyle, formatMoney, equityBarHeight,
         };
       }
     }).mount('#app');

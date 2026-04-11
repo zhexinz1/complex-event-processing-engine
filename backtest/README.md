@@ -108,3 +108,8 @@ The current module does not yet fully model:
 - risk engine constraints during backtest
 
 Those can be added incrementally without changing the central design: everything should continue to flow through `EventBus`.
+
+## Next step
+- integrate real historical data for backtesting
+- support adding new strategies on the fly
+- support data selection (stock, commodity, data interval)

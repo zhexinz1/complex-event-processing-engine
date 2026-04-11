@@ -50,11 +50,11 @@ class SimulatedBroker:
         side_text = str(signal.payload.get("side", OrderSide.BUY.value)).upper()
         side = OrderSide.BUY if side_text != OrderSide.SELL.value else OrderSide.SELL
         quantity = float(signal.payload.get("quantity", self.default_quantity))
+        signal_price = signal.payload.get("price", signal.payload.get("close"))
         price = float(
-            signal.payload.get(
-                "price",
-                self._latest_prices.get(signal.symbol, signal.payload.get("close", 0.0)),
-            )
+            signal_price
+            if signal_price is not None
+            else self._latest_prices.get(signal.symbol, 0.0)
         )
 
         order_id = str(uuid.uuid4())
