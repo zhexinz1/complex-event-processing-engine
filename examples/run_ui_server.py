@@ -2,6 +2,8 @@
 run_ui_server.py — 一键启动目标仓位配置大屏
 
 用法：
+    npm install
+    npm run frontend:build
     uv run -m examples.run_ui_server
     # 或
     python examples/run_ui_server.py

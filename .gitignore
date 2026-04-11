@@ -45,3 +45,5 @@ htmlcov/
 .DS_Store
 Thumbs.db
 xt_sdk/
+node_modules/
+frontend/dist/

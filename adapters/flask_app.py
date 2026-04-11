@@ -27,7 +27,7 @@ from typing import Any, cast
 
 import pymysql
 import pymysql.cursors
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, abort, jsonify, request, send_from_directory
 
 from backtest.preset_strategies import (
     PRESET_STRATEGIES,
@@ -76,7 +76,20 @@ CREATE TABLE IF NOT EXISTS allowed_assets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+FRONTEND_DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
+
+
+def get_frontend_dir() -> Path:
+    """Return the compiled Vite app directory, or fail with setup guidance."""
+    if (FRONTEND_DIST_DIR / "index.html").exists():
+        return FRONTEND_DIST_DIR
+    abort(
+        503,
+        description=(
+            f"前端静态文件未找到: {FRONTEND_DIST_DIR / 'index.html'}。"
+            "请先运行 `npm install` 和 `npm run frontend:build`"
+        ),
+    )
 
 
 def get_conn() -> Any:
@@ -106,11 +119,11 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        return send_from_directory(str(FRONTEND_DIR), "index.html")
+        return send_from_directory(str(get_frontend_dir()), "index.html")
 
     @app.route("/<path:filename>")
     def static_files(filename: str):
-        return send_from_directory(str(FRONTEND_DIR), filename)
+        return send_from_directory(str(get_frontend_dir()), filename)
 
     # -----------------------------------------------------------------------
     # GET /api/weights
