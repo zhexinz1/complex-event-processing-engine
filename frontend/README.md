@@ -13,6 +13,12 @@ npm run frontend:build
 uv run -m examples.run_ui_server
 ```
 
+The backtest tab is hidden by default. To include it in the production frontend bundle, pass the build flag through npm:
+
+```bash
+npm run frontend:build -- --show-backtest
+```
+
 For local frontend development with Vite:
 
 ```bash
@@ -75,3 +81,5 @@ Flask serves the UI from `frontend/dist`. If `dist/index.html` does not exist, t
 npm install
 npm run frontend:build
 ```
+
+The default build excludes the backtest tab from the UI. Use `npm run frontend:build -- --show-backtest` when a deployment should expose the backtest workflow.

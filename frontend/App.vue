@@ -1,7 +1,7 @@
 <template>
   <div>
     <AppHeader :current-time="currentTime" :db-ok="dbOk" @open-assets="showAssetModal = true" />
-    <AppNav v-model="activeTab" />
+    <AppNav v-model="activeTab" :show-backtest="showBacktest" />
 
     <template v-if="activeTab === 'allocations'">
       <AllocationToolbar
@@ -23,7 +23,7 @@
     </template>
 
     <BacktestPanel
-      v-if="activeTab === 'backtest'"
+      v-if="showBacktest && activeTab === 'backtest'"
       v-model:selected-strategy-id="selectedStrategyId"
       v-model:backtest-data-source="backtestDataSource"
       v-model:backtest-ts-code="backtestTsCode"
@@ -89,6 +89,7 @@ import { useToast } from './composables/useToast';
 import type { AppTab } from './types';
 
 const activeTab = ref<AppTab>('allocations');
+const showBacktest = import.meta.env.VITE_SHOW_BACKTEST === 'true';
 const { toast, showToast } = useToast();
 const { currentTime } = useClock();
 const {
@@ -139,5 +140,5 @@ const {
   selectStock,
   closeStockSearchSoon,
   equityBarHeight,
-} = useBacktest(CepApi, showToast);
+} = useBacktest(CepApi, showToast, { enabled: showBacktest });
 </script>

@@ -5,7 +5,7 @@
       @click="$emit('update:modelValue', 'allocations')">
       目标仓位配置
     </button>
-    <button class="tab-btn" :class="{ active: modelValue === 'backtest' }"
+    <button v-if="showBacktest" class="tab-btn" :class="{ active: modelValue === 'backtest' }"
       @click="$emit('update:modelValue', 'backtest')">
       策略回测
     </button>
@@ -17,6 +17,7 @@ import type { AppTab } from '../types';
 
 defineProps<{
   modelValue: AppTab;
+  showBacktest: boolean;
 }>();
 
 defineEmits<{

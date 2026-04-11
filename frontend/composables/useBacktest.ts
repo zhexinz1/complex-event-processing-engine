@@ -15,7 +15,12 @@ import {
   toTushareDate,
 } from '../utils';
 
-export function useBacktest(api: CepApiClient, showToast: ShowToast) {
+interface UseBacktestOptions {
+  enabled?: boolean;
+}
+
+export function useBacktest(api: CepApiClient, showToast: ShowToast, options: UseBacktestOptions = {}) {
+  const enabled = options.enabled ?? true;
   const backtestPresets = ref<BacktestPreset[]>([]);
   const selectedStrategyId = ref('pbx_ma');
   const backtestDataSource = ref('tushare');
@@ -62,6 +67,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast) {
   }
 
   async function fetchBacktestPresets() {
+    if (!enabled) return;
     try {
       const json = await api.fetchBacktestPresets();
       if (json.success) {
@@ -78,6 +84,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast) {
   }
 
   async function runBacktest() {
+    if (!enabled) return;
     if (!selectedStrategyId.value) {
       showToast('请选择预设策略', 'error');
       return;
@@ -117,6 +124,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast) {
   }
 
   async function searchStocks({ silent = false }: { silent?: boolean } = {}) {
+    if (!enabled) return;
     const keyword = backtestTsCode.value.trim();
     if (!keyword) {
       stockSearchResults.value = [];
@@ -168,41 +176,43 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast) {
     }, 160);
   }
 
-  watch([backtestTsCode, backtestDataSource], ([query, dataSource]) => {
-    clearTimeout(stockSearchTimer);
-    if (dataSource !== 'tushare') {
-      stockSearchRequestId += 1;
-      stockSearchLoading.value = false;
-      stockSearchResults.value = [];
-      stockSearchOpen.value = false;
-      return;
-    }
+  if (enabled) {
+    watch([backtestTsCode, backtestDataSource], ([query, dataSource]) => {
+      clearTimeout(stockSearchTimer);
+      if (dataSource !== 'tushare') {
+        stockSearchRequestId += 1;
+        stockSearchLoading.value = false;
+        stockSearchResults.value = [];
+        stockSearchOpen.value = false;
+        return;
+      }
 
-    const keyword = query.trim();
-    if (keyword === selectedStockCode) return;
-    selectedStockCode = '';
-    if (keyword.length < 2) {
-      stockSearchRequestId += 1;
-      stockSearchLoading.value = false;
-      stockSearchResults.value = [];
-      stockSearchOpen.value = false;
-      return;
-    }
+      const keyword = query.trim();
+      if (keyword === selectedStockCode) return;
+      selectedStockCode = '';
+      if (keyword.length < 2) {
+        stockSearchRequestId += 1;
+        stockSearchLoading.value = false;
+        stockSearchResults.value = [];
+        stockSearchOpen.value = false;
+        return;
+      }
 
-    stockSearchTimer = setTimeout(() => {
-      searchStocks({ silent: true });
-    }, 350);
-  });
+      stockSearchTimer = setTimeout(() => {
+        searchStocks({ silent: true });
+      }, 350);
+    });
 
-  watch(selectedStrategyId, () => {
-    if (!presetSupportsDataSource(selectedPreset.value, backtestDataSource.value)) {
-      backtestDataSource.value = 'mock';
-    }
-  });
+    watch(selectedStrategyId, () => {
+      if (!presetSupportsDataSource(selectedPreset.value, backtestDataSource.value)) {
+        backtestDataSource.value = 'mock';
+      }
+    });
 
-  onMounted(() => {
-    fetchBacktestPresets();
-  });
+    onMounted(() => {
+      fetchBacktestPresets();
+    });
+  }
 
   onUnmounted(() => {
     clearTimeout(stockSearchTimer);
