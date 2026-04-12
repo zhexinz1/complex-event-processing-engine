@@ -77,6 +77,9 @@ uv run tests/test_imports.py
 
 > 所有文件使用绝对包路径导入，请始终从项目根目录 `/home/ubuntu/CEP` 运行。
 
+### tushare数据API配置
+先前往[个人主页](https://tushare.pro/user/token) 获取token，然后在`~/.bashrc`中添加`export TUSHARE_TOKEN=<YOUR_TOKEN>`，然后`source ~/.bashrc`生效环境变量
+
 ## 使用示例
 
 ```python

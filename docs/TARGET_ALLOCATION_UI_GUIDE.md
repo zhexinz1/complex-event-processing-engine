@@ -18,8 +18,7 @@
 **前端**：
 - Vue 3 (CDN) — 响应式框架
 - Tailwind CSS (CDN) — 原子化 CSS
-- 原生 JavaScript (ES6+)
-- 无构建步骤，单 HTML 文件
+- TypeScript + Vite + npm 管理
 
 **数据库**：
 - MySQL 5.7+ (阿里云 RDS)
@@ -170,11 +169,11 @@ WHERE product_name = %s
 **用法**：
 
 ```bash
-# 方式 1：使用 uv
-uv run -m examples.run_ui_server
+# 首次运行或前端代码变更后，先构建 TypeScript/Vite 前端
+npm install
+npm run frontend:build
 
-# 方式 2：直接运行
-.venv/bin/python examples/run_ui_server.py
+uv run -m examples.run_ui_server
 ```
 
 **启动流程**：
@@ -188,169 +187,9 @@ uv run -m examples.run_ui_server
 
 ## 前端实现
 
-### 文件结构
+前端已迁移为 Vue 3 + TypeScript + Vite。`frontend/index.html` 只保留 Vite HTML shell 和 `#app` 挂载点，页面模板位于 `frontend/App.vue`，状态和业务动作拆分到 `frontend/composables/`。
 
-```
-frontend/
-└── index.html    # 单页面应用（Vue3 + Tailwind CSS）
-```
-
-### UI 设计规范
-
-**色彩系统**：
-
-```css
---bg:      #080c14   /* 深色背景 */
---surface: rgba(255,255,255,0.035)  /* 玻璃卡片 */
---border:  rgba(99,179,237,0.15)    /* 边框 */
---cyan:    #00d4ff   /* 主色调（荧光青） */
---green:   #00ff88   /* 成功色（荧光绿） */
---amber:   #ffaa00   /* 警告色 */
---red:     #ff4d6d   /* 错误色 */
---text:    #cdd9e5   /* 文本色 */
---muted:   #6b7a8d   /* 次要文本 */
-```
-
-**视觉特效**：
-
-- **Glassmorphism**：`backdrop-filter: blur(12px)` + 半透明背景
-- **Glow Text**：`text-shadow: 0 0 12px rgba(0,212,255,0.6)`
-- **Scan Line**：顶部扫描线动画（8秒循环）
-- **Progress Bar**：权重比例可视化（渐变填充）
-
-### 核心功能模块
-
-#### 1. 数据表格
-
-**特性**：
-- 响应式布局
-- Hover 高亮行
-- 权重比例进度条（0-100%）
-- 算法类型徽章（TWAP / VWAP）
-- 编辑/删除操作按钮
-
-**权重进度条实现**：
-
-```html
-<div class="weight-bar-bg">
-  <div class="weight-bar-fill"
-       :style="{
-         width: (row.weight_ratio * 100) + '%',
-         background: 'linear-gradient(90deg, #00d4ff, #00ff88)'
-       }">
-  </div>
-</div>
-```
-
-#### 2. 筛选工具栏
-
-**功能**：
-- 日期选择器（`<input type="date">`）
-- 产品下拉框（动态加载）
-- 新增配置按钮
-
-**实现**：
-
-```javascript
-const filterDate = ref('');
-const filterProduct = ref('');
-
-watch([filterDate, filterProduct], () => {
-  fetchData();
-});
-```
-
-#### 3. 新增/编辑 Modal
-
-**特性**：
-- 玻璃态弹窗
-- 表单验证（必填项检查）
-- 权重总和预警（超过 100% 显示黄色提示）
-- 平滑过渡动画
-
-**表单字段**：
-
-```javascript
-const form = ref({
-  target_date: '',
-  product_name: '',
-  asset_code: '',
-  weight_pct: '',      // 前端输入百分比（25.61）
-  algo_type: 'TWAP'
-});
-```
-
-**提交逻辑**：
-
-```javascript
-async function saveRow() {
-  const payload = {
-    ...form.value,
-    weight_ratio: form.value.weight_pct / 100  // 转换为小数
-  };
-  const res = await fetch('/api/weights', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const json = await res.json();
-  if (json.success) {
-    showToast('保存成功', 'success');
-    fetchData();
-  } else {
-    showToast(json.message, 'error');
-  }
-}
-```
-
-#### 4. 资产字典库模块（防呆选单）
-
-**特性**：
-- **产品组合防错**：下拉控制产品名称只允许选择系统固有的几个基金组合（如“明钺全天候1号”等）。
-- **资产录入强校验**：目标核心配置界面不再允许主观手动拼写配置资产，必须通过系统内部存储的“资产字典”进行预备录入后拉取。
-- **UI 操作独立流**：在页面头部提供了一个单独的弹窗界面，独立调用 `/api/assets` 接口进行资产字典白名单维护。
-
-#### 5. 数据库状态指示器
-
-**位置**：右上角
-
-**显示逻辑**：
-
-```javascript
-const dbOk = ref(true);
-
-async function fetchData() {
-  const res = await fetch('/api/weights');
-  const json = await res.json();
-  if (json.success) {
-    rows.value = json.data;
-    dbOk.value = true;
-  } else {
-    dbOk.value = false;
-    showToast(json.message, 'error');
-  }
-}
-```
-
-**UI 表现**：
-- ✅ `DB CONNECTED` — 绿色脉冲点
-- ❌ `DB ERROR` — 红色脉冲点
-
-#### 5. Toast 通知
-
-**特性**：
-- 右下角浮动
-- 3 秒自动消失
-- 成功/错误两种样式
-
-**实现**：
-
-```javascript
-function showToast(message, type = 'success') {
-  toast.value = { show: true, message, type };
-  setTimeout(() => { toast.value.show = false; }, 3000);
-}
-```
+简化后的结构、运行命令和核心模块说明见 [`frontend/README.md`](../frontend/README.md)。本设计文档只保留目标仓位 UI 的业务背景和接口说明，避免与前端源码结构文档重复。
 
 ---
 
@@ -635,6 +474,10 @@ pyproject.toml             (更新依赖)
 ---
 
 ## 更新日志
+
+### v1.2.0 (2026-04-11)
+- 新增backtest页面
+- 显著重构，模块化拆分当前UI，并改用现代化的typescript编写
 
 ### v1.1.0 (2026-04-10)
 

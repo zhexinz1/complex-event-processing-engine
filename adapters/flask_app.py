@@ -11,6 +11,11 @@ Endpoints:
     GET  /api/assets           获取资产代码白名单
     POST /api/assets           新增资产代码
     DELETE /api/assets/<code>  删除资产代码
+    GET  /api/backtests/presets 获取可回测预设策略列表
+    POST /api/backtests/run     运行预设策略回测；mock body: {"strategy_id": "pbx_ma"}
+                                tushare body: {"strategy_id": "pbx_ma", "data_source": "tushare",
+                                "ts_code": "000001.SZ", "start_date": "20240101", "end_date": "20241231"}
+    GET  /api/stocks/search     搜索本地 A 股股票索引（query: q, limit）
     GET  /                     前端大屏页面
 """
 
@@ -18,10 +23,18 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import pymysql
 import pymysql.cursors
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, abort, jsonify, request, send_from_directory
+
+from backtest.preset_strategies import (
+    PRESET_STRATEGIES,
+    run_preset_backtest,
+    serialize_backtest_result,
+)
+from data_provider import search_stocks
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +42,7 @@ logger = logging.getLogger(__name__)
 # 数据库连接配置
 # ---------------------------------------------------------------------------
 
-DB_CONFIG = dict(
+DB_CONFIG: dict[str, Any] = dict(
     host="120.25.245.137",
     port=23306,
     database="fof",
@@ -63,10 +76,23 @@ CREATE TABLE IF NOT EXISTS allowed_assets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+FRONTEND_DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 
 
-def get_conn():
+def get_frontend_dir() -> Path:
+    """Return the compiled Vite app directory, or fail with setup guidance."""
+    if (FRONTEND_DIST_DIR / "index.html").exists():
+        return FRONTEND_DIST_DIR
+    abort(
+        503,
+        description=(
+            f"前端静态文件未找到: {FRONTEND_DIST_DIR / 'index.html'}。"
+            "请先运行 `npm install` 和 `npm run frontend:build`"
+        ),
+    )
+
+
+def get_conn() -> Any:
     return pymysql.connect(**DB_CONFIG)
 
 
@@ -93,11 +119,11 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        return send_from_directory(str(FRONTEND_DIR), "index.html")
+        return send_from_directory(str(get_frontend_dir()), "index.html")
 
     @app.route("/<path:filename>")
     def static_files(filename: str):
-        return send_from_directory(str(FRONTEND_DIR), filename)
+        return send_from_directory(str(get_frontend_dir()), filename)
 
     # -----------------------------------------------------------------------
     # GET /api/weights
@@ -130,7 +156,7 @@ def create_app() -> Flask:
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(sql, params)
-                    rows = cur.fetchall()
+                    rows = cast(list[dict[str, Any]], cur.fetchall())
         except Exception as e:
             return jsonify({"success": False, "message": f"数据库连接失败: {e}", "data": []}), 503
 
@@ -214,7 +240,7 @@ def create_app() -> Flask:
                     cur.execute(
                         "SELECT DISTINCT product_name FROM target_allocations ORDER BY product_name"
                     )
-                    rows = cur.fetchall()
+                    rows = cast(list[dict[str, Any]], cur.fetchall())
         except Exception:
             return jsonify({"success": True, "data": []})
         return jsonify({"success": True, "data": [r["product_name"] for r in rows]})
@@ -231,7 +257,7 @@ def create_app() -> Flask:
                     cur.execute(
                         "SELECT asset_code, created_at FROM allowed_assets ORDER BY asset_code"
                     )
-                    rows = cur.fetchall()
+                    rows = cast(list[dict[str, Any]], cur.fetchall())
         except Exception as e:
             return jsonify({"success": False, "message": f"数据库连接失败: {e}", "data": []}), 503
         for row in rows:
@@ -291,5 +317,92 @@ def create_app() -> Flask:
         if affected == 0:
             return jsonify({"success": False, "message": "资产代码不存在"}), 404
         return jsonify({"success": True, "message": f"已删除资产代码 {asset_code}"})
+
+    # -----------------------------------------------------------------------
+    # GET /api/backtests/presets — 获取可回测预设策略
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/backtests/presets", methods=["GET"])
+    def get_backtest_presets():
+        return jsonify({"success": True, "data": list(PRESET_STRATEGIES.values())})
+
+    # -----------------------------------------------------------------------
+    # GET /api/stocks/search — 搜索本地 A 股股票索引
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/stocks/search", methods=["GET"])
+    def search_stock_index():
+        keyword = request.args.get("q", "").strip()
+        raw_limit = request.args.get("limit", "20")
+        try:
+            limit = int(raw_limit)
+        except ValueError:
+            return jsonify({"success": False, "message": "limit 必须是整数", "data": []}), 400
+
+        try:
+            rows = search_stocks(keyword, limit=limit)
+        except Exception as e:
+            logger.exception("Stock search failed: %s", e)
+            return jsonify({"success": False, "message": f"股票搜索失败: {e}", "data": []}), 500
+
+        logger.info("Stock search: q=%s, limit=%s, results=%s", keyword, limit, len(rows))
+        return jsonify({"success": True, "data": rows, "total": len(rows)})
+
+    # -----------------------------------------------------------------------
+    # POST /api/backtests/run — 运行预设策略回测
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/backtests/run", methods=["POST"])
+    def run_backtest():
+        body = request.get_json(force=True, silent=True) or {}
+        strategy_id = str(body.get("strategy_id", "pbx_ma")).strip()
+        data_source = str(body.get("data_source", "mock")).strip().lower()
+        ts_code = body.get("ts_code")
+        symbols = body.get("symbols", body.get("ts_codes"))
+        start_date = body.get("start_date")
+        end_date = body.get("end_date")
+        logger.info(
+            "Backtest API request: strategy_id=%s, data_source=%s, ts_code=%s, symbols=%s, "
+            "start_date=%s, end_date=%s, raw_body=%s",
+            strategy_id,
+            data_source,
+            ts_code,
+            symbols,
+            start_date,
+            end_date,
+            body,
+        )
+        try:
+            result = run_preset_backtest(
+                strategy_id=strategy_id,
+                data_source=data_source,
+                ts_code=ts_code,
+                symbols=symbols,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except ValueError as e:
+            return jsonify({"success": False, "message": str(e)}), 400
+        except Exception as e:
+            logger.exception("Preset backtest failed: %s", e)
+            return jsonify({"success": False, "message": f"回测失败: {e}"}), 500
+
+        logger.info(
+            "Backtest API result: strategy_id=%s, data_source=%s, "
+            "market_events=%s, signals=%s, trades=%s, final_equity=%.2f",
+            strategy_id,
+            data_source,
+            result.market_events_processed,
+            len(result.signals),
+            len(result.trades),
+            result.final_equity,
+        )
+        return jsonify(
+            {
+                "success": True,
+                "message": "回测完成",
+                "data": serialize_backtest_result(result),
+            }
+        )
 
     return app
