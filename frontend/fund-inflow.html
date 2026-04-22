@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>净入金录入 - CEP 系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* 导航栏样式 */
+        .nav-tabs {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .nav-tab {
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .nav-tab.active {
+            color: #2563eb;
+            border-bottom-color: #2563eb;
+            background: #f9fafb;
+        }
+
+        .nav-tab:not(.active) {
+            color: #6b7280;
+        }
+
+        .nav-tab:not(.active):hover {
+            color: #111827;
+            background: #f9fafb;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        select,
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        select:focus,
+        input:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #2563eb;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-radius: 4px;
+        }
+
+        .info-box p {
+            margin: 5px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .info-box strong {
+            color: #333;
+        }
+
+        .alert {
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #2563eb;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation Tabs -->
+    <div style="background: white; border-bottom: 2px solid #e5e7eb; margin-bottom: 20px;">
+        <div style="max-width: 1400px; margin: 0 auto; display: flex; gap: 0;">
+            <a href="/"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                目标仓位配置
+            </a>
+            <a href="/fund-inflow.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #2563eb; text-decoration: none; border-bottom: 2px solid #2563eb; margin-bottom: -2px; background: #f9fafb;">
+                净入金录入
+            </a>
+            <a href="/order-confirm.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                订单确认
+            </a>
+            <a href="/order-list.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                订单列表
+            </a>
+            <a href="/health.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                行情健康检查
+            </a>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>净入金录入</h1>
+
+        <div id="alertBox" class="alert"></div>
+
+        <form id="inflowForm">
+            <div class="form-group">
+                <label for="productSelect">选择产品 *</label>
+                <select id="productSelect" required>
+                    <option value="">-- 请选择产品 --</option>
+                </select>
+            </div>
+
+            <div id="productInfo" class="info-box" style="display: none;">
+                <p><strong>杠杆倍数:</strong> <span id="leverageRatio">-</span></p>
+                <p><strong>关联账号:</strong> <span id="accountId">-</span></p>
+            </div>
+
+            <div class="form-group">
+                <label for="netInflow">净入金金额（元）*</label>
+                <input type="number" id="netInflow" step="0.01" min="0" placeholder="例如: 1000000" required>
+            </div>
+
+            <div class="form-group">
+                <label for="inputBy">录入人</label>
+                <input type="text" id="inputBy" placeholder="例如: 张三" maxlength="50">
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">计算订单</button>
+        </form>
+
+        <a href="/" class="back-link">← 返回目标仓位配置</a>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let products = [];
+
+        // 页面加载时获取产品列表
+        async function loadProducts() {
+            try {
+                const response = await fetch(`${API_BASE}/products/list`);
+                const data = await response.json();
+
+                if (data.success) {
+                    products = data.products;
+                    const select = document.getElementById('productSelect');
+
+                    products.forEach(product => {
+                        const option = document.createElement('option');
+                        option.value = product.product_name;
+                        option.textContent = product.product_name;
+                        option.dataset.leverage = product.leverage_ratio;
+                        option.dataset.account = product.account_id;
+                        select.appendChild(option);
+                    });
+                } else {
+                    showAlert('加载产品列表失败: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+            }
+        }
+
+        // 产品选择变化时显示产品信息
+        document.getElementById('productSelect').addEventListener('change', function () {
+            const selectedOption = this.options[this.selectedIndex];
+            const infoBox = document.getElementById('productInfo');
+
+            if (selectedOption.value) {
+                document.getElementById('leverageRatio').textContent = selectedOption.dataset.leverage + '倍';
+                document.getElementById('accountId').textContent = selectedOption.dataset.account;
+                infoBox.style.display = 'block';
+            } else {
+                infoBox.style.display = 'none';
+            }
+        });
+
+        // 表单提交
+        document.getElementById('inflowForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const productName = document.getElementById('productSelect').value;
+            const netInflow = parseFloat(document.getElementById('netInflow').value);
+            const inputBy = document.getElementById('inputBy').value.trim();
+
+            if (!productName || netInflow <= 0) {
+                showAlert('请填写完整信息', 'error');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '计算中...';
+
+            try {
+                const response = await fetch(`${API_BASE}/fund/inflow`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        product_name: productName,
+                        net_inflow: netInflow,
+                        input_by: inputBy
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('订单计算成功！正在跳转到确认页面...', 'success');
+                    setTimeout(() => {
+                        window.location.href = `/order-confirm.html?batch_id=${data.batch_id}`;
+                    }, 1500);
+                } else {
+                    showAlert('计算失败: ' + data.message, 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '计算订单';
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '计算订单';
+            }
+        });
+
+        function showAlert(message, type) {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.textContent = message;
+            alertBox.className = `alert ${type}`;
+            alertBox.style.display = 'block';
+
+            setTimeout(() => {
+                alertBox.style.display = 'none';
+            }, 5000);
+        }
+
+        // 初始化
+        loadProducts();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>订单列表 - CEP 系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #1f2937;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-success {
+            background: #059669;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #047857;
+        }
+
+        .btn-success:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .content {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .query-panel {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .query-panel h3 {
+            font-size: 14px;
+            color: #0369a1;
+            margin-bottom: 12px;
+        }
+
+        .query-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .query-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .query-item label {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .query-item select,
+        .query-item input {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-item label {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .filter-item input {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f9fafb;
+        }
+
+        th {
+            padding: 12px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 14px;
+            color: #1f2937;
+        }
+
+        tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-submitted {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-partial {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .status-filled {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-cancelled {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .status-rejected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-querying {
+            background: #e9ecef;
+            color: #495057;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-not-queried {
+            background: #f3f4f6;
+            color: #9ca3af;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.error {
+            background: #fee;
+            color: #c00;
+            border: 1px solid #fcc;
+        }
+
+        .alert.success {
+            background: #efe;
+            color: #060;
+            border: 1px solid #cfc;
+        }
+
+        .xt-summary {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 8px;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation Tabs -->
+    <div style="background: white; border-bottom: 2px solid #e5e7eb; margin-bottom: 20px;">
+        <div style="max-width: 1400px; margin: 0 auto; display: flex; gap: 0;">
+            <a href="/"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                目标仓位配置
+            </a>
+            <a href="/fund-inflow.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                净入金录入
+            </a>
+            <a href="/order-confirm.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                订单确认
+            </a>
+            <a href="/order-list.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #2563eb; text-decoration: none; border-bottom: 2px solid #2563eb; margin-bottom: -2px; background: #f9fafb;">
+                订单列表
+            </a>
+            <a href="/health.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                行情健康检查
+            </a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>订单列表</h1>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="refreshBtn">刷新订单</button>
+                <button class="btn btn-secondary" onclick="window.location.href='/fund-inflow.html'">返回</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="alertBox" class="alert"></div>
+
+            <!-- 迅投状态查询面板 -->
+            <div class="query-panel">
+                <h3>🔍 迅投订单状态查询</h3>
+                <div class="query-row">
+                    <div class="query-item">
+                        <label>产品 *</label>
+                        <select id="xtProductSelect">
+                            <option value="">请选择产品</option>
+                        </select>
+                    </div>
+                    <div class="query-item">
+                        <label>开始日期</label>
+                        <input type="date" id="xtStartDate">
+                    </div>
+                    <div class="query-item">
+                        <label>结束日期</label>
+                        <input type="date" id="xtEndDate">
+                    </div>
+                    <div class="query-item">
+                        <button class="btn btn-success" id="queryXtBtn">查询迅投状态</button>
+                    </div>
+                </div>
+                <div class="xt-summary" id="xtSummary"></div>
+                <div style="font-size: 11px; color: #9ca3af; margin-top: 6px;">
+                    提示：不填日期则查询当日委托；历史委托需指定日期范围（格式：YYYYMMDD）
+                </div>
+            </div>
+
+            <!-- 筛选器 -->
+            <div class="filters">
+                <div class="filter-item">
+                    <label>合约代码筛选</label>
+                    <input type="text" id="assetFilter" placeholder="输入合约代码">
+                </div>
+            </div>
+
+            <div id="loadingBox" class="loading">
+                <p>加载中...</p>
+            </div>
+
+            <div id="contentBox" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>批次ID</th>
+                            <th>产品</th>
+                            <th>合约代码</th>
+                            <th>数量</th>
+                            <th>价格</th>
+                            <th>目标市值</th>
+                            <th>迅投指令ID</th>
+                            <th>迅投状态</th>
+                            <th>创建时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ordersTableBody">
+                    </tbody>
+                </table>
+
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    <p>暂无订单数据</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let allOrders = [];
+        let xtOrderMap = new Map();       // order_id (int) -> xt order detail
+        let xtByInstrument = new Map();   // instrument (str) -> [xt order detail, ...]
+        let isQueryingXt = false;
+
+        // ==================== 初始化 ====================
+
+        // 设置日期默认值为今天
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('xtStartDate').value = today;
+        document.getElementById('xtEndDate').value = today;
+
+        // 加载产品列表到迅投查询面板
+        async function loadProductList() {
+            try {
+                const response = await fetch(`${API_BASE}/products/list`);
+                const data = await response.json();
+                if (data.success) {
+                    const select = document.getElementById('xtProductSelect');
+                    (data.products || []).forEach(p => {
+                        const option = document.createElement('option');
+                        option.value = p.product_name;
+                        option.textContent = p.product_name;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (e) {
+                console.error('加载产品列表失败:', e);
+            }
+        }
+
+        // ==================== 订单加载 ====================
+
+        async function loadOrders() {
+            try {
+                const dbResponse = await fetch(`${API_BASE}/orders/all`);
+                const dbData = await dbResponse.json();
+
+                if (!dbData.success) {
+                    showAlert('加载订单失败: ' + dbData.message, 'error');
+                    document.getElementById('loadingBox').style.display = 'none';
+                    return;
+                }
+
+                allOrders = dbData.orders || [];
+                displayOrders();
+                document.getElementById('loadingBox').style.display = 'none';
+                document.getElementById('contentBox').style.display = 'block';
+
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+                document.getElementById('loadingBox').style.display = 'none';
+            }
+        }
+
+        // ==================== 迅投状态查询 ====================
+
+        async function queryXtStatus() {
+            if (isQueryingXt) return;
+
+            const productName = document.getElementById('xtProductSelect').value;
+            if (!productName) {
+                showAlert('请先选择产品', 'error');
+                return;
+            }
+
+            isQueryingXt = true;
+            const btn = document.getElementById('queryXtBtn');
+            btn.disabled = true;
+            btn.textContent = '⭐ 正在查询（首次可能需 30秒）...';
+
+            // 构建请求参数
+            const params = new URLSearchParams({ product_name: productName });
+
+            const startDate = document.getElementById('xtStartDate').value;
+            const endDate = document.getElementById('xtEndDate').value;
+
+            if (startDate) {
+                params.set('start_date', startDate.replace(/-/g, ''));
+            }
+            if (endDate) {
+                params.set('end_date', endDate.replace(/-/g, ''));
+            }
+
+            try {
+                // 60秒超时（首次连接迅投服务器可能较慢）
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+                const response = await fetch(`${API_BASE}/xt/orders?${params}`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                const data = await response.json();
+
+                if (data.success) {
+                    // 构建两级映射
+                    xtOrderMap.clear();
+                    xtByInstrument.clear();
+                    (data.orders || []).forEach(order => {
+                        // 精确映射: order_id -> order
+                        xtOrderMap.set(order.order_id, order);
+                        // 回退映射: instrument -> [orders]
+                        const key = order.instrument.toLowerCase();
+                        if (!xtByInstrument.has(key)) {
+                            xtByInstrument.set(key, []);
+                        }
+                        xtByInstrument.get(key).push(order);
+                    });
+
+                    const summary = document.getElementById('xtSummary');
+                    summary.style.display = 'block';
+                    summary.innerHTML = `查询成功！产品: <strong>${productName}</strong>，` +
+                        `日期: ${data.query_date}，` +
+                        `共 <strong>${data.orders.length}</strong> 条迅投委托记录，` +
+                        `资金账号: ${data.account_id}`;
+
+                    showAlert(`查询成功，共获取 ${data.orders.length} 条迅投委托记录`, 'success');
+                } else {
+                    showAlert('查询迅投状态失败: ' + data.message, 'error');
+                }
+
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    showAlert('查询超时（60秒），请检查迅投服务器连接', 'error');
+                } else {
+                    showAlert('查询迅投状态网络错误: ' + error.message, 'error');
+                }
+            }
+
+            displayOrders();
+            btn.disabled = false;
+            btn.textContent = '查询迅投状态';
+            isQueryingXt = false;
+        }
+
+        // ==================== 迅投状态解析 ====================
+
+        function parseXtStatus(xtOrder) {
+            let badgeClass = 'status-pending';
+            let statusText = xtOrder.status_msg || '未知';
+
+            switch (xtOrder.status) {
+                case 1: case 49:
+                    badgeClass = 'status-submitted'; statusText = '已报'; break;
+                case 2: case 50:
+                    badgeClass = 'status-partial';
+                    statusText = `部分成交 (${xtOrder.traded_volume}/${xtOrder.volume})`; break;
+                case 3: case 51:
+                    badgeClass = 'status-filled'; statusText = '全部成交'; break;
+                case 4: case 54:
+                    badgeClass = 'status-cancelled'; statusText = '已撤单'; break;
+                case 5: case 55:
+                    badgeClass = 'status-partial';
+                    statusText = `部成部撤 (${xtOrder.traded_volume}/${xtOrder.volume})`; break;
+                case 6: case 56:
+                    badgeClass = 'status-rejected'; statusText = '废单'; break;
+                case 52:
+                    badgeClass = 'status-pending'; statusText = '待报'; break;
+                case 53:
+                    badgeClass = 'status-pending'; statusText = '待撤'; break;
+                default:
+                    badgeClass = 'status-pending';
+                    statusText = `${statusText} (${xtOrder.status})`;
+            }
+            return { badgeClass, statusText };
+        }
+
+        // ==================== 显示订单 ====================
+
+        function displayOrders() {
+            const assetFilter = document.getElementById('assetFilter').value.toLowerCase();
+
+            let filteredOrders = allOrders.filter(order => {
+                if (assetFilter && !order.asset_code.toLowerCase().includes(assetFilter)) return false;
+                return true;
+            });
+
+            const tbody = document.getElementById('ordersTableBody');
+            const emptyState = document.getElementById('emptyState');
+
+            if (filteredOrders.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            tbody.innerHTML = '';
+
+            filteredOrders.forEach(order => {
+                const row = document.createElement('tr');
+
+                // 迅投指令ID列
+                const xtIdDisplay = order.xt_order_id
+                    ? `<code>${order.xt_order_id}</code>`
+                    : '<span style="color: #9ca3af;">—</span>';
+
+                // 迅投状态列：优先通过 xt_order_id 精确匹配，回退到按合约代码匹配
+                let xtStatusHtml;
+                let matched = null;
+
+                // 策略1: 通过 xt_order_id 精确匹配
+                if (order.xt_order_id && xtOrderMap.has(order.xt_order_id)) {
+                    matched = xtOrderMap.get(order.xt_order_id);
+                }
+
+                // 策略2: 通过合约代码回退匹配（适用于没有 xt_order_id 的历史订单）
+                if (!matched && xtByInstrument.size > 0) {
+                    const assetBase = order.asset_code.split('.')[0].toLowerCase();
+                    const candidates = xtByInstrument.get(assetBase);
+                    if (candidates && candidates.length > 0) {
+                        // 取最近的一笔（通常委托列表按时间倒序）
+                        matched = candidates[candidates.length - 1];
+                    }
+                }
+
+                if (matched) {
+                    const { badgeClass, statusText } = parseXtStatus(matched);
+                    const matchLabel = order.xt_order_id ? '' : ' <small style="color:#9ca3af">(按合约匹配)</small>';
+                    xtStatusHtml = `<span class="status-badge ${badgeClass}">${statusText}</span>${matchLabel}`;
+                } else if (xtOrderMap.size > 0) {
+                    // 已查询但未匹配到
+                    xtStatusHtml = '<span class="status-badge status-not-queried">未在迅投中找到</span>';
+                } else {
+                    // 尚未查询
+                    xtStatusHtml = '<span class="status-badge status-not-queried">请先查询</span>';
+                }
+
+                row.innerHTML = `
+                    <td><small>${order.batch_id.substring(0, 8)}...</small></td>
+                    <td>${order.product_name}</td>
+                    <td><strong>${order.asset_code}</strong></td>
+                    <td>${order.final_quantity}</td>
+                    <td>${parseFloat(order.price).toFixed(2)}</td>
+                    <td>${parseFloat(order.target_market_value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</td>
+                    <td>${xtIdDisplay}</td>
+                    <td>${xtStatusHtml}</td>
+                    <td><small>${order.created_at}</small></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // ==================== 事件绑定 ====================
+
+        document.getElementById('queryXtBtn').addEventListener('click', queryXtStatus);
+
+        document.getElementById('refreshBtn').addEventListener('click', function () {
+            document.getElementById('loadingBox').style.display = 'block';
+            document.getElementById('contentBox').style.display = 'none';
+            xtOrderMap.clear();
+            xtByInstrument.clear();
+            document.getElementById('xtSummary').style.display = 'none';
+            loadOrders();
+        });
+
+        document.getElementById('assetFilter').addEventListener('input', displayOrders);
+
+        function showAlert(message, type) {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.textContent = message;
+            alertBox.className = `alert ${type}`;
+            alertBox.style.display = 'block';
+            setTimeout(() => { alertBox.style.display = 'none'; }, 5000);
+        }
+
+        // ==================== 页面初始化 ====================
+        loadProductList();
+        loadOrders();
+    </script>
+</body>
+
+</html>

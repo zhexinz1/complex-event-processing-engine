@@ -25,8 +25,16 @@ from typing import Any, Callable, Optional, cast
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent, BarEvent
 
+# ---- 终极环境保护垫片 ----
+# 防御从外部终端或守护进程错误继承了含毒的 LD_LIBRARY_PATH (尤其是 xt_sdk)
+_inherited_ld = os.environ.get("LD_LIBRARY_PATH", "")
+if "xt_sdk" in _inherited_ld:
+    _clean_paths = [p for p in _inherited_ld.split(":") if "xt_sdk" not in p]
+    os.environ["LD_LIBRARY_PATH"] = ":".join(_clean_paths)
+    logging.getLogger(__name__).info("CTP 网关启动探测到全局 C++ 环境污染，已主动完成局部净化。")
+
 try:
-    from openctp_ctp import mdapi as _mdapi  # pyright: ignore[reportMissingImports]
+    from openctp_ctp import thostmduserapi as _mdapi  # pyright: ignore[reportMissingImports]
 
     mdapi: Any = _mdapi
     _CTP_AVAILABLE = True
@@ -281,11 +289,18 @@ class CTPMarketGateway(MarketGateway):
             logger.error("openctp-ctp 未安装，无法连接")
             return False
 
+        import uuid
+        
+        # 使用 unique UUID 作为 flow_path，防止多个进程/实例读写同一个 .con 文件导致底层 C++ Segfault
+        unique_id = uuid.uuid4().hex[:8]
+        self.flow_path = os.path.join(self.flow_path, f"run_{unique_id}/")
         os.makedirs(self.flow_path, exist_ok=True)
         self._login_event.clear()
 
         ctp_mdapi = _get_mdapi()
+        # openctp-ctp 在 Linux 下 CreateFtdcMdApi 必须传入 Python str
         self._api = ctp_mdapi.CThostFtdcMdApi.CreateFtdcMdApi(self.flow_path)
+        
         self._spi = CTPMdSpi(
             api=self._api,
             broker_id=self.broker_id,
@@ -297,9 +312,8 @@ class CTPMarketGateway(MarketGateway):
         self._api.RegisterFront(self.front_addr)
         self._api.RegisterSpi(self._spi)
 
-        # api.Init() 会阻塞，必须在子线程中运行
-        self._api_thread = threading.Thread(target=self._api.Init, daemon=True, name="ctp-md-thread")
-        self._api_thread.start()
+        # api.Init() 是非阻塞的，必须在当前线程调用
+        self._api.Init()
 
         if not self._login_event.wait(timeout=10):
             logger.error("CTP: 登录超时（10 秒），请检查前置地址和网络")

@@ -1,0 +1,374 @@
+"""
+数据库访问层 (DAO)
+提供对产品、留白数据、待确认订单、净入金记录的 CRUD 操作
+"""
+import pymysql
+from decimal import Decimal
+from typing import List, Optional
+from datetime import datetime
+import uuid
+
+from database.models import (
+    Product, ProductStatus,
+    FractionalShare,
+    PendingOrder, OrderStatus,
+    FundInflow, FundInflowStatus
+)
+
+
+class DatabaseDAO:
+    """数据库访问对象"""
+
+    def __init__(self, host: str, port: int, user: str, password: str, database: str):
+        self.connection_params = {
+            'host': host,
+            'port': port,
+            'user': user,
+            'password': password,
+            'database': database,
+            'charset': 'utf8mb4',
+            'cursorclass': pymysql.cursors.DictCursor
+        }
+
+    def _get_connection(self):
+        """获取数据库连接"""
+        return pymysql.connect(**self.connection_params)
+
+    # ==================== 产品管理 ====================
+
+    def get_product_by_name(self, product_name: str) -> Optional[Product]:
+        """根据产品名称查询产品"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "SELECT * FROM products WHERE product_name = %s"
+                cursor.execute(sql, (product_name,))
+                row = cursor.fetchone()
+                if row:
+                    return Product(
+                        id=row['id'],
+                        product_name=row['product_name'],
+                        leverage_ratio=row['leverage_ratio'],
+                        account_id=row['account_id'],
+                        fund_account=row.get('fund_account'),
+                        xt_username=row.get('xt_username'),
+                        xt_password=row.get('xt_password'),
+                        status=ProductStatus(row['status']),
+                        created_at=row['created_at'],
+                        updated_at=row['updated_at']
+                    )
+                return None
+        finally:
+            conn.close()
+
+    def list_active_products(self) -> List[Product]:
+        """查询所有活跃产品"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "SELECT * FROM products WHERE status = 'active' ORDER BY product_name"
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+                return [
+                    Product(
+                        id=row['id'],
+                        product_name=row['product_name'],
+                        leverage_ratio=row['leverage_ratio'],
+                        account_id=row['account_id'],
+                        fund_account=row.get('fund_account'),
+                        xt_username=row.get('xt_username'),
+                        xt_password=row.get('xt_password'),
+                        status=ProductStatus(row['status']),
+                        created_at=row['created_at'],
+                        updated_at=row['updated_at']
+                    )
+                    for row in rows
+                ]
+        finally:
+            conn.close()
+
+    # ==================== 留白数据管理 ====================
+
+    def get_fractional_share(self, product_name: str, asset_code: str) -> Decimal:
+        """获取留白数据（不存在则返回0）"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "SELECT fractional_amount FROM fractional_shares WHERE product_name = %s AND asset_code = %s"
+                cursor.execute(sql, (product_name, asset_code))
+                row = cursor.fetchone()
+                return row['fractional_amount'] if row else Decimal('0.0')
+        finally:
+            conn.close()
+
+    def update_fractional_share(self, product_name: str, asset_code: str, fractional_amount: Decimal):
+        """更新留白数据（INSERT ON DUPLICATE KEY UPDATE）"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """
+                INSERT INTO fractional_shares (product_name, asset_code, fractional_amount)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE fractional_amount = %s, last_updated = CURRENT_TIMESTAMP
+                """
+                cursor.execute(sql, (product_name, asset_code, fractional_amount, fractional_amount))
+            conn.commit()
+        finally:
+            conn.close()
+
+    # ==================== 待确认订单管理 ====================
+
+    def create_pending_order(self, order: PendingOrder) -> int:
+        """创建待确认订单"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """
+                INSERT INTO pending_orders (
+                    batch_id, product_name, asset_code, target_market_value,
+                    price, contract_multiplier, theoretical_quantity,
+                    rounded_quantity, fractional_part, final_quantity, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(sql, (
+                    order.batch_id, order.product_name, order.asset_code,
+                    order.target_market_value, order.price, order.contract_multiplier,
+                    order.theoretical_quantity, order.rounded_quantity,
+                    order.fractional_part, order.final_quantity, order.status.value
+                ))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def get_pending_orders_by_batch(self, batch_id: str) -> List[PendingOrder]:
+        """根据批次ID查询待确认订单"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "SELECT * FROM pending_orders WHERE batch_id = %s ORDER BY id"
+                cursor.execute(sql, (batch_id,))
+                rows = cursor.fetchall()
+                return [self._row_to_pending_order(row) for row in rows]
+        finally:
+            conn.close()
+
+    def get_pending_orders_by_product(self, product_name: str, status: Optional[OrderStatus] = None) -> List[PendingOrder]:
+        """根据产品名称查询待确认订单"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                if status:
+                    sql = "SELECT * FROM pending_orders WHERE product_name = %s AND status = %s ORDER BY created_at DESC"
+                    cursor.execute(sql, (product_name, status.value))
+                else:
+                    sql = "SELECT * FROM pending_orders WHERE product_name = %s ORDER BY created_at DESC"
+                    cursor.execute(sql, (product_name,))
+                rows = cursor.fetchall()
+                return [self._row_to_pending_order(row) for row in rows]
+        finally:
+            conn.close()
+
+    def _row_to_pending_order(self, row: dict) -> PendingOrder:
+        """将数据库行转换为 PendingOrder 对象"""
+        return PendingOrder(
+            id=row['id'],
+            batch_id=row['batch_id'],
+            product_name=row['product_name'],
+            asset_code=row['asset_code'],
+            target_market_value=row['target_market_value'],
+            price=row['price'],
+            contract_multiplier=row['contract_multiplier'],
+            theoretical_quantity=row['theoretical_quantity'],
+            rounded_quantity=row['rounded_quantity'],
+            fractional_part=row['fractional_part'],
+            final_quantity=row['final_quantity'],
+            status=OrderStatus(row['status']),
+            created_at=row['created_at'],
+            confirmed_at=row['confirmed_at'],
+            executed_at=row['executed_at'],
+            error_msg=row['error_msg'],
+            xt_order_id=row.get('xt_order_id'),
+        )
+
+    def update_order_final_quantity(self, order_id: int, final_quantity: int):
+        """更新订单的最终手数（交易员手动调整）"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "UPDATE pending_orders SET final_quantity = %s WHERE id = %s"
+                cursor.execute(sql, (final_quantity, order_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def update_order_status(self, order_id: int, status: OrderStatus,
+                           confirmed_by: Optional[str] = None,
+                           error_msg: Optional[str] = None):
+        """更新订单状态"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                if status == OrderStatus.CONFIRMED:
+                    sql = """
+                    UPDATE pending_orders
+                    SET status = %s, confirmed_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    """
+                    cursor.execute(sql, (status.value, order_id))
+                elif status == OrderStatus.EXECUTED:
+                    sql = """
+                    UPDATE pending_orders
+                    SET status = %s, executed_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    """
+                    cursor.execute(sql, (status.value, order_id))
+                elif status == OrderStatus.FAILED:
+                    sql = """
+                    UPDATE pending_orders
+                    SET status = %s, error_msg = %s
+                    WHERE id = %s
+                    """
+                    cursor.execute(sql, (status.value, error_msg, order_id))
+                else:
+                    sql = "UPDATE pending_orders SET status = %s WHERE id = %s"
+                    cursor.execute(sql, (status.value, order_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def update_order_xt_id(self, order_id: int, xt_order_id: int):
+        """下单成功后将迅投返回的指令ID写入数据库"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "UPDATE pending_orders SET xt_order_id = %s WHERE id = %s"
+                cursor.execute(sql, (xt_order_id, order_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    # ==================== 净入金记录管理 ====================
+
+    def create_fund_inflow(self, inflow: FundInflow) -> str:
+        """创建净入金记录，返回 batch_id"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """
+                INSERT INTO fund_inflows (
+                    batch_id, product_name, net_inflow, leverage_ratio,
+                    leveraged_amount, input_by, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(sql, (
+                    inflow.batch_id, inflow.product_name, inflow.net_inflow,
+                    inflow.leverage_ratio, inflow.leveraged_amount,
+                    inflow.input_by, inflow.status.value
+                ))
+            conn.commit()
+            return inflow.batch_id
+        finally:
+            conn.close()
+
+    def get_fund_inflow_by_batch(self, batch_id: str) -> Optional[FundInflow]:
+        """根据批次ID查询净入金记录"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "SELECT * FROM fund_inflows WHERE batch_id = %s"
+                cursor.execute(sql, (batch_id,))
+                row = cursor.fetchone()
+                if row:
+                    return FundInflow(
+                        id=row['id'],
+                        batch_id=row['batch_id'],
+                        product_name=row['product_name'],
+                        net_inflow=row['net_inflow'],
+                        leverage_ratio=row['leverage_ratio'],
+                        leveraged_amount=row['leveraged_amount'],
+                        input_by=row['input_by'],
+                        input_at=row['input_at'],
+                        confirmed_by=row['confirmed_by'],
+                        confirmed_at=row['confirmed_at'],
+                        status=FundInflowStatus(row['status'])
+                    )
+                return None
+        finally:
+            conn.close()
+
+    def list_fund_inflows(self, limit: int = 50) -> list[FundInflow]:
+        """查询所有净入金记录，按创建时间倒序排列"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "SELECT * FROM fund_inflows ORDER BY input_at DESC LIMIT %s"
+                cursor.execute(sql, (limit,))
+                rows = cursor.fetchall()
+                return [
+                    FundInflow(
+                        id=row['id'],
+                        batch_id=row['batch_id'],
+                        product_name=row['product_name'],
+                        net_inflow=row['net_inflow'],
+                        leverage_ratio=row['leverage_ratio'],
+                        leveraged_amount=row['leveraged_amount'],
+                        input_by=row['input_by'],
+                        input_at=row['input_at'],
+                        confirmed_by=row['confirmed_by'],
+                        confirmed_at=row['confirmed_at'],
+                        status=FundInflowStatus(row['status'])
+                    )
+                    for row in rows
+                ]
+        finally:
+            conn.close()
+
+    def update_fund_inflow_status(self, batch_id: str, status: FundInflowStatus,
+                                  confirmed_by: Optional[str] = None):
+        """更新净入金状态"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                if status == FundInflowStatus.CONFIRMED:
+                    sql = """
+                    UPDATE fund_inflows
+                    SET status = %s, confirmed_by = %s, confirmed_at = CURRENT_TIMESTAMP
+                    WHERE batch_id = %s
+                    """
+                    cursor.execute(sql, (status.value, confirmed_by, batch_id))
+                else:
+                    sql = "UPDATE fund_inflows SET status = %s WHERE batch_id = %s"
+                    cursor.execute(sql, (status.value, batch_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def generate_batch_id() -> str:
+        """生成批次ID（时间戳 + UUID）"""
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        short_uuid = str(uuid.uuid4())[:8]
+        return f"{timestamp}_{short_uuid}"
+
+    # ==================== 行情资产管理 ====================
+
+    def get_all_target_assets(self) -> List[str]:
+        """获取全网需要监听行情的目标资产合约代码列表"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                # 目标资产库由前端和主逻辑共同维护在 target_allocations 表内
+                sql = "SELECT DISTINCT asset_code FROM target_allocations"
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+                if rows:
+                    return [row['asset_code'] for row in rows]
+                
+                # 宁缺毋滥，如果数据库中确实没有，直接返回空列表，绝对不返回内置测试代码
+                return []
+        except Exception as e:
+            # 遇到表未创建或网络中断异常时，拒绝降级写入脏数据，直接返回空池
+            return []
+        finally:
+            conn.close()
