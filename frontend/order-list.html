@@ -492,7 +492,7 @@
             isQueryingXt = true;
             const btn = document.getElementById('queryXtBtn');
             btn.disabled = true;
-            btn.textContent = '⭐ 正在查询（首次可能需 30秒）...';
+            btn.textContent = '正在查询...';
 
             // 构建请求参数
             const params = new URLSearchParams({ product_name: productName });
@@ -537,10 +537,10 @@
                     summary.style.display = 'block';
                     summary.innerHTML = `查询成功！产品: <strong>${productName}</strong>，` +
                         `日期: ${data.query_date}，` +
-                        `共 <strong>${data.orders.length}</strong> 条迅投委托记录，` +
+                        `共 <strong>${data.orders.length}</strong> 条迅投指令记录，` +
                         `资金账号: ${data.account_id}`;
 
-                    showAlert(`查询成功，共获取 ${data.orders.length} 条迅投委托记录`, 'success');
+                    showAlert(`查询成功，共获取 ${data.orders.length} 条迅投指令记录`, 'success');
                 } else {
                     showAlert('查询迅投状态失败: ' + data.message, 'error');
                 }
@@ -564,30 +564,60 @@
         function parseXtStatus(xtOrder) {
             let badgeClass = 'status-pending';
             let statusText = xtOrder.status_msg || '未知';
+            const status = xtOrder.status;
 
-            switch (xtOrder.status) {
-                case 1: case 49:
-                    badgeClass = 'status-submitted'; statusText = '已报'; break;
-                case 2: case 50:
-                    badgeClass = 'status-partial';
-                    statusText = `部分成交 (${xtOrder.traded_volume}/${xtOrder.volume})`; break;
-                case 3: case 51:
-                    badgeClass = 'status-filled'; statusText = '全部成交'; break;
-                case 4: case 54:
-                    badgeClass = 'status-cancelled'; statusText = '已撤单'; break;
-                case 5: case 55:
-                    badgeClass = 'status-partial';
-                    statusText = `部成部撤 (${xtOrder.traded_volume}/${xtOrder.volume})`; break;
-                case 6: case 56:
-                    badgeClass = 'status-rejected'; statusText = '废单'; break;
-                case 52:
-                    badgeClass = 'status-pending'; statusText = '待报'; break;
-                case 53:
-                    badgeClass = 'status-pending'; statusText = '待撤'; break;
-                default:
-                    badgeClass = 'status-pending';
-                    statusText = `${statusText} (${xtOrder.status})`;
+            // 指令级别的状态（字符串，来自 reqCommandsInfoSync）
+            if (typeof status === 'string') {
+                switch (status) {
+                    case 'OCS_FINISHED':
+                        badgeClass = 'status-filled'; statusText = '已完成'; break;
+                    case 'OCS_RUNNING':
+                        badgeClass = 'status-submitted'; statusText = '运行中'; break;
+                    case 'OCS_STOPPED':
+                        badgeClass = 'status-rejected'; statusText = '已停止'; break;
+                    case 'OCS_REJECTED':
+                        badgeClass = 'status-rejected'; statusText = '已驳回'; break;
+                    case 'OCS_CHECKING':
+                        badgeClass = 'status-pending'; statusText = '风控检查中'; break;
+                    case 'OCS_APPROVING':
+                        badgeClass = 'status-pending'; statusText = '审批中'; break;
+                    case 'OCS_CANCELING':
+                        badgeClass = 'status-cancelled'; statusText = '撤销中'; break;
+                    default:
+                        badgeClass = 'status-pending'; statusText = statusText || status;
+                }
+            } else {
+                // 委托级别的状态（数字，来自 reqOrderDetailSync）
+                switch (status) {
+                    case 1: case 49:
+                        badgeClass = 'status-submitted'; statusText = '已报'; break;
+                    case 2: case 50:
+                        badgeClass = 'status-partial';
+                        statusText = `部分成交 (${xtOrder.traded_volume}/${xtOrder.volume})`; break;
+                    case 3: case 51:
+                        badgeClass = 'status-filled'; statusText = '全部成交'; break;
+                    case 4: case 54:
+                        badgeClass = 'status-cancelled'; statusText = '已撤单'; break;
+                    case 5: case 55:
+                        badgeClass = 'status-partial';
+                        statusText = `部成部撤 (${xtOrder.traded_volume}/${xtOrder.volume})`; break;
+                    case 6: case 56:
+                        badgeClass = 'status-rejected'; statusText = '废单'; break;
+                    case 52:
+                        badgeClass = 'status-pending'; statusText = '待报'; break;
+                    case 53:
+                        badgeClass = 'status-pending'; statusText = '待撤'; break;
+                    default:
+                        badgeClass = 'status-pending';
+                        statusText = `${statusText} (${status})`;
+                }
             }
+
+            // 如果有错误信息，追加显示
+            if (xtOrder.error_msg) {
+                statusText += `<br><small style="color:#ef4444;font-size:11px;">${xtOrder.error_msg}</small>`;
+            }
+
             return { badgeClass, statusText };
         }
 

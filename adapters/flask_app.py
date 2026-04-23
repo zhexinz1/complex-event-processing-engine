@@ -1207,35 +1207,70 @@ def create_app() -> Flask:
             actual_account_id = product.fund_account if product.fund_account else product.account_id
 
             # 查询订单
+            # 核心策略：优先用 query_instructions() 查询「指令」级别的状态
+            # 指令 (Instruction) 是迅投系统层面的概念，包含 CTP 驳回信息
+            # 委托 (Entrust) 是 broker 柜台层面的概念，CTP 驳回时根本不会有委托
+            #
+            # 对于当日查询：使用 query_instructions() + query_orders() 合并
+            # 对于历史查询：使用 query_history_orders()（历史指令不可查）
+            import datetime
+            today_str = datetime.date.today().strftime("%Y%m%d")
+
+            order_list = []
+
+            # 1. 始终查询指令（指令只有当日可查，但能捕获驳回信息）
+            instructions = xt_service.query_instructions(account_id=actual_account_id)
+            logger.info("指令查询: %d 条 (account_id=%s)", len(instructions), actual_account_id)
+
+            # 把指令数据直接作为主要结果
+            for instr in instructions:
+                order_list.append({
+                    "order_id": instr["order_id"],
+                    "instrument": instr["instrument"],
+                    "market": instr["market"],
+                    "direction": instr["direction"],
+                    "volume": instr["volume"],
+                    "price": instr["price"],
+                    "status": instr["status"],
+                    "status_msg": instr["status_msg"],
+                    "traded_volume": instr.get("traded_volume", 0),
+                    "order_time": "",
+                    "error_msg": instr.get("error_msg", ""),
+                    "source": "instruction",
+                })
+
+            # 2. 如果查询的是历史日期，也查历史委托
+            seen_ids = {o["order_id"] for o in order_list}
+
             if start_date:
-                # 历史日期查询
                 if not end_date:
                     end_date = start_date
-                orders = xt_service.query_history_orders(
-                    account_id=actual_account_id,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-            else:
-                # 当日查询
-                orders = xt_service.query_orders(account_id=actual_account_id)
 
-            # 转换为字典列表
-            order_list = [
-                {
-                    "order_id": o.order_id,
-                    "instrument": o.instrument,
-                    "market": o.market,
-                    "direction": o.direction,
-                    "volume": o.volume,
-                    "price": o.price,
-                    "status": o.status,
-                    "status_msg": o.status_msg,
-                    "traded_volume": o.traded_volume,
-                    "order_time": o.order_time
-                }
-                for o in orders
-            ]
+                if start_date < today_str or end_date < today_str:
+                    hist_end = min(end_date, (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y%m%d"))
+                    if start_date <= hist_end:
+                        hist_orders = xt_service.query_history_orders(
+                            account_id=actual_account_id,
+                            start_date=start_date,
+                            end_date=hist_end
+                        )
+                        for o in hist_orders:
+                            if o.order_id not in seen_ids:
+                                order_list.append({
+                                    "order_id": o.order_id,
+                                    "instrument": o.instrument,
+                                    "market": o.market,
+                                    "direction": o.direction,
+                                    "volume": o.volume,
+                                    "price": o.price,
+                                    "status": o.status,
+                                    "status_msg": o.status_msg,
+                                    "traded_volume": o.traded_volume,
+                                    "order_time": o.order_time,
+                                    "error_msg": "",
+                                    "source": "history_entrust",
+                                })
+                        logger.info("历史委托查询 (%s ~ %s): %d 笔", start_date, hist_end, len(hist_orders))
 
             return jsonify({
                 "success": True,
@@ -1248,6 +1283,143 @@ def create_app() -> Flask:
         except Exception as e:
             logger.exception("查询迅投订单异常")
             return jsonify({"success": False, "message": f"服务器错误: {str(e)}"}), 500
+
+    @app.route("/api/xt/debug_query")
+    def xt_debug_query():
+        """
+        诊断接口：直接用多种方式查询迅投订单，返回原始SDK结果
+        参数: product_name, order_id (可选，指定单笔查询)
+        """
+        try:
+            product_name = request.args.get("product_name")
+            target_order_id = request.args.get("order_id", type=int)
+            if not product_name:
+                return jsonify({"success": False, "message": "请指定 product_name"}), 400
+
+            product = dao.get_product_by_name(product_name)
+            if not product:
+                return jsonify({"success": False, "message": f"产品 {product_name} 不存在"}), 404
+
+            xt_manager = get_xt_connection_manager()
+            xt_service = xt_manager.get_connection(
+                username=product.xt_username,
+                password=product.xt_password,
+                account_id=product.account_id,
+                timeout=30.0
+            )
+            if not xt_service:
+                return jsonify({"success": False, "message": "无法连接迅投"}), 500
+
+            actual_account_id = product.fund_account if product.fund_account else product.account_id
+            account_key = xt_service._account_ready.get(actual_account_id)
+
+            result = {
+                "account_id": actual_account_id,
+                "account_key": account_key[:30] + "..." if account_key else None,
+                "logined": xt_service._logined,
+                "account_ready_keys": list(xt_service._account_ready.keys()),
+            }
+
+            # 方法1: reqOrderDetailSync (当日委托)
+            try:
+                from XtTraderPyApi import XtError as _XtError
+                error = _XtError(0, "")
+                orders = xt_service._api.reqOrderDetailSync(actual_account_id, error, account_key)
+                result["method1_reqOrderDetailSync"] = {
+                    "isSuccess": error.isSuccess(),
+                    "errorMsg": error.errorMsg(),
+                    "count": len(orders) if orders else 0,
+                    "type": type(orders).__name__,
+                }
+                if orders:
+                    result["method1_first_order_attrs"] = {}
+                    for attr in dir(orders[0]):
+                        if attr.startswith('m_'):
+                            try:
+                                val = getattr(orders[0], attr)
+                                result["method1_first_order_attrs"][attr] = str(val)
+                            except:
+                                pass
+            except Exception as e:
+                result["method1_error"] = str(e)
+
+            # 方法2: reqOrderDetailSyncByOrderID (按指令ID查)
+            if target_order_id:
+                try:
+                    error2 = _XtError(0, "")
+                    orders2 = xt_service._api.reqOrderDetailSyncByOrderID(
+                        actual_account_id, error2, target_order_id, account_key
+                    )
+                    result["method2_reqByOrderID"] = {
+                        "order_id": target_order_id,
+                        "isSuccess": error2.isSuccess(),
+                        "errorMsg": error2.errorMsg(),
+                        "count": len(orders2) if orders2 else 0,
+                    }
+                    if orders2:
+                        result["method2_first_attrs"] = {}
+                        for attr in dir(orders2[0]):
+                            if attr.startswith('m_'):
+                                try:
+                                    val = getattr(orders2[0], attr)
+                                    result["method2_first_attrs"][attr] = str(val)
+                                except:
+                                    pass
+                except Exception as e:
+                    result["method2_error"] = str(e)
+
+            # 方法3: reqDealDetailSync (成交明细)
+            try:
+                error3 = _XtError(0, "")
+                deals = xt_service._api.reqDealDetailSync(actual_account_id, error3, account_key)
+                result["method3_reqDealDetail"] = {
+                    "isSuccess": error3.isSuccess(),
+                    "errorMsg": error3.errorMsg(),
+                    "count": len(deals) if deals else 0,
+                }
+                if deals:
+                    result["method3_first_deal_attrs"] = {}
+                    for attr in dir(deals[0]):
+                        if attr.startswith('m_'):
+                            try:
+                                val = getattr(deals[0], attr)
+                                result["method3_first_deal_attrs"][attr] = str(val)
+                            except:
+                                pass
+            except Exception as e:
+                result["method3_error"] = str(e)
+
+            # 方法4: reqCommandsInfoSync (指令查询 - 不需要account_id)
+            try:
+                error4 = _XtError(0, "")
+                cmds = xt_service._api.reqCommandsInfoSync(error4)
+                result["method4_reqCommandsInfo"] = {
+                    "isSuccess": error4.isSuccess(),
+                    "errorMsg": error4.errorMsg(),
+                    "count": len(cmds) if cmds else 0,
+                }
+                if cmds:
+                    # 只取最近10条指令
+                    cmd_list = []
+                    for cmd in cmds[-10:]:
+                        cmd_info = {}
+                        for attr in dir(cmd):
+                            if attr.startswith('m_'):
+                                try:
+                                    val = getattr(cmd, attr)
+                                    cmd_info[attr] = str(val)
+                                except:
+                                    pass
+                        cmd_list.append(cmd_info)
+                    result["method4_recent_commands"] = cmd_list
+            except Exception as e:
+                result["method4_error"] = str(e)
+
+            return jsonify({"success": True, "debug": result})
+
+        except Exception as e:
+            logger.exception("诊断查询异常")
+            return jsonify({"success": False, "message": str(e)}), 500
 
     # ---------------------------------------------------------------------------
     # 迅投下单 API

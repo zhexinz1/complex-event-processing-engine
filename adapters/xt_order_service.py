@@ -507,7 +507,13 @@ class XtOrderService:
 
         try:
             error = XtError(0, "")
+            logger.info("正在调用 reqOrderDetailSync: account_id=%s, account_key=%s", 
+                        account_id, account_key[:20] + "..." if account_key else "None")
             orders = self._api.reqOrderDetailSync(account_id, error, account_key)
+
+            logger.info("reqOrderDetailSync 返回: error.isSuccess=%s, errorMsg=%s, orders类型=%s, orders数量=%s",
+                       error.isSuccess(), error.errorMsg(), type(orders).__name__, 
+                       len(orders) if orders else 0)
 
             if not error.isSuccess():
                 logger.error("查询当日订单失败: account_id=%s, 错误=%s", account_id, error.errorMsg())
@@ -518,6 +524,8 @@ class XtOrderService:
                 for order in orders:
                     result.append(self._parse_order_detail(order))
                 logger.info("当日订单查询成功: account_id=%s, 共 %d 笔", account_id, len(result))
+            else:
+                logger.info("当日订单查询: account_id=%s, SDK返回空列表 (0笔)", account_id)
             return result
 
         except Exception as e:
@@ -577,6 +585,91 @@ class XtOrderService:
 
         except Exception as e:
             logger.exception("查询历史订单异常: %s", e)
+            return []
+
+    # 指令状态映射（来自 SDK 的 EOrderCommandStatus 枚举）
+    _CMD_STATUS_MAP = {
+        "OCS_CHECKING": "风控检查中",
+        "OCS_RUNNING": "运行中",
+        "OCS_APPROVING": "审批中",
+        "OCS_REJECTED": "已驳回",
+        "OCS_FINISHED": "已完成",
+        "OCS_STOPPED": "已停止",
+        "OCS_CANCELING": "撤销中",
+    }
+
+    def query_instructions(self, account_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        查询指令列表（通过 reqCommandsInfoSync）
+
+        重要区别：
+        - reqOrderDetailSync 查的是「委托」（broker 柜台层面）
+        - reqCommandsInfoSync 查的是「指令」（迅投系统层面）
+        - 当 CTP 柜台驳回指令时（如资金不足），不会产生委托，reqOrderDetailSync 返回空
+        - 但 reqCommandsInfoSync 仍能查到指令及驳回原因
+
+        Args:
+            account_id: 过滤指定资金账号的指令，为空则返回全部
+
+        Returns:
+            指令详情字典列表
+        """
+        if not self._logined or self._api is None:
+            logger.error("XtTrader 未登录，无法查询指令")
+            return []
+
+        try:
+            error = XtError(0, "")
+            cmds = self._api.reqCommandsInfoSync(error)
+
+            if not error.isSuccess():
+                logger.error("查询指令失败: 错误=%s", error.errorMsg())
+                return []
+
+            result = []
+            if cmds:
+                for cmd in cmds:
+                    # 按 account_id 过滤
+                    cmd_account = getattr(cmd, 'm_strAccountID', '')
+                    if account_id and cmd_account != account_id:
+                        continue
+
+                    # 解析状态
+                    raw_status = str(getattr(cmd, 'm_eStatus', ''))
+                    # 从 "EOrderCommandStatus.OCS_STOPPED" 中提取 "OCS_STOPPED"
+                    status_key = raw_status.split('.')[-1] if '.' in raw_status else raw_status
+                    status_msg = self._CMD_STATUS_MAP.get(status_key, raw_status)
+
+                    # 解析方向
+                    raw_direction = str(getattr(cmd, 'm_eOperationType', ''))
+                    direction_key = raw_direction.split('.')[-1] if '.' in raw_direction else raw_direction
+
+                    result.append({
+                        "order_id": getattr(cmd, 'm_nOrderID', 0),
+                        "instrument": getattr(cmd, 'm_strInstrument', ''),
+                        "market": getattr(cmd, 'm_strMarket', ''),
+                        "direction": direction_key,
+                        "volume": getattr(cmd, 'm_nVolume', 0),
+                        "price": getattr(cmd, 'm_dPrice', 0.0),
+                        "status": status_key,
+                        "status_msg": status_msg,
+                        "traded_volume": getattr(cmd, 'm_dTradedVolume', 0.0),
+                        "traded_price": getattr(cmd, 'm_dTradedPrice', 0.0),
+                        "traded_amount": getattr(cmd, 'm_dTradedAmount', 0.0),
+                        "error_msg": getattr(cmd, 'm_strMsg', ''),
+                        "account_id": cmd_account,
+                        "broker_type": str(getattr(cmd, 'm_eBrokerType', '')),
+                    })
+
+                logger.info(
+                    "指令查询成功: 总数=%d, 过滤后=%d (account_id=%s)",
+                    len(cmds), len(result), account_id or "全部"
+                )
+
+            return result
+
+        except Exception as e:
+            logger.exception("查询指令异常: %s", e)
             return []
 
     @property
