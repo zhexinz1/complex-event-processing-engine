@@ -98,22 +98,18 @@ CREATE TABLE IF NOT EXISTS allowed_assets (
 """
 
 FRONTEND_DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
+FRONTEND_SRC_DIR = Path(__file__).parent.parent / "frontend"
 
 # 全局 DAO 实例（在 create_app 中初始化）
 dao: DatabaseDAO = None
 
 
 def get_frontend_dir() -> Path:
-    """Return the compiled Vite app directory, or fail with setup guidance."""
+    """Return the compiled Vite app directory if built, else fall back to raw frontend/."""
     if (FRONTEND_DIST_DIR / "index.html").exists():
         return FRONTEND_DIST_DIR
-    abort(
-        503,
-        description=(
-            f"前端静态文件未找到: {FRONTEND_DIST_DIR / 'index.html'}。"
-            "请先运行 `npm install` 和 `npm run frontend:build`"
-        ),
-    )
+    # 未构建 Vue 前端时，直接服务 frontend/ 下的原始 HTML 文件
+    return FRONTEND_SRC_DIR
 
 
 def get_conn() -> Any:
@@ -161,7 +157,13 @@ def create_app() -> Flask:
 
     @app.route("/<path:filename>")
     def static_files(filename: str):
-        return send_from_directory(str(get_frontend_dir()), filename)
+        # 尝试直接提供静态文件（JS/CSS/图片等）
+        frontend_dir = get_frontend_dir()
+        file_path = frontend_dir / filename
+        if file_path.is_file():
+            return send_from_directory(str(frontend_dir), filename)
+        # 非 API 路径且文件不存在 → SPA fallback 到 index.html
+        return send_from_directory(str(frontend_dir), "index.html")
 
     # -----------------------------------------------------------------------
     # GET /api/weights
