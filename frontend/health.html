@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行情健康检查 - CEP 系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Status Cards */
+        .status-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            border-left: 4px solid #e5e7eb;
+        }
+
+        .card.ok {
+            border-left-color: #10b981;
+        }
+
+        .card.warn {
+            border-left-color: #f59e0b;
+        }
+
+        .card.error {
+            border-left-color: #ef4444;
+        }
+
+        .card-title {
+            font-size: 12px;
+            color: #6b7280;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .card-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .card-value.ok {
+            color: #059669;
+        }
+
+        .card-value.warn {
+            color: #d97706;
+        }
+
+        .card-value.error {
+            color: #dc2626;
+        }
+
+        .card-sub {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        /* Content */
+        .content {
+            background: white;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+
+        .content h2 {
+            font-size: 16px;
+            color: #1f2937;
+            margin-bottom: 16px;
+        }
+
+        /* Missing alert */
+        .missing-alert {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .missing-alert h3 {
+            color: #b91c1c;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .missing-alert .code {
+            background: #fee2e2;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: 600;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f9fafb;
+        }
+
+        th {
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 14px;
+            color: #1f2937;
+        }
+
+        tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        .price {
+            font-family: "SF Mono", monospace;
+            font-weight: 600;
+        }
+
+        .time {
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        /* Refresh */
+        .header {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            color: #1f2937;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .auto-label {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .auto-toggle {
+            margin-left: 6px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .pulse {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: pulsate 1.5s infinite;
+        }
+
+        .pulse.green {
+            background: #10b981;
+        }
+
+        .pulse.red {
+            background: #ef4444;
+        }
+
+        @keyframes pulsate {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.8);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation Tabs -->
+    <div style="background: white; border-bottom: 2px solid #e5e7eb; margin-bottom: 20px;">
+        <div style="max-width: 1200px; margin: 0 auto; display: flex; gap: 0;">
+            <a href="/"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                目标仓位配置
+            </a>
+            <a href="/fund-inflow.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                净入金录入
+            </a>
+            <a href="/order-confirm.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                订单确认
+            </a>
+            <a href="/order-list.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #6b7280; text-decoration: none; transition: all 0.2s;"
+                onmouseover="this.style.color='#111827'; this.style.background='#f9fafb';"
+                onmouseout="this.style.color='#6b7280'; this.style.background='transparent';">
+                订单列表
+            </a>
+            <a href="/health.html"
+                style="padding: 12px 24px; font-size: 14px; font-weight: 500; color: #2563eb; text-decoration: none; border-bottom: 2px solid #2563eb; margin-bottom: -2px; background: #f9fafb;">
+                行情健康检查
+            </a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>行情健康检查</h1>
+            <div class="btn-group">
+                <span class="auto-label">
+                    自动刷新
+                    <input type="checkbox" id="autoRefreshToggle" class="auto-toggle" checked>
+                </span>
+                <button class="btn btn-primary" id="refreshBtn">立即刷新</button>
+            </div>
+        </div>
+
+        <!-- Status Cards -->
+        <div class="status-cards">
+            <div class="card" id="cardOverall">
+                <div class="card-title">总体状态</div>
+                <div class="card-value" id="overallStatus">检查中...</div>
+                <div class="card-sub" id="overallSub">—</div>
+            </div>
+            <div class="card" id="cardSubscriber">
+                <div class="card-title">Redis 订阅线程</div>
+                <div class="card-value" id="subscriberStatus">—</div>
+                <div class="card-sub">行情数据接收通道</div>
+            </div>
+            <div class="card" id="cardSymbols">
+                <div class="card-title">行情覆盖率</div>
+                <div class="card-value" id="symbolCoverage">—</div>
+                <div class="card-sub" id="symbolSub">—</div>
+            </div>
+        </div>
+
+        <!-- Missing Symbols Alert -->
+        <div class="missing-alert" id="missingAlert">
+            <h3>以下合约缺少行情数据</h3>
+            <p id="missingList"></p>
+            <p style="margin-top: 8px; font-size: 13px; color: #7f1d1d;">
+                请检查 Market Node 是否已订阅这些合约，或 CTP 合约代码是否正确。
+            </p>
+        </div>
+
+        <!-- Tick Data Table -->
+        <div class="content">
+            <h2>实时行情缓存明细</h2>
+            <div id="loadingBox" class="loading">加载中...</div>
+            <table id="tickTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>合约代码</th>
+                        <th>最新价</th>
+                        <th>买1价</th>
+                        <th>买1量</th>
+                        <th>卖1价</th>
+                        <th>卖1量</th>
+                        <th>成交量</th>
+                        <th>行情时间</th>
+                        <th>交易日</th>
+                        <th>来源状态</th>
+                    </tr>
+                </thead>
+                <tbody id="tickBody"></tbody>
+            </table>
+            <div id="emptyState" style="display: none; text-align: center; padding: 40px; color: #6b7280;">
+                <p>暂无行情数据。请检查 Market Node 是否已启动。</p>
+            </div>
+        </div>
+
+        <!-- Expected Symbols from DB -->
+        <div class="content">
+            <h2>数据库配置的目标合约</h2>
+            <p id="expectedList" style="color: #6b7280;">加载中...</p>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshTimer = null;
+
+        async function checkHealth() {
+            try {
+                const response = await fetch('/api/market/health');
+                const data = await response.json();
+
+                if (!data.success) {
+                    document.getElementById('overallStatus').textContent = '❌ 异常';
+                    return;
+                }
+
+                // --- Overall status card ---
+                const card = document.getElementById('cardOverall');
+                const val = document.getElementById('overallStatus');
+                const sub = document.getElementById('overallSub');
+                if (data.healthy) {
+                    card.className = 'card ok'; val.className = 'card-value ok';
+                    val.innerHTML = '<span class="pulse green"></span>健康';
+                    sub.textContent = '所有合约行情正常';
+                } else {
+                    card.className = 'card error'; val.className = 'card-value error';
+                    val.innerHTML = '<span class="pulse red"></span>异常';
+                    sub.textContent = data.missing_symbols.length > 0
+                        ? `${data.missing_symbols.length} 个合约缺少行情`
+                        : (!data.subscriber_alive ? 'Redis 订阅线程已断开' : '无行情数据');
+                }
+
+                // --- Subscriber card ---
+                const subCard = document.getElementById('cardSubscriber');
+                const subVal = document.getElementById('subscriberStatus');
+                if (data.subscriber_alive) {
+                    subCard.className = 'card ok'; subVal.className = 'card-value ok';
+                    subVal.textContent = '运行中';
+                } else {
+                    subCard.className = 'card error'; subVal.className = 'card-value error';
+                    subVal.textContent = '已断开';
+                }
+
+                // --- Coverage card ---
+                const symCard = document.getElementById('cardSymbols');
+                const symVal = document.getElementById('symbolCoverage');
+                const symSub = document.getElementById('symbolSub');
+                const expectedCount = data.expected_symbols.length;
+                const cachedCount = data.cached_count;
+                const receivedExpected = expectedCount - data.missing_symbols.length;
+                symVal.textContent = `${receivedExpected} / ${expectedCount}`;
+                symSub.textContent = `缓存中共 ${cachedCount} 个合约`;
+                if (data.missing_symbols.length === 0 && expectedCount > 0) {
+                    symCard.className = 'card ok'; symVal.className = 'card-value ok';
+                } else if (data.missing_symbols.length > 0) {
+                    symCard.className = 'card warn'; symVal.className = 'card-value warn';
+                } else {
+                    symCard.className = 'card'; symVal.className = 'card-value';
+                }
+
+                // --- Missing alert ---
+                const missingAlert = document.getElementById('missingAlert');
+                if (data.missing_symbols.length > 0) {
+                    missingAlert.style.display = 'block';
+                    document.getElementById('missingList').innerHTML =
+                        data.missing_symbols.map(s => `<span class="code">${s}</span>`).join('  ');
+                } else {
+                    missingAlert.style.display = 'none';
+                }
+
+                // --- Expected symbols list ---
+                document.getElementById('expectedList').innerHTML =
+                    data.expected_symbols.length > 0
+                        ? data.expected_symbols.map(s => {
+                            const inCache = data.symbols[s] !== undefined;
+                            return `<span style="display: inline-block; margin: 4px 8px 4px 0; padding: 4px 12px; border-radius: 16px; font-size: 13px; font-weight: 500; background: ${inCache ? '#d1fae5' : '#fee2e2'}; color: ${inCache ? '#065f46' : '#991b1b'};">${inCache ? '✓' : '✗'} ${s}</span>`;
+                        }).join('')
+                        : '<span style="color: #9ca3af;">数据库中未配置任何目标合约</span>';
+
+                // --- Tick table ---
+                const symbols = data.symbols || {};
+                const keys = Object.keys(symbols).sort();
+                const tbody = document.getElementById('tickBody');
+                const table = document.getElementById('tickTable');
+                const empty = document.getElementById('emptyState');
+
+                document.getElementById('loadingBox').style.display = 'none';
+
+                if (keys.length === 0) {
+                    table.style.display = 'none';
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                table.style.display = 'table';
+                empty.style.display = 'none';
+                tbody.innerHTML = '';
+
+                keys.forEach(sym => {
+                    const t = symbols[sym];
+                    const isExpected = data.expected_symbols.includes(sym);
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><strong>${sym}</strong></td>
+                        <td class="price">${t.last_price.toFixed(2)}</td>
+                        <td class="price" style="color: #059669;">${t.bid1 > 0 ? t.bid1.toFixed(2) : '—'}</td>
+                        <td>${t.bid1_vol || '—'}</td>
+                        <td class="price" style="color: #dc2626;">${t.ask1 > 0 ? t.ask1.toFixed(2) : '—'}</td>
+                        <td>${t.ask1_vol || '—'}</td>
+                        <td>${t.volume || '—'}</td>
+                        <td class="time">${t.update_time || '—'}</td>
+                        <td>${t.trading_day || '—'}</td>
+                        <td>${isExpected ? '<span style="color:#059669">已配置</span>' : '<span style="color:#9ca3af">额外</span>'}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+            } catch (e) {
+                document.getElementById('overallStatus').textContent = '网络异常';
+                console.error('Health check error:', e);
+            }
+        }
+
+        // Auto-refresh
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            autoRefreshTimer = setInterval(checkHealth, 3000);
+        }
+        function stopAutoRefresh() {
+            if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+        }
+
+        document.getElementById('autoRefreshToggle').addEventListener('change', function () {
+            if (this.checked) { startAutoRefresh(); } else { stopAutoRefresh(); }
+        });
+        document.getElementById('refreshBtn').addEventListener('click', checkHealth);
+
+        // Init
+        checkHealth();
+        startAutoRefresh();
+    </script>
+</body>
+
+</html>

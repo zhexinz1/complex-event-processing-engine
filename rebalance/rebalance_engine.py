@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any
+from decimal import Decimal
 
 from rebalance.portfolio_context import PortfolioContext
 
@@ -63,6 +64,33 @@ class RebalanceResult:
     calculation_details: dict[str, Any]
 
 
+@dataclass
+class IncrementalOrder:
+    """
+    增量买入订单（净入金场景）。
+
+    Attributes:
+        asset_code:           合约代码
+        target_market_value:  目标市值（元）
+        price:                计算时使用的价格（卖1价）
+        contract_multiplier:  合约乘数
+        theoretical_quantity: 理论手数（未取整）
+        rounded_quantity:     四舍五入后的手数
+        fractional_part:      留白部分（小数）
+        previous_fractional:  上次留白累积
+        final_quantity:       最终手数（rounded_quantity，可手动调整）
+    """
+    asset_code: str
+    target_market_value: Decimal
+    price: Decimal
+    contract_multiplier: int
+    theoretical_quantity: Decimal
+    rounded_quantity: int
+    fractional_part: Decimal
+    previous_fractional: Decimal
+    final_quantity: int
+
+
 # ---------------------------------------------------------------------------
 # 再平衡引擎
 # ---------------------------------------------------------------------------
@@ -75,12 +103,12 @@ class RebalanceEngine:
       - calculate(): 执行完整的 5 步计算链路
     """
 
-    def __init__(self, portfolio_ctx: PortfolioContext) -> None:
+    def __init__(self, portfolio_ctx: PortfolioContext = None) -> None:
         """
         初始化再平衡引擎。
 
         Args:
-            portfolio_ctx: 组合上下文（提供持仓、权重、行情等数据）
+            portfolio_ctx: 组合上下文（增量买入场景可以为 None）
         """
         self.portfolio_ctx = portfolio_ctx
         logger.info("RebalanceEngine initialized.")
@@ -254,3 +282,103 @@ class RebalanceEngine:
         logger.info(f"订单校验通过: 所需保证金 {result.total_margin_needed:,.2f}, "
                     f"可用资金 {available_cash:,.2f}")
         return True, ""
+
+    # ---------------------------------------------------------------------------
+    # 增量买入逻辑（净入金场景）
+    # ---------------------------------------------------------------------------
+
+    def calculate_incremental_orders(
+        self,
+        net_inflow: Decimal,
+        leverage_ratio: Decimal,
+        target_weights: dict[str, Decimal],
+        market_prices: dict[str, Decimal],
+        contract_multipliers: dict[str, int],
+        previous_fractionals: dict[str, Decimal]
+    ) -> list[IncrementalOrder]:
+        """
+        计算增量买入订单（净入金场景）。
+
+        Args:
+            net_inflow: 净入金金额（元）
+            leverage_ratio: 杠杆倍数（如 2.0 表示2倍杠杆）
+            target_weights: 目标权重字典 {asset_code: weight}
+            market_prices: 市场价格字典 {asset_code: 卖1价}
+            contract_multipliers: 合约乘数字典 {asset_code: multiplier}
+            previous_fractionals: 上次留白数据 {asset_code: fractional_amount}
+
+        Returns:
+            增量订单列表
+
+        计算步骤：
+            1. 杠杆后市值 = 净入金 × 杠杆倍数
+            2. 标的分配市值 = 杠杆后市值 × 目标权重
+            3. 理论手数 = (标的分配市值 + 上次留白市值) / (卖1价 × 合约乘数)
+            4. 四舍五入 + 留白存储
+        """
+        logger.info(f"开始计算增量买入订单: 净入金={net_inflow}, 杠杆={leverage_ratio}")
+
+        # 步骤1: 计算杠杆后市值
+        leveraged_amount = net_inflow * leverage_ratio
+        logger.info(f"杠杆后市值: {leveraged_amount}")
+
+        orders = []
+
+        for asset_code, weight in target_weights.items():
+            # 步骤2: 标的分配市值
+            target_market_value = leveraged_amount * weight
+
+            # 获取价格和合约乘数
+            price = market_prices.get(asset_code)
+            multiplier = contract_multipliers.get(asset_code)
+
+            if price is None or multiplier is None:
+                logger.warning(f"跳过 {asset_code}: 缺少价格或合约乘数")
+                continue
+
+            # 获取上次留白
+            previous_fractional = previous_fractionals.get(asset_code, Decimal('0.0'))
+
+            # 步骤3: 计算理论手数（包含上次留白）
+            # 上次留白对应的市值
+            previous_fractional_value = previous_fractional * price * Decimal(multiplier)
+
+            # 总目标市值 = 本次分配市值 + 上次留白市值
+            total_target_value = target_market_value + previous_fractional_value
+
+            # 理论手数
+            theoretical_quantity = total_target_value / (price * Decimal(multiplier))
+
+            # 步骤4: 四舍五入
+            rounded_quantity = int(round(theoretical_quantity))
+
+            # 留白部分 = 理论手数 - 四舍五入后的手数
+            fractional_part = theoretical_quantity - Decimal(rounded_quantity)
+
+            # 最终手数（初始值等于四舍五入后的值，可由交易员手动调整）
+            final_quantity = rounded_quantity
+
+            order = IncrementalOrder(
+                asset_code=asset_code,
+                target_market_value=target_market_value,
+                price=price,
+                contract_multiplier=multiplier,
+                theoretical_quantity=theoretical_quantity,
+                rounded_quantity=rounded_quantity,
+                fractional_part=fractional_part,
+                previous_fractional=previous_fractional,
+                final_quantity=final_quantity
+            )
+
+            orders.append(order)
+
+            logger.info(
+                f"{asset_code}: 目标市值={target_market_value:.2f}, "
+                f"价格={price}, 乘数={multiplier}, "
+                f"理论手数={theoretical_quantity:.6f}, "
+                f"四舍五入={rounded_quantity}, "
+                f"留白={fractional_part:.6f}, "
+                f"上次留白={previous_fractional:.6f}"
+            )
+
+        return orders
