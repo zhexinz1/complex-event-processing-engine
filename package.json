@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "frontend:dev": "vite --config frontend/vite.config.ts --host 0.0.0.0",
+    "frontend:check": "vue-tsc -p frontend/tsconfig.json --noEmit",
+    "frontend:build": "node frontend/build.mjs"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.5",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vue-tsc": "^3.2.6"
+  }
+}

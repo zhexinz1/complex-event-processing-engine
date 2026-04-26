@@ -455,6 +455,10 @@ CEP/
 
 替换 `_thostmduserapi.so` 和 `_thosttraderapi.so` 时，必须下载与 `.venv` 中 Python 版本 (3.13) 匹配的二进制文件。如果用了 3.12 的 .so 会直接 `ImportError`。
 
+### tushare 数据 API 配置
+
+先前往 [个人主页](https://tushare.pro/user/token) 获取 token，然后在 `~/.bashrc` 中添加 `export TUSHARE_TOKEN=<YOUR_TOKEN>`，然后 `source ~/.bashrc` 生效环境变量。
+
 ### 2. 迅投合约代码必须小写
 
 XunTou SDK 的 `COrdinaryOrder.m_strInstrument` 必须传入**小写**合约代码（如 `au2606`），大写会导致找不到合约。代码中已在 `order_service.py` 做了 `.lower()` 处理。

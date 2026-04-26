@@ -22,6 +22,8 @@ All Python files use absolute module imports (e.g., `from cep.core.events import
 
 The NLP module (`nlp/nl_parser.py`) requires `ANTHROPIC_API_KEY` set in the environment and the `anthropic` package installed. It degrades gracefully if the SDK is absent.
 
+The frontend UI is written in Vue.ts. Check the standard build and lint commands in `package.json`.
+
 ## Architecture
 
 This is a **Complex Event Processing (CEP)** system for quantitative trading (A-shares and futures), built on the ECA (Event–Condition–Action) pattern with a publish/subscribe event bus.
@@ -48,6 +50,7 @@ MarketGateway → EventBus → Triggers → EventBus → Handlers
 | `rebalance/` | Portfolio rebalance engine and triggers |
 | `nlp/` | Natural language → JSON AST via Claude API |
 | `adapters/` | External interfaces (market gateway, order gateway, config, frontend API) |
+| `frontend/` | Web UI |
 
 ### Key Design Constraints
 
@@ -117,6 +120,7 @@ Public APIs are re-exported via `__init__.py` files:
 - `from nlp import parse_natural_language, validate_and_suggest, IndicatorMeta`
 
 ## Coding Guidelines
-- Run `ruff` and `pyright` before every commit, and fix all reported errors.
+- Run `ruff` and `pyright` before every commit that changes python code, and fix all reported errors.
 - A change is not ready to commit if `ruff` reports violations or `pyright` reports type-checking errors.
-- Recommended pre-commit verification from the repo root:
+- Read corresponding docs (README.md in the directory and related files under `docs/`) for context.
+- After adding a new feature or making architectural changes, make sure to keep the related documentations updated.

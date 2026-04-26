@@ -2,6 +2,8 @@
 run_ui_server.py — 一键启动目标仓位配置大屏
 
 用法：
+    npm install
+    npm run frontend:build
     uv run -m examples.run_ui_server
     # 或
     python examples/run_ui_server.py
@@ -10,6 +12,7 @@ run_ui_server.py — 一键启动目标仓位配置大屏
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -30,7 +33,8 @@ if __name__ == "__main__":
     except Exception as e:
         logging.getLogger(__name__).warning("数据库连接失败（服务仍将启动）: %s", e)
 
+    port = int(os.getenv("PORT", "5000"))
     app = create_app()
     print("\n  CEP 目标仓位配置大屏已启动")
-    print("  访问地址: http://43.160.206.71:5000\n")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    print(f"  访问地址: http://43.160.206.71:{port}\n")
+    app.run(host="0.0.0.0", port=port, debug=False)

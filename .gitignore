@@ -59,3 +59,7 @@ AGENTS.md
 
 # Legacy
 run_server.py
+
+# Frontend build
+node_modules/
+frontend/dist/

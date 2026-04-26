@@ -15,6 +15,7 @@ market_gateway.py — 行情网关适配器
 from __future__ import annotations
 
 import logging
+import importlib
 import os
 import threading
 from abc import ABC, abstractmethod
@@ -139,9 +140,21 @@ class _BarAccumulator:
 
 
 def _get_mdapi() -> Any:
-    """Return the imported CTP mdapi module or raise a clear runtime error."""
-    if mdapi is None:
-        raise RuntimeError("openctp-ctp is not installed")
+    """Lazily import the CTP mdapi module so mock-only runs avoid native imports."""
+    global mdapi, _CTP_AVAILABLE, _CTP_MD_SPI_BASE
+
+    if mdapi is not None:
+        return mdapi
+
+    try:
+        imported = importlib.import_module("openctp_ctp.mdapi")
+    except Exception as exc:  # pragma: no cover - depends on local native SDK state
+        _CTP_AVAILABLE = False
+        raise RuntimeError("openctp-ctp is not installed or failed to load") from exc
+
+    mdapi = imported
+    _CTP_AVAILABLE = True
+    _CTP_MD_SPI_BASE = getattr(imported, "CThostFtdcMdSpi", object)
     return mdapi
 
 
@@ -162,7 +175,7 @@ class CTPMdSpi(_CTP_MD_SPI_BASE):
         login_event: threading.Event,
         on_tick_callback: Callable,
     ):
-        if _CTP_AVAILABLE:
+        if _CTP_AVAILABLE is not False:
             super().__init__()
         self._api = api
         self._broker_id = broker_id
@@ -273,9 +286,6 @@ class CTPMarketGateway(MarketGateway):
         self._bar_lock: threading.Lock = threading.Lock()
         self._connected: bool = False
 
-        if not _CTP_AVAILABLE:
-            logger.warning("openctp-ctp 未安装，CTPMarketGateway 将不可用。请运行: pip install openctp-ctp")
-
         logger.info(f"CTPMarketGateway initialized: {front_addr}")
 
     def connect(self) -> bool:
@@ -309,6 +319,7 @@ class CTPMarketGateway(MarketGateway):
             login_event=self._login_event,
             on_tick_callback=self._on_depth_market_data,
         )
+
         self._api.RegisterFront(self.front_addr)
         self._api.RegisterSpi(self._spi)
 
@@ -616,7 +627,9 @@ class MockMarketGateway(MarketGateway):
         low: float,
         close: float,
         volume: int = 0,
-        turnover: float = 0.0
+        turnover: float = 0.0,
+        bar_time: datetime | None = None,
+        timestamp: datetime | None = None,
     ) -> None:
         """
         手动推送 Bar 数据（用于测试）。
@@ -628,12 +641,16 @@ class MockMarketGateway(MarketGateway):
             high:     最高价
             low:      最低价
             close:    收盘价
-            volume:   成交量
-            turnover: 成交额
+            volume:    成交量
+            turnover:  成交额
+            bar_time:  Bar 时间（可选，默认当前时间）
+            timestamp: 事件时间（可选，默认当前时间）
         """
         if symbol not in self._subscribed_symbols:
             logger.warning(f"Symbol {symbol} not subscribed, ignoring bar")
             return
+
+        now = datetime.now()
 
         bar = BarEvent(
             symbol=symbol,
@@ -644,8 +661,8 @@ class MockMarketGateway(MarketGateway):
             close=close,
             volume=volume,
             turnover=turnover,
-            bar_time=datetime.now(),
-            timestamp=datetime.now()
+            bar_time=bar_time or now,
+            timestamp=timestamp or now,
         )
         self._publish_bar(bar)
         logger.debug(f"Mock bar pushed: {symbol} {freq} close={close}")
