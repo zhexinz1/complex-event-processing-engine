@@ -2,16 +2,17 @@
 初始化数据库表结构
 执行 database/schema.sql 中的建表语句
 """
-import os
 import pymysql
 
-DB_CONFIG = {
-    'host': os.environ.get('DB_HOST', '127.0.0.1'),
-    'port': int(os.environ.get('DB_PORT', '3306')),
-    'user': os.environ.get('DB_USER', 'root'),
-    'password': os.environ.get('DB_PASS', ''),
-    'database': os.environ.get('DB_NAME', 'fof'),
-    'charset': 'utf8mb4'
+from database.config import DB_CONFIG
+
+PYMYSQL_CONFIG = {
+    'host': DB_CONFIG.host,
+    'port': DB_CONFIG.port,
+    'user': DB_CONFIG.user,
+    'password': DB_CONFIG.password,
+    'database': DB_CONFIG.database,
+    'charset': DB_CONFIG.charset,
 }
 
 def init_database():
@@ -21,7 +22,7 @@ def init_database():
         sql_script = f.read()
 
     # 连接数据库
-    conn = pymysql.connect(**DB_CONFIG)
+    conn = pymysql.connect(**PYMYSQL_CONFIG)
 
     try:
         with conn.cursor() as cursor:

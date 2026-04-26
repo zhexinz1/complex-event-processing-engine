@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS allowed_assets (
 ### 文件结构
 
 ```
+database/
+└── config.py             # 数据库连接配置单一来源
+
 adapters/
 ├── config_source.py      # MySQLConfigSource 类（供引擎读取配置）
 ├── flask_app.py          # Flask REST API（供前端调用）
@@ -93,6 +96,8 @@ examples/
 **位置**：`adapters/config_source.py`
 
 **作用**：实现 `ConfigSource` 接口，供 `RebalanceEngine` 读取目标权重。
+
+数据库连接参数来自 `.env` 的 `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` / `DB_NAME`，应用、DAO、初始化脚本和配置源统一通过 `database/config.py` 读取。
 
 **核心方法**：
 
@@ -207,20 +212,7 @@ uv sync
 
 ### 2. 配置数据库访问
 
-**阿里云 RDS 白名单设置**：
-
-1. 登录阿里云 RDS 控制台
-2. 找到 `fof` 数据库实例
-3. 进入「数据安全性」→「白名单设置」
-4. 添加服务器 IP（如 `43.160.206.71`）
-
-**或通过 SQL 授权**：
-
-```sql
-GRANT ALL PRIVILEGES ON fof.* TO 'cx'@'43.160.206.71'
-IDENTIFIED BY 'iyykiho4#0HO';
-FLUSH PRIVILEGES;
-```
+数据库配置会自动从 .env文件中读取到`database/config.py`作为中心化的默认配置。所有连接DB的模块都会直接引用它。
 
 ### 3. 配置安全组
 

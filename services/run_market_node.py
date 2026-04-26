@@ -56,14 +56,7 @@ def main():
     redis_bridge.start_publishing([TickEvent, BarEvent])
 
     # 建立正式的 MySQL 数据库层 (DAO) 连接
-    from adapters.config_source import MySQLConfigSource
-    db_dao = DatabaseDAO(
-        host=MySQLConfigSource.DB_HOST,
-        port=MySQLConfigSource.DB_PORT,
-        user=MySQLConfigSource.DB_USER,
-        password=MySQLConfigSource.DB_PASS,
-        database=MySQLConfigSource.DB_NAME
-    )
+    db_dao = DatabaseDAO()
 
     # 3. 初始化并连接 CTP 行情网关
     gateway = CTPMarketGateway(

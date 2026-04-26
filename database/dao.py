@@ -15,19 +15,27 @@ from database.models import (
     FundInflow, FundInflowStatus,
     UserSignalDefinition, UserSignalStatus,
 )
+from database.config import DB_CONFIG
 
 
 class DatabaseDAO:
     """数据库访问对象"""
 
-    def __init__(self, host: str, port: int, user: str, password: str, database: str):
+    def __init__(
+        self,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        database: str | None = None,
+    ):
         self.connection_params = {
-            'host': host,
-            'port': port,
-            'user': user,
-            'password': password,
-            'database': database,
-            'charset': 'utf8mb4',
+            'host': host or DB_CONFIG.host,
+            'port': port or DB_CONFIG.port,
+            'user': user or DB_CONFIG.user,
+            'password': password if password is not None else DB_CONFIG.password,
+            'database': database or DB_CONFIG.database,
+            'charset': DB_CONFIG.charset,
             'cursorclass': pymysql.cursors.DictCursor
         }
 

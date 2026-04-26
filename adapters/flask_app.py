@@ -45,6 +45,12 @@ from backtest.preset_strategies import (
 )
 from data_provider import search_stocks
 
+from database.config import (
+    CONNECT_TIMEOUT_SECONDS,
+    DB_CONFIG as DATABASE_CONFIG,
+    READ_TIMEOUT_SECONDS,
+    WRITE_TIMEOUT_SECONDS,
+)
 from database.dao import DatabaseDAO
 from database.models import (
     PendingOrder,
@@ -72,19 +78,19 @@ logger = logging.getLogger(__name__)
 # 数据库连接配置
 # ---------------------------------------------------------------------------
 
-DB_CONFIG: dict[str, Any] = dict(
-    host=os.environ.get("DB_HOST", "127.0.0.1"),
-    port=int(os.environ.get("DB_PORT", "3306")),
-    database=os.environ.get("DB_NAME", "fof"),
-    user=os.environ.get("DB_USER", "root"),
-    password=os.environ.get("DB_PASS", ""),
-    charset="utf8mb4",
-    cursorclass=pymysql.cursors.DictCursor,
-    autocommit=False,
-    connect_timeout=10,  # 连接超时10秒
-    read_timeout=10,     # 读取超时10秒
-    write_timeout=10,    # 写入超时10秒
-)
+DB_CONFIG: dict[str, Any] = {
+    "host": DATABASE_CONFIG.host,
+    "port": DATABASE_CONFIG.port,
+    "database": DATABASE_CONFIG.database,
+    "user": DATABASE_CONFIG.user,
+    "password": DATABASE_CONFIG.password,
+    "charset": DATABASE_CONFIG.charset,
+    "cursorclass": pymysql.cursors.DictCursor,
+    "autocommit": False,
+    "connect_timeout": CONNECT_TIMEOUT_SECONDS,
+    "read_timeout": READ_TIMEOUT_SECONDS,
+    "write_timeout": WRITE_TIMEOUT_SECONDS,
+}
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS target_allocations (
@@ -156,13 +162,7 @@ def init_db() -> None:
 
     # 初始化 DAO
     global dao
-    dao = DatabaseDAO(
-        host=DB_CONFIG['host'],
-        port=DB_CONFIG['port'],
-        user=DB_CONFIG['user'],
-        password=DB_CONFIG['password'],
-        database=DB_CONFIG['database']
-    )
+    dao = DatabaseDAO()
     logger.info("DatabaseDAO initialized.")
 
 

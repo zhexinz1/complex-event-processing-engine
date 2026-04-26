@@ -275,7 +275,7 @@ if "xt_sdk" in _inherited_ld:
 | User | `cx` |
 | Charset | `utf8mb4` |
 
-连接参数硬编码在 `adapters/config_source.py` 的 `MySQLConfigSource` 类中。
+连接参数集中定义在 `.env` 的 `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` / `DB_NAME`。Python 代码统一通过 `database/config.py` 读取。
 
 ### 核心表
 
@@ -454,10 +454,6 @@ CEP/
 ### 1. openctp .so 替换必须匹配 Python 版本
 
 替换 `_thostmduserapi.so` 和 `_thosttraderapi.so` 时，必须下载与 `.venv` 中 Python 版本 (3.13) 匹配的二进制文件。如果用了 3.12 的 .so 会直接 `ImportError`。
-
-### tushare 数据 API 配置
-
-先前往 [个人主页](https://tushare.pro/user/token) 获取 token，然后在 `~/.bashrc` 中添加 `export TUSHARE_TOKEN=<YOUR_TOKEN>`，然后 `source ~/.bashrc` 生效环境变量。
 
 ### 2. 迅投合约代码必须小写
 

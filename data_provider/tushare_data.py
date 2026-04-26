@@ -9,7 +9,8 @@ from typing import Any, cast
 import tushare as ts
 
 from cep.core.events import BarEvent
-
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file if present
 
 def normalize_ts_code(raw_code: str) -> str:
     """Normalize common A-share user input into a Tushare ts_code."""
