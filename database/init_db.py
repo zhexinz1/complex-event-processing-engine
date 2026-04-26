@@ -2,14 +2,15 @@
 初始化数据库表结构
 执行 database/schema.sql 中的建表语句
 """
+import os
 import pymysql
 
 DB_CONFIG = {
-    'host': '120.25.245.137',
-    'port': 23306,
-    'user': 'cx',
-    'password': 'cC3z#,2?od)gn7Nhd2L1',
-    'database': 'fof',
+    'host': os.environ.get('DB_HOST', '127.0.0.1'),
+    'port': int(os.environ.get('DB_PORT', '3306')),
+    'user': os.environ.get('DB_USER', 'root'),
+    'password': os.environ.get('DB_PASS', ''),
+    'database': os.environ.get('DB_NAME', 'fof'),
     'charset': 'utf8mb4'
 }
 

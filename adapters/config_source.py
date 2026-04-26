@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
@@ -372,11 +373,11 @@ class MySQLConfigSource(ConfigSource):
     供 RebalanceEngine 直接使用。
     """
 
-    DB_HOST = "120.25.245.137"
-    DB_PORT = 23306
-    DB_NAME = "fof"
-    DB_USER = "cx"
-    DB_PASS = "cC3z#,2?od)gn7Nhd2L1"
+    DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
+    DB_PORT = int(os.environ.get("DB_PORT", "3306"))
+    DB_NAME = os.environ.get("DB_NAME", "fof")
+    DB_USER = os.environ.get("DB_USER", "root")
+    DB_PASS = os.environ.get("DB_PASS", "")
 
     CREATE_TABLE_SQL = """
     CREATE TABLE IF NOT EXISTS target_allocations (

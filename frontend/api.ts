@@ -119,14 +119,6 @@ export const CepApi: CepApiClient = {
     });
   },
 
-  reconcileOrders(): Promise<ApiResponse> {
-    return this.requestJson('/api/orders/reconcile', { method: 'POST' });
-  },
-
-  fetchXtCache(): Promise<ApiResponse> {
-    return this.requestJson('/api/xuntou/cache');
-  },
-
   // ---- Prices ----
 
   fetchRealtimePrices(symbols: string): Promise<ApiResponse & { prices: Record<string, RealtimePrice> }> {

@@ -2,6 +2,18 @@
 启动 Flask Web 微服务 (独立 Web 控制台)
 """
 import logging
+from pathlib import Path
+
+# 加载 .env 环境变量（在读取任何配置之前）
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+if _env_file.exists():
+    import os
+    for line in _env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip())
+
 from adapters.flask_app import create_app, init_db
 from adapters.price_service import init_redis_market_subscriber
 

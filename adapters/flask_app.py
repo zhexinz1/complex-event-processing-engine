@@ -28,6 +28,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from decimal import Decimal
 from datetime import datetime
@@ -61,11 +62,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DB_CONFIG: dict[str, Any] = dict(
-    host="120.25.245.137",
-    port=23306,
-    database="fof",
-    user="cx",
-    password="cC3z#,2?od)gn7Nhd2L1",
+    host=os.environ.get("DB_HOST", "127.0.0.1"),
+    port=int(os.environ.get("DB_PORT", "3306")),
+    database=os.environ.get("DB_NAME", "fof"),
+    user=os.environ.get("DB_USER", "root"),
+    password=os.environ.get("DB_PASS", ""),
     charset="utf8mb4",
     cursorclass=pymysql.cursors.DictCursor,
     autocommit=False,
@@ -221,6 +222,14 @@ def create_app() -> Flask:
         missing = [f for f in required if f not in body]
         if missing:
             return jsonify({"success": False, "message": f"缺少字段: {missing}"}), 400
+
+        # 校验合约代码格式：不允许带交易所后缀
+        asset_code = (body["asset_code"] or "").strip()
+        if '.' in asset_code:
+            return jsonify({
+                "success": False,
+                "message": f"合约代码不应包含交易所后缀，请输入纯合约代码 (如 {asset_code.split('.')[0]})"
+            }), 400
 
         sql = """
             INSERT INTO target_allocations
@@ -441,10 +450,22 @@ def create_app() -> Flask:
         if not asset_code:
             return jsonify({"success": False, "message": "asset_code 不能为空"}), 400
 
-        # TODO: 校验品种是否存在（未来挂载 CTP/实盘接口查验交易所品种）
-        # is_valid = ctp_gateway.check_symbol(asset_code)
-        # if not is_valid:
-        #     return jsonify({"success": False, "message": f"品种 {asset_code} 在交易所不存在"}), 422
+        # 校验：合约代码不能带交易所后缀（如 ".SHFE"）
+        # CTP InstrumentID 只接受纯合约代码（如 ag2606），带后缀会导致行情订阅静默失败
+        # 交易所后缀由 normalize_asset_code() 在下单时动态计算
+        if '.' in asset_code:
+            return jsonify({
+                "success": False,
+                "message": f"合约代码不应包含交易所后缀 (如 .SHFE)，请输入纯合约代码 (如 {asset_code.split('.')[0]})"
+            }), 400
+
+        # 校验：合约代码应为字母+数字格式
+        import re
+        if not re.match(r'^[a-zA-Z]+\d+$', asset_code):
+            return jsonify({
+                "success": False,
+                "message": f"合约代码格式不正确: {asset_code}，应为品种+月份格式（如 ag2606、rb2510）"
+            }), 400
 
         try:
             with get_conn() as conn:
@@ -605,7 +626,7 @@ def create_app() -> Flask:
 
             leverage_ratio = product.leverage_ratio
 
-            # 2. 查询目标权重配置（从 target_allocations 表）
+            # 2. 查询目标权重配置（从 target_allocations 表，只取最新日期）
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -613,10 +634,13 @@ def create_app() -> Flask:
                         SELECT asset_code, weight_ratio
                         FROM target_allocations
                         WHERE product_name = %s
-                        ORDER BY target_date DESC
-                        LIMIT 100
+                          AND target_date = (
+                              SELECT MAX(target_date)
+                              FROM target_allocations
+                              WHERE product_name = %s
+                          )
                         """,
-                        (product_name,)
+                        (product_name, product_name)
                     )
                     rows = cur.fetchall()
 
@@ -1044,7 +1068,9 @@ def create_app() -> Flask:
                     result = xt_service.place_order(order_req)
 
                     if result.success:
-                        dao.update_order_status(order.id, OrderStatus.EXECUTED)
+                        # 仅标记为"已确认提交"，而非"已执行"
+                        # 真正的终态（EXECUTED/FAILED/CANCELLED）由回调/对账更新
+                        dao.update_order_status(order.id, OrderStatus.CONFIRMED)
                         executed_orders.append(order.asset_code)
 
                         # 将迅投返回的指令ID写入数据库（同时标记 xt_status='sent'）

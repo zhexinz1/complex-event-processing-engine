@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS products (
     product_name VARCHAR(100) NOT NULL UNIQUE COMMENT '产品名称',
     leverage_ratio DECIMAL(5, 2) NOT NULL COMMENT '杠杆倍数（如 2.00 表示2倍杠杆）',
     account_id VARCHAR(50) NOT NULL COMMENT '关联的交易账号ID',
+    fund_account VARCHAR(50) COMMENT '资金账号（真实资金账号ID，用于下单）',
+    xt_username VARCHAR(100) COMMENT '迅投登录用户名',
+    xt_password VARCHAR(200) COMMENT '迅投登录密码（加密存储）',
     status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '产品状态',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -43,10 +46,17 @@ CREATE TABLE IF NOT EXISTS pending_orders (
     confirmed_at TIMESTAMP NULL COMMENT '交易员确认时间',
     executed_at TIMESTAMP NULL COMMENT '订单执行时间',
     error_msg TEXT COMMENT '执行失败时的错误信息',
+    xt_order_id BIGINT COMMENT '迅投返回的指令ID',
+    xt_status VARCHAR(20) DEFAULT 'not_sent' COMMENT '迅投侧状态（not_sent/send_failed/sent/running/rejected/filled/partial/cancelled/stopped）',
+    xt_error_msg TEXT COMMENT 'CTP 驳回原因',
+    xt_traded_volume INT DEFAULT 0 COMMENT '迅投回报的成交量',
+    xt_traded_price DECIMAL(18, 4) DEFAULT 0.0000 COMMENT '迅投回报的成交均价',
+    order_price_type VARCHAR(20) DEFAULT 'limit' COMMENT '下单价格类型（limit/market/best/twap/vwap）',
     INDEX idx_batch_id (batch_id),
     INDEX idx_product_name (product_name),
     INDEX idx_status (status),
-    INDEX idx_created_at (created_at)
+    INDEX idx_created_at (created_at),
+    INDEX idx_xt_order_id (xt_order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='待确认订单表';
 
 -- 净入金记录表

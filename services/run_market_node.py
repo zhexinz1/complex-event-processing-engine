@@ -20,7 +20,17 @@ if "xt_sdk" in _inherited_ld:
 
 import time
 from datetime import datetime
+from pathlib import Path
 import logging
+
+# 加载 .env 环境变量（在读取任何配置之前）
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+if _env_file.exists():
+    for line in _env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip())
 
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent, BarEvent
@@ -73,6 +83,18 @@ def main():
             """通过真正的 DAO 数据库层拉取最新的目标合约，并增量订阅"""
             try:
                 target_pool = db_dao.get_all_target_assets()
+
+                # 防御性检查：CTP 只接受纯 InstrumentID，不能带交易所后缀
+                bad_codes = [s for s in target_pool if '.' in s]
+                if bad_codes:
+                    logger.error(
+                        "[Market Node] ⚠️ 数据库中存在带交易所后缀的合约代码: %s "
+                        "— CTP 无法订阅这些代码，请在前端修正为纯合约代码（如 ag2606）",
+                        bad_codes,
+                    )
+                    # 过滤掉无效代码，只订阅合法的
+                    target_pool = [s for s in target_pool if '.' not in s]
+
                 new_symbols = [s for s in target_pool if s not in subscribed_symbols]
 
                 if new_symbols:

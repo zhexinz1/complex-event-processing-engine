@@ -266,21 +266,43 @@ class DatabaseDAO:
         finally:
             conn.close()
 
+    # 迅投终态 → 业务状态映射
+    _XT_TERMINAL_STATUS_MAP: dict[str, str] = {
+        "filled": "executed",
+        "rejected": "failed",
+        "cancelled": "cancelled",
+        "stopped": "failed",
+    }
+
     def update_order_xt_status(self, xt_order_id: int, xt_status: str,
                                xt_error_msg: str = ""):
-        """根据迅投指令ID更新订单的迅投侧状态（回调 / 对账使用）"""
+        """根据迅投指令ID更新订单的迅投侧状态（回调 / 对账使用）
+
+        当 xt_status 到达终态（filled/rejected/cancelled/stopped）时，
+        同步更新业务 status 字段，保持两个状态一致。
+        """
         import logging as _logging
         _logger = _logging.getLogger(__name__)
 
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:
-                sql = """UPDATE pending_orders
-                         SET xt_status = %s, xt_error_msg = %s
-                         WHERE xt_order_id = %s"""
-                cursor.execute(sql, (xt_status, xt_error_msg, xt_order_id))
+                # 检查是否为终态，需要同步更新业务 status
+                biz_status = self._XT_TERMINAL_STATUS_MAP.get(xt_status)
+                if biz_status:
+                    sql = """UPDATE pending_orders
+                             SET xt_status = %s, xt_error_msg = %s, status = %s
+                             WHERE xt_order_id = %s"""
+                    cursor.execute(sql, (xt_status, xt_error_msg, biz_status, xt_order_id))
+                else:
+                    sql = """UPDATE pending_orders
+                             SET xt_status = %s, xt_error_msg = %s
+                             WHERE xt_order_id = %s"""
+                    cursor.execute(sql, (xt_status, xt_error_msg, xt_order_id))
                 if cursor.rowcount == 0:
                     _logger.debug("update_order_xt_status: xt_order_id=%s 未匹配到订单", xt_order_id)
+                elif biz_status:
+                    _logger.info("update_order_xt_status: xt_order_id=%s 终态同步 status → %s", xt_order_id, biz_status)
             conn.commit()
         finally:
             conn.close()
