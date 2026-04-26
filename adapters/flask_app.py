@@ -36,9 +36,9 @@ from flask import Flask, jsonify, request, send_from_directory
 from database.dao import DatabaseDAO
 from database.models import PendingOrder, OrderStatus, FundInflow, FundInflowStatus
 from rebalance.rebalance_engine import RebalanceEngine, IncrementalOrder
-from adapters.xt_order_service import XtOrderService, OrderRequest, OrderDirection, OrderPriceType
-from adapters.xt_query_service import XtQueryService
-from adapters.xt_connection_manager import get_xt_connection_manager
+from adapters.xuntou import XtOrderService, OrderRequest, OrderDirection, OrderPriceType
+from adapters.xuntou import XtQueryService
+from adapters.xuntou import get_xt_connection_manager
 from adapters.price_service import get_latest_price, init_redis_market_subscriber, get_tick_cache_detail
 from adapters.contract_config import get_contract_multiplier, normalize_asset_code
 
@@ -756,6 +756,11 @@ def create_app() -> Flask:
                             "final_quantity": row["final_quantity"],
                             "status": row["status"],
                             "xt_order_id": row.get("xt_order_id"),
+                            "xt_status": row.get("xt_status", "not_sent"),
+                            "xt_error_msg": row.get("xt_error_msg", ""),
+                            "xt_traded_volume": row.get("xt_traded_volume", 0),
+                            "xt_traded_price": float(row.get("xt_traded_price", 0) or 0),
+                            "order_price_type": row.get("order_price_type", "limit"),
                             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
                             "confirmed_at": row.get("confirmed_at").isoformat() if row.get("confirmed_at") else None,
                         }
@@ -931,6 +936,19 @@ def create_app() -> Flask:
                     dao.update_order_status(order.id, OrderStatus.CANCELLED)
                     continue
 
+                # 记录订单价格类型到 DB
+                try:
+                    conn = dao._get_connection()
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            "UPDATE pending_orders SET order_price_type = %s WHERE id = %s",
+                            (price_type_str, order.id)
+                        )
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass  # 非关键字段，失败不阻断下单流程
+
                 try:
                     # 获取产品配置以获取迅投账号信息
                     product = dao.get_product_by_name(order.product_name)
@@ -946,7 +964,8 @@ def create_app() -> Flask:
                         username=product.xt_username,
                         password=product.xt_password,
                         account_id=product.account_id,
-                        timeout=30.0
+                        timeout=30.0,
+                        dao=dao,
                     )
 
                     if not xt_service:
@@ -1001,7 +1020,7 @@ def create_app() -> Flask:
                         dao.update_order_status(order.id, OrderStatus.EXECUTED)
                         executed_orders.append(order.asset_code)
 
-                        # 将迅投返回的指令ID写入数据库（用于后续精确查询订单状态）
+                        # 将迅投返回的指令ID写入数据库（同时标记 xt_status='sent'）
                         if result.order_id:
                             dao.update_order_xt_id(order.id, result.order_id)
 
@@ -1012,7 +1031,10 @@ def create_app() -> Flask:
                             order.fractional_part
                         )
                     else:
-                        raise RuntimeError(result.error_msg or "下单失败")
+                        # SDK 调用返回失败 — 记录 xt_status='send_failed'
+                        error_msg = result.error_msg or "下单失败"
+                        dao.update_order_xt_send_failed(order.id, error_msg)
+                        raise RuntimeError(error_msg)
 
                 except Exception as e:
                     logger.exception(f"执行订单失败: {order.asset_code}")
@@ -1148,43 +1170,24 @@ def create_app() -> Flask:
             return jsonify({"success": False, "message": f"服务器错误: {str(e)}"}), 500
 
     @app.route("/api/xt/orders", methods=["GET"])
-    def xt_query_orders():
+    def xt_reconcile_orders():
         """
-        查询迅投订单状态（支持产品级别 + 日期范围）
+        手动对账接口 — 从迅投拉取当日指令，与 DB 精确匹配并更新状态
 
         查询参数:
-            product_name: 产品名称（必选，用于获取迅投账号信息）
-            start_date: 开始日期（可选，格式 YYYYMMDD，不传则查当日）
-            end_date: 结束日期（可选，格式 YYYYMMDD，不传则同 start_date）
+            product_name: 产品名称（必选）
 
-        返回:
-        {
-            "success": true,
-            "orders": [
-                {
-                    "order_id": 123,
-                    "instrument": "ag2606",
-                    "market": "SHFE",
-                    "direction": 1,
-                    "volume": 10,
-                    "price": 7145.0,
-                    "status": 3,
-                    "status_msg": "全部成交",
-                    "traded_volume": 10,
-                    "order_time": "2026-04-16 15:30:00"
-                }
-            ]
-        }
+        执行逻辑:
+            1. 调一次 reqCommandsInfoSync() 拿到当日全部指令
+            2. 逐笔与 DB 中 xt_status='sent'/'running' 的订单按 xt_order_id 精确匹配
+            3. 更新 DB 中的 xt_status 和 xt_error_msg
+            4. 返回对账摘要
         """
         try:
             product_name = request.args.get("product_name")
-            start_date = request.args.get("start_date")  # YYYYMMDD
-            end_date = request.args.get("end_date")  # YYYYMMDD
-
             if not product_name:
                 return jsonify({"success": False, "message": "请指定产品名称 (product_name)"}), 400
 
-            # 从产品配置中获取迅投账号信息
             product = dao.get_product_by_name(product_name)
             if not product:
                 return jsonify({"success": False, "message": f"产品 {product_name} 不存在"}), 404
@@ -1192,96 +1195,91 @@ def create_app() -> Flask:
             if not product.xt_username or not product.xt_password:
                 return jsonify({"success": False, "message": f"产品 {product_name} 未配置迅投账号"}), 400
 
-            # 获取迅投连接（复用连接管理器）
+            # 获取迅投连接
             xt_manager = get_xt_connection_manager()
             xt_service = xt_manager.get_connection(
                 username=product.xt_username,
                 password=product.xt_password,
                 account_id=product.account_id,
-                timeout=30.0
+                timeout=30.0,
+                dao=dao,
             )
             if not xt_service:
                 return jsonify({"success": False, "message": f"无法连接迅投账号: {product.xt_username}"}), 500
 
-            # 确定查询的资金账号
             actual_account_id = product.fund_account if product.fund_account else product.account_id
 
-            # 查询订单
-            # 核心策略：优先用 query_instructions() 查询「指令」级别的状态
-            # 指令 (Instruction) 是迅投系统层面的概念，包含 CTP 驳回信息
-            # 委托 (Entrust) 是 broker 柜台层面的概念，CTP 驳回时根本不会有委托
-            #
-            # 对于当日查询：使用 query_instructions() + query_orders() 合并
-            # 对于历史查询：使用 query_history_orders()（历史指令不可查）
-            import datetime
-            today_str = datetime.date.today().strftime("%Y%m%d")
-
-            order_list = []
-
-            # 1. 始终查询指令（指令只有当日可查，但能捕获驳回信息）
+            # 1. 拉取迅投当日全部指令
             instructions = xt_service.query_instructions(account_id=actual_account_id)
-            logger.info("指令查询: %d 条 (account_id=%s)", len(instructions), actual_account_id)
+            logger.info("对账: 迅投返回 %d 条指令 (account_id=%s)", len(instructions), actual_account_id)
 
-            # 把指令数据直接作为主要结果
+            # 构建 order_id → instruction 索引
+            instr_map = {}
             for instr in instructions:
-                order_list.append({
-                    "order_id": instr["order_id"],
-                    "instrument": instr["instrument"],
-                    "market": instr["market"],
-                    "direction": instr["direction"],
-                    "volume": instr["volume"],
-                    "price": instr["price"],
-                    "status": instr["status"],
-                    "status_msg": instr["status_msg"],
-                    "traded_volume": instr.get("traded_volume", 0),
-                    "order_time": "",
-                    "error_msg": instr.get("error_msg", ""),
-                    "source": "instruction",
-                })
+                instr_map[instr["order_id"]] = instr
 
-            # 2. 如果查询的是历史日期，也查历史委托
-            seen_ids = {o["order_id"] for o in order_list}
+            # 2. 从 DB 取出未终结的订单
+            pending_statuses = ["sent", "running"]
+            pending_orders = dao.get_orders_by_xt_status(pending_statuses)
 
-            if start_date:
-                if not end_date:
-                    end_date = start_date
+            # 3. 逐笔精确匹配并更新
+            # 指令状态字符串 → 我们的 XtStatus 映射
+            _INSTR_STATUS_MAP = {
+                "OCS_FINISHED": "filled",
+                "OCS_RUNNING": "running",
+                "OCS_STOPPED": "stopped",
+                "OCS_REJECTED": "rejected",
+                "OCS_CHECKING": "running",
+                "OCS_APPROVING": "running",
+                "OCS_CANCELING": "cancelled",
+            }
 
-                if start_date < today_str or end_date < today_str:
-                    hist_end = min(end_date, (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y%m%d"))
-                    if start_date <= hist_end:
-                        hist_orders = xt_service.query_history_orders(
-                            account_id=actual_account_id,
-                            start_date=start_date,
-                            end_date=hist_end
+            updated = 0
+            not_found = 0
+            already_ok = 0
+
+            for order in pending_orders:
+                if order.xt_order_id is None:
+                    continue
+
+                matched = instr_map.get(order.xt_order_id)
+                if matched:
+                    new_status = _INSTR_STATUS_MAP.get(matched["status"], "sent")
+                    error_msg = matched.get("error_msg", "")
+
+                    if new_status != order.xt_status or error_msg != (order.xt_error_msg or ""):
+                        dao.update_order_xt_status(
+                            xt_order_id=order.xt_order_id,
+                            xt_status=new_status,
+                            xt_error_msg=error_msg,
                         )
-                        for o in hist_orders:
-                            if o.order_id not in seen_ids:
-                                order_list.append({
-                                    "order_id": o.order_id,
-                                    "instrument": o.instrument,
-                                    "market": o.market,
-                                    "direction": o.direction,
-                                    "volume": o.volume,
-                                    "price": o.price,
-                                    "status": o.status,
-                                    "status_msg": o.status_msg,
-                                    "traded_volume": o.traded_volume,
-                                    "order_time": o.order_time,
-                                    "error_msg": "",
-                                    "source": "history_entrust",
-                                })
-                        logger.info("历史委托查询 (%s ~ %s): %d 笔", start_date, hist_end, len(hist_orders))
+                        updated += 1
+                        logger.info(
+                            "对账更新: xt_order_id=%s, %s → %s, error=%s",
+                            order.xt_order_id, order.xt_status, new_status, error_msg,
+                        )
+                    else:
+                        already_ok += 1
+                else:
+                    # 迅投没有这笔指令 — 保持不变
+                    not_found += 1
 
             return jsonify({
                 "success": True,
-                "orders": order_list,
+                "message": f"对账完成: 更新 {updated} 笔, 一致 {already_ok} 笔, 未找到 {not_found} 笔",
+                "reconcile_summary": {
+                    "xt_instructions_count": len(instructions),
+                    "pending_orders_count": len(pending_orders),
+                    "updated": updated,
+                    "already_ok": already_ok,
+                    "not_found": not_found,
+                },
                 "account_id": actual_account_id,
                 "product_name": product_name,
-                "query_date": start_date or "today"
             })
 
         except Exception as e:
-            logger.exception("查询迅投订单异常")
+            logger.exception("对账异常")
             return jsonify({"success": False, "message": f"服务器错误: {str(e)}"}), 500
 
     @app.route("/api/xt/debug_query")

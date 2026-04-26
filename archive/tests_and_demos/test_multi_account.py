@@ -5,8 +5,8 @@
 import sys
 sys.path.insert(0, '/home/ubuntu/xt_sdk')
 
-from adapters.xt_connection_manager import get_xt_connection_manager
-from adapters.xt_order_service import OrderRequest, OrderDirection, OrderPriceType
+from adapters.xuntou import get_xt_connection_manager
+from adapters.xuntou import OrderRequest, OrderDirection, OrderPriceType
 
 def test_connection_manager():
     """测试连接管理器"""

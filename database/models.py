@@ -31,6 +31,19 @@ class FundInflowStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class XtStatus(str, Enum):
+    """迅投侧订单状态"""
+    NOT_SENT = "not_sent"          # 订单已创建，尚未调用 SDK
+    SEND_FAILED = "send_failed"    # 调用 SDK 时报错（网络断、SDK 崩）
+    SENT = "sent"                  # SDK 返回了 xt_order_id，已入迅投系统
+    RUNNING = "running"            # 指令运行中
+    REJECTED = "rejected"          # 迅投/CTP 驳回（资金不足等）
+    FILLED = "filled"              # 全部成交
+    PARTIAL = "partial"            # 部分成交
+    CANCELLED = "cancelled"        # 已撤单
+    STOPPED = "stopped"            # 已停止
+
+
 @dataclass
 class Product:
     """产品配置"""
@@ -75,7 +88,12 @@ class PendingOrder:
     confirmed_at: Optional[datetime] = None
     executed_at: Optional[datetime] = None
     error_msg: Optional[str] = None
-    xt_order_id: Optional[int] = None  # 迅投返回的指令ID，用于精确匹配迅投订单状态
+    xt_order_id: Optional[int] = None      # 迅投返回的指令ID
+    xt_status: str = "not_sent"            # 迅投侧状态（XtStatus 枚举值）
+    xt_error_msg: Optional[str] = None     # CTP 驳回原因
+    xt_traded_volume: int = 0              # 迅投回报的成交量
+    xt_traded_price: float = 0.0           # 迅投回报的成交价
+    order_price_type: str = "limit"        # 下单价格类型 (limit/market/best/twap/vwap)
 
 
 @dataclass

@@ -14,7 +14,7 @@ os.environ['LD_LIBRARY_PATH'] = '/home/ubuntu/xt_sdk:' + os.environ.get('LD_LIBR
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent
 from adapters.market_gateway import CTPMarketGateway
-from adapters.xt_order_service import XtOrderService, OrderRequest, OrderDirection, OrderPriceType
+from adapters.xuntou import XtOrderService, OrderRequest, OrderDirection, OrderPriceType
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)

@@ -71,20 +71,28 @@ def main():
 
         def sync_symbols():
             """通过真正的 DAO 数据库层拉取最新的目标合约，并增量订阅"""
-            target_pool = db_dao.get_all_target_assets()
-            new_symbols = [s for s in target_pool if s not in subscribed_symbols]
-            
-            if new_symbols:
-                logger.info(f"[Market Node] 通过 DAO 发现并订阅新目标合约: {new_symbols}")
-                gateway.subscribe(new_symbols)
-                subscribed_symbols.update(new_symbols)
+            try:
+                target_pool = db_dao.get_all_target_assets()
+                new_symbols = [s for s in target_pool if s not in subscribed_symbols]
+
+                if new_symbols:
+                    logger.info(f"[Market Node] 通过 DAO 发现并订阅新目标合约: {new_symbols}")
+                    gateway.subscribe(new_symbols)
+                    subscribed_symbols.update(new_symbols)
+                else:
+                    logger.info(
+                        "[Market Node] sync_symbols: DB返回 %d 个合约 %s, 已订阅 %d 个, 无新增",
+                        len(target_pool), target_pool, len(subscribed_symbols),
+                    )
+            except Exception as e:
+                logger.error("[Market Node] sync_symbols 异常: %s", e, exc_info=True)
 
         # 启动时先强制同步一次数据库，保证默认/数据库挂载池加载
         sync_symbols()
         
         logger.info("[Market Node] 系统现已就绪。所有行情将通过 Redis 实时向全网分发。按 Ctrl+C 退出。")
         try:
-            # 7x24 全天候心跳监听，每10秒从数据库重载一次全网标的
+            # 7x24 全天候心跳监听，每30秒从数据库重载一次全网标的
             while True:
                 time.sleep(30)
                 sync_symbols()

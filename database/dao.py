@@ -127,14 +127,16 @@ class DatabaseDAO:
                 INSERT INTO pending_orders (
                     batch_id, product_name, asset_code, target_market_value,
                     price, contract_multiplier, theoretical_quantity,
-                    rounded_quantity, fractional_part, final_quantity, status
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    rounded_quantity, fractional_part, final_quantity, status,
+                    order_price_type
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(sql, (
                     order.batch_id, order.product_name, order.asset_code,
                     order.target_market_value, order.price, order.contract_multiplier,
                     order.theoretical_quantity, order.rounded_quantity,
-                    order.fractional_part, order.final_quantity, order.status.value
+                    order.fractional_part, order.final_quantity, order.status.value,
+                    order.order_price_type
                 ))
             conn.commit()
             return cursor.lastrowid
@@ -189,6 +191,11 @@ class DatabaseDAO:
             executed_at=row['executed_at'],
             error_msg=row['error_msg'],
             xt_order_id=row.get('xt_order_id'),
+            xt_status=row.get('xt_status', 'not_sent'),
+            xt_error_msg=row.get('xt_error_msg'),
+            xt_traded_volume=row.get('xt_traded_volume', 0),
+            xt_traded_price=row.get('xt_traded_price', 0.0),
+            order_price_type=row.get('order_price_type', 'limit'),
         )
 
     def update_order_final_quantity(self, order_id: int, final_quantity: int):
@@ -238,13 +245,71 @@ class DatabaseDAO:
             conn.close()
 
     def update_order_xt_id(self, order_id: int, xt_order_id: int):
-        """下单成功后将迅投返回的指令ID写入数据库"""
+        """下单成功后将迅投返回的指令ID写入数据库，同时标记 xt_status='sent'"""
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:
-                sql = "UPDATE pending_orders SET xt_order_id = %s WHERE id = %s"
+                sql = "UPDATE pending_orders SET xt_order_id = %s, xt_status = 'sent' WHERE id = %s"
                 cursor.execute(sql, (xt_order_id, order_id))
             conn.commit()
+        finally:
+            conn.close()
+
+    def update_order_xt_send_failed(self, order_id: int, error_msg: str):
+        """SDK 调用失败时标记 xt_status='send_failed'"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "UPDATE pending_orders SET xt_status = 'send_failed', xt_error_msg = %s WHERE id = %s"
+                cursor.execute(sql, (error_msg, order_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def update_order_xt_status(self, xt_order_id: int, xt_status: str,
+                               xt_error_msg: str = ""):
+        """根据迅投指令ID更新订单的迅投侧状态（回调 / 对账使用）"""
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
+
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """UPDATE pending_orders
+                         SET xt_status = %s, xt_error_msg = %s
+                         WHERE xt_order_id = %s"""
+                cursor.execute(sql, (xt_status, xt_error_msg, xt_order_id))
+                if cursor.rowcount == 0:
+                    _logger.debug("update_order_xt_status: xt_order_id=%s 未匹配到订单", xt_order_id)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def update_order_xt_trade(self, xt_order_id: int, traded_volume: int,
+                              traded_price: float):
+        """成交回报写入（回调使用）"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """UPDATE pending_orders
+                         SET xt_traded_volume = %s, xt_traded_price = %s
+                         WHERE xt_order_id = %s"""
+                cursor.execute(sql, (traded_volume, traded_price, xt_order_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_orders_by_xt_status(self, statuses: List[str]) -> List[PendingOrder]:
+        """查询指定迅投状态的订单（用于对账）"""
+        if not statuses:
+            return []
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                placeholders = ', '.join(['%s'] * len(statuses))
+                sql = f"SELECT * FROM pending_orders WHERE xt_status IN ({placeholders})"
+                cursor.execute(sql, statuses)
+                return [self._row_to_pending_order(row) for row in cursor.fetchall()]
         finally:
             conn.close()
 
@@ -355,20 +420,20 @@ class DatabaseDAO:
 
     def get_all_target_assets(self) -> List[str]:
         """获取全网需要监听行情的目标资产合约代码列表"""
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
+
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:
-                # 目标资产库由前端和主逻辑共同维护在 target_allocations 表内
                 sql = "SELECT DISTINCT asset_code FROM target_allocations"
                 cursor.execute(sql)
                 rows = cursor.fetchall()
                 if rows:
                     return [row['asset_code'] for row in rows]
-                
-                # 宁缺毋滥，如果数据库中确实没有，直接返回空列表，绝对不返回内置测试代码
                 return []
         except Exception as e:
-            # 遇到表未创建或网络中断异常时，拒绝降级写入脏数据，直接返回空池
+            _logger.error("get_all_target_assets 查询异常（可能连接超时）: %s", e)
             return []
         finally:
             conn.close()

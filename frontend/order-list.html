@@ -350,9 +350,9 @@
         <div class="content">
             <div id="alertBox" class="alert"></div>
 
-            <!-- 迅投状态查询面板 -->
+            <!-- 迅投对账面板 -->
             <div class="query-panel">
-                <h3>🔍 迅投订单状态查询</h3>
+                <h3>对账</h3>
                 <div class="query-row">
                     <div class="query-item">
                         <label>产品 *</label>
@@ -361,20 +361,12 @@
                         </select>
                     </div>
                     <div class="query-item">
-                        <label>开始日期</label>
-                        <input type="date" id="xtStartDate">
-                    </div>
-                    <div class="query-item">
-                        <label>结束日期</label>
-                        <input type="date" id="xtEndDate">
-                    </div>
-                    <div class="query-item">
-                        <button class="btn btn-success" id="queryXtBtn">查询迅投状态</button>
+                        <button class="btn btn-success" id="queryXtBtn">对账</button>
                     </div>
                 </div>
                 <div class="xt-summary" id="xtSummary"></div>
                 <div style="font-size: 11px; color: #9ca3af; margin-top: 6px;">
-                    提示：不填日期则查询当日委托；历史委托需指定日期范围（格式：YYYYMMDD）
+                    提示：订单状态正常由回调函数自动更新，此用于重启后补充与迅投之间订单对账
                 </div>
             </div>
 
@@ -397,6 +389,7 @@
                             <th>批次ID</th>
                             <th>产品</th>
                             <th>合约代码</th>
+                            <th>订单类型</th>
                             <th>数量</th>
                             <th>价格</th>
                             <th>目标市值</th>
@@ -424,18 +417,10 @@
     <script>
         const API_BASE = '/api';
         let allOrders = [];
-        let xtOrderMap = new Map();       // order_id (int) -> xt order detail
-        let xtByInstrument = new Map();   // instrument (str) -> [xt order detail, ...]
-        let isQueryingXt = false;
+        let isReconciling = false;
 
         // ==================== 初始化 ====================
 
-        // 设置日期默认值为今天
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('xtStartDate').value = today;
-        document.getElementById('xtEndDate').value = today;
-
-        // 加载产品列表到迅投查询面板
         async function loadProductList() {
             try {
                 const response = await fetch(`${API_BASE}/products/list`);
@@ -478,10 +463,10 @@
             }
         }
 
-        // ==================== 迅投状态查询 ====================
+        // ==================== 手动对账 ====================
 
-        async function queryXtStatus() {
-            if (isQueryingXt) return;
+        async function reconcileOrders() {
+            if (isReconciling) return;
 
             const productName = document.getElementById('xtProductSelect').value;
             if (!productName) {
@@ -489,29 +474,16 @@
                 return;
             }
 
-            isQueryingXt = true;
+            isReconciling = true;
             const btn = document.getElementById('queryXtBtn');
             btn.disabled = true;
-            btn.textContent = '正在查询...';
-
-            // 构建请求参数
-            const params = new URLSearchParams({ product_name: productName });
-
-            const startDate = document.getElementById('xtStartDate').value;
-            const endDate = document.getElementById('xtEndDate').value;
-
-            if (startDate) {
-                params.set('start_date', startDate.replace(/-/g, ''));
-            }
-            if (endDate) {
-                params.set('end_date', endDate.replace(/-/g, ''));
-            }
+            btn.textContent = '对账中...';
 
             try {
-                // 60秒超时（首次连接迅投服务器可能较慢）
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 60000);
 
+                const params = new URLSearchParams({ product_name: productName });
                 const response = await fetch(`${API_BASE}/xt/orders?${params}`, {
                     signal: controller.signal
                 });
@@ -519,106 +491,79 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    // 构建两级映射
-                    xtOrderMap.clear();
-                    xtByInstrument.clear();
-                    (data.orders || []).forEach(order => {
-                        // 精确映射: order_id -> order
-                        xtOrderMap.set(order.order_id, order);
-                        // 回退映射: instrument -> [orders]
-                        const key = order.instrument.toLowerCase();
-                        if (!xtByInstrument.has(key)) {
-                            xtByInstrument.set(key, []);
-                        }
-                        xtByInstrument.get(key).push(order);
-                    });
-
                     const summary = document.getElementById('xtSummary');
                     summary.style.display = 'block';
-                    summary.innerHTML = `查询成功！产品: <strong>${productName}</strong>，` +
-                        `日期: ${data.query_date}，` +
-                        `共 <strong>${data.orders.length}</strong> 条迅投指令记录，` +
-                        `资金账号: ${data.account_id}`;
+                    const s = data.reconcile_summary;
+                    summary.innerHTML =
+                        `对账完成！迅投指令: <strong>${s.xt_instructions_count}</strong> 条，` +
+                        `待对账: <strong>${s.pending_orders_count}</strong> 笔，` +
+                        `更新: <strong>${s.updated}</strong>，` +
+                        `一致: <strong>${s.already_ok}</strong>，` +
+                        `未找到: ${s.not_found}`;
 
-                    showAlert(`查询成功，共获取 ${data.orders.length} 条迅投指令记录`, 'success');
+                    showAlert(data.message, 'success');
+
+                    // 对账后刷新订单列表
+                    await loadOrders();
                 } else {
-                    showAlert('查询迅投状态失败: ' + data.message, 'error');
+                    showAlert('对账失败: ' + data.message, 'error');
                 }
 
             } catch (error) {
                 if (error.name === 'AbortError') {
-                    showAlert('查询超时（60秒），请检查迅投服务器连接', 'error');
+                    showAlert('对账超时（60秒），请检查迅投服务器连接', 'error');
                 } else {
-                    showAlert('查询迅投状态网络错误: ' + error.message, 'error');
+                    showAlert('对账网络错误: ' + error.message, 'error');
                 }
             }
 
-            displayOrders();
             btn.disabled = false;
-            btn.textContent = '查询迅投状态';
-            isQueryingXt = false;
+            btn.textContent = '手动对账';
+            isReconciling = false;
         }
 
-        // ==================== 迅投状态解析 ====================
+        // ==================== 迅投状态渲染（直接读 DB 字段） ====================
 
-        function parseXtStatus(xtOrder) {
-            let badgeClass = 'status-pending';
-            let statusText = xtOrder.status_msg || '未知';
-            const status = xtOrder.status;
+        function renderXtStatus(order) {
+            const status = order.xt_status || 'not_sent';
+            const errorMsg = order.xt_error_msg || '';
 
-            // 指令级别的状态（字符串，来自 reqCommandsInfoSync）
-            if (typeof status === 'string') {
-                switch (status) {
-                    case 'OCS_FINISHED':
-                        badgeClass = 'status-filled'; statusText = '已完成'; break;
-                    case 'OCS_RUNNING':
-                        badgeClass = 'status-submitted'; statusText = '运行中'; break;
-                    case 'OCS_STOPPED':
-                        badgeClass = 'status-rejected'; statusText = '已停止'; break;
-                    case 'OCS_REJECTED':
-                        badgeClass = 'status-rejected'; statusText = '已驳回'; break;
-                    case 'OCS_CHECKING':
-                        badgeClass = 'status-pending'; statusText = '风控检查中'; break;
-                    case 'OCS_APPROVING':
-                        badgeClass = 'status-pending'; statusText = '审批中'; break;
-                    case 'OCS_CANCELING':
-                        badgeClass = 'status-cancelled'; statusText = '撤销中'; break;
-                    default:
-                        badgeClass = 'status-pending'; statusText = statusText || status;
-                }
-            } else {
-                // 委托级别的状态（数字，来自 reqOrderDetailSync）
-                switch (status) {
-                    case 1: case 49:
-                        badgeClass = 'status-submitted'; statusText = '已报'; break;
-                    case 2: case 50:
-                        badgeClass = 'status-partial';
-                        statusText = `部分成交 (${xtOrder.traded_volume}/${xtOrder.volume})`; break;
-                    case 3: case 51:
-                        badgeClass = 'status-filled'; statusText = '全部成交'; break;
-                    case 4: case 54:
-                        badgeClass = 'status-cancelled'; statusText = '已撤单'; break;
-                    case 5: case 55:
-                        badgeClass = 'status-partial';
-                        statusText = `部成部撤 (${xtOrder.traded_volume}/${xtOrder.volume})`; break;
-                    case 6: case 56:
-                        badgeClass = 'status-rejected'; statusText = '废单'; break;
-                    case 52:
-                        badgeClass = 'status-pending'; statusText = '待报'; break;
-                    case 53:
-                        badgeClass = 'status-pending'; statusText = '待撤'; break;
-                    default:
-                        badgeClass = 'status-pending';
-                        statusText = `${statusText} (${status})`;
-                }
+            const statusConfig = {
+                'not_sent': { cls: 'status-not-queried', text: '未发送' },
+                'send_failed': { cls: 'status-rejected', text: '发送失败' },
+                'sent': { cls: 'status-submitted', text: '已发送' },
+                'running': { cls: 'status-submitted', text: '运行中' },
+                'rejected': { cls: 'status-rejected', text: '已驳回' },
+                'filled': { cls: 'status-filled', text: '已完成' },
+                'partial': { cls: 'status-partial', text: '部分成交' },
+                'cancelled': { cls: 'status-cancelled', text: '已撤单' },
+                'stopped': { cls: 'status-rejected', text: '已停止' },
+            };
+
+            const config = statusConfig[status] || { cls: 'status-pending', text: status };
+            let html = `<span class="status-badge ${config.cls}">${config.text}</span>`;
+
+            if (errorMsg) {
+                html += `<br><small style="color:#ef4444;font-size:11px;">${errorMsg}</small>`;
             }
 
-            // 如果有错误信息，追加显示
-            if (xtOrder.error_msg) {
-                statusText += `<br><small style="color:#ef4444;font-size:11px;">${xtOrder.error_msg}</small>`;
+            // 如果有成交信息
+            if (order.xt_traded_volume > 0) {
+                html += `<br><small style="color:#059669;font-size:11px;">成交: ${order.xt_traded_volume}手 @ ${order.xt_traded_price.toFixed(2)}</small>`;
             }
 
-            return { badgeClass, statusText };
+            return html;
+        }
+
+        function renderPriceType(type) {
+            const map = {
+                'limit': '限价',
+                'market': '市价',
+                'best': '最优价',
+                'twap': 'TWAP',
+                'vwap': 'VWAP',
+            };
+            return map[type] || type || '限价';
         }
 
         // ==================== 显示订单 ====================
@@ -646,48 +591,25 @@
             filteredOrders.forEach(order => {
                 const row = document.createElement('tr');
 
-                // 迅投指令ID列
                 const xtIdDisplay = order.xt_order_id
                     ? `<code>${order.xt_order_id}</code>`
                     : '<span style="color: #9ca3af;">—</span>';
 
-                // 迅投状态列：优先通过 xt_order_id 精确匹配，回退到按合约代码匹配
-                let xtStatusHtml;
-                let matched = null;
+                const xtStatusHtml = renderXtStatus(order);
 
-                // 策略1: 通过 xt_order_id 精确匹配
-                if (order.xt_order_id && xtOrderMap.has(order.xt_order_id)) {
-                    matched = xtOrderMap.get(order.xt_order_id);
-                }
-
-                // 策略2: 通过合约代码回退匹配（适用于没有 xt_order_id 的历史订单）
-                if (!matched && xtByInstrument.size > 0) {
-                    const assetBase = order.asset_code.split('.')[0].toLowerCase();
-                    const candidates = xtByInstrument.get(assetBase);
-                    if (candidates && candidates.length > 0) {
-                        // 取最近的一笔（通常委托列表按时间倒序）
-                        matched = candidates[candidates.length - 1];
-                    }
-                }
-
-                if (matched) {
-                    const { badgeClass, statusText } = parseXtStatus(matched);
-                    const matchLabel = order.xt_order_id ? '' : ' <small style="color:#9ca3af">(按合约匹配)</small>';
-                    xtStatusHtml = `<span class="status-badge ${badgeClass}">${statusText}</span>${matchLabel}`;
-                } else if (xtOrderMap.size > 0) {
-                    // 已查询但未匹配到
-                    xtStatusHtml = '<span class="status-badge status-not-queried">未在迅投中找到</span>';
-                } else {
-                    // 尚未查询
-                    xtStatusHtml = '<span class="status-badge status-not-queried">请先查询</span>';
-                }
+                // 价格显示：市价/最优价类型显示 -1
+                const priceType = order.order_price_type || 'limit';
+                const priceDisplay = (priceType === 'market' || priceType === 'best')
+                    ? '-1'
+                    : parseFloat(order.price).toFixed(2);
 
                 row.innerHTML = `
                     <td><small>${order.batch_id.substring(0, 8)}...</small></td>
                     <td>${order.product_name}</td>
                     <td><strong>${order.asset_code}</strong></td>
+                    <td>${renderPriceType(priceType)}</td>
                     <td>${order.final_quantity}</td>
-                    <td>${parseFloat(order.price).toFixed(2)}</td>
+                    <td>${priceDisplay}</td>
                     <td>${parseFloat(order.target_market_value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</td>
                     <td>${xtIdDisplay}</td>
                     <td>${xtStatusHtml}</td>
@@ -699,13 +621,11 @@
 
         // ==================== 事件绑定 ====================
 
-        document.getElementById('queryXtBtn').addEventListener('click', queryXtStatus);
+        document.getElementById('queryXtBtn').addEventListener('click', reconcileOrders);
 
         document.getElementById('refreshBtn').addEventListener('click', function () {
             document.getElementById('loadingBox').style.display = 'block';
             document.getElementById('contentBox').style.display = 'none';
-            xtOrderMap.clear();
-            xtByInstrument.clear();
             document.getElementById('xtSummary').style.display = 'none';
             loadOrders();
         });

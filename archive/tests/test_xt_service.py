@@ -6,7 +6,7 @@ import logging
 sys.path.insert(0, '/home/ubuntu/xt_sdk')
 os.environ['LD_LIBRARY_PATH'] = '/home/ubuntu/xt_sdk:' + os.environ.get('LD_LIBRARY_PATH', '')
 
-from adapters.xt_query_service import XtQueryService
+from adapters.xuntou import XtQueryService
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 

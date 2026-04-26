@@ -7,7 +7,7 @@ sys.path.insert(0, '/home/ubuntu/xt_sdk')
 os.environ['LD_LIBRARY_PATH'] = '/home/ubuntu/xt_sdk:' + os.environ.get('LD_LIBRARY_PATH', '')
 
 from database.dao import DatabaseDAO
-from adapters.xt_connection_manager import get_xt_connection_manager
+from adapters.xuntou import get_xt_connection_manager
 import time
 
 DB_CONFIG = {

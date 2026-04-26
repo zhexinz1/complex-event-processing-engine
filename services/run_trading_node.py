@@ -25,7 +25,7 @@ from cep.core.event_bus import EventBus
 from cep.core.events import SignalEvent
 from cep.core.remote_bus import RedisEventBridge
 
-from adapters.xt_order_service import (
+from adapters.xuntou import (
     XtOrderService, 
     OrderRequest, 
     OrderDirection, 

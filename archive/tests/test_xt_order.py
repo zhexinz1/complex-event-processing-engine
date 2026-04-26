@@ -9,7 +9,7 @@ import logging
 sys.path.insert(0, '/home/ubuntu/xt_sdk')
 os.environ['LD_LIBRARY_PATH'] = '/home/ubuntu/xt_sdk:' + os.environ.get('LD_LIBRARY_PATH', '')
 
-from adapters.xt_order_service import XtOrderService, OrderRequest, OrderDirection, OrderPriceType
+from adapters.xuntou import XtOrderService, OrderRequest, OrderDirection, OrderPriceType
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)

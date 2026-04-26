@@ -10,8 +10,8 @@ os.environ['LD_LIBRARY_PATH'] = '/home/ubuntu/xt_sdk:' + os.environ.get('LD_LIBR
 from decimal import Decimal
 from database.dao import DatabaseDAO
 from database.models import Product, ProductStatus, PendingOrder, OrderStatus
-from adapters.xt_connection_manager import get_xt_connection_manager
-from adapters.xt_order_service import OrderRequest, OrderDirection, OrderPriceType
+from adapters.xuntou import get_xt_connection_manager
+from adapters.xuntou import OrderRequest, OrderDirection, OrderPriceType
 import uuid
 
 # 数据库配置

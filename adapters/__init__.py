@@ -10,9 +10,7 @@
 
 from .market_gateway import MarketGateway, CTPMarketGateway, MockMarketGateway
 from .config_source import ConfigSource, DatabaseConfigSource, FileConfigSource, MySQLConfigSource
-from .xt_query_service import XtQueryService
-from .xt_order_service import XtOrderService
-from .xt_connection_manager import XtConnectionManager, get_xt_connection_manager
+from .xuntou import XtQueryService, XtOrderService, XtConnectionManager, get_xt_connection_manager
 from .frontend_api import FrontendAPI
 
 __all__ = [
