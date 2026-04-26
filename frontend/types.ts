@@ -115,6 +115,47 @@ export interface BacktestRequest {
   end_date?: string;
 }
 
+export interface SignalDiagnostic {
+  level: string;
+  message: string;
+  line?: number;
+  symbol?: string;
+  timestamp?: string;
+}
+
+export interface UserSignalDefinition {
+  id?: number;
+  name: string;
+  symbols: string[];
+  bar_freq: string;
+  source_code: string;
+  status: 'enabled' | 'disabled';
+  created_by: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserSignalBacktestRequest {
+  signal_id?: number;
+  source_code?: string;
+  data_source: string;
+  ts_code?: string;
+  symbols?: string[];
+  start_date?: string;
+  end_date?: string;
+  initial_cash?: number;
+}
+
+export interface LiveSignal {
+  event_id: string;
+  timestamp: string;
+  symbol: string;
+  source: string;
+  rule_id: string;
+  signal_type: string;
+  payload: BacktestSignalPayload;
+}
+
 // ---- Fund Inflow ----
 
 export interface ProductInfo {
@@ -210,6 +251,13 @@ export interface CepApiClient {
   fetchBacktestPresets(): Promise<ApiResponse<BacktestPreset[]>>;
   searchStocks(keyword: string, limit?: number): Promise<ApiResponse<StockSearchResult[]>>;
   runBacktest(payload: BacktestRequest): Promise<ApiResponse<BacktestResult>>;
+  fetchUserSignals(): Promise<ApiResponse<UserSignalDefinition[]>>;
+  createUserSignal(payload: UserSignalDefinition): Promise<ApiResponse<UserSignalDefinition>>;
+  updateUserSignal(signalId: number, payload: UserSignalDefinition): Promise<ApiResponse<UserSignalDefinition>>;
+  updateUserSignalStatus(signalId: number, status: 'enabled' | 'disabled'): Promise<ApiResponse>;
+  validateUserSignal(sourceCode: string): Promise<ApiResponse & { diagnostics: SignalDiagnostic[] }>;
+  runUserSignalBacktest(payload: UserSignalBacktestRequest): Promise<ApiResponse<BacktestResult & { diagnostics?: SignalDiagnostic[] }>>;
+  fetchRecentLiveSignals(): Promise<ApiResponse<LiveSignal[]>>;
   // Fund Inflow
   fetchProductList(): Promise<ApiResponse & { products: ProductInfo[] }>;
   submitFundInflow(payload: { product_name: string; net_inflow: number; input_by: string }): Promise<ApiResponse & { batch_id: string }>;

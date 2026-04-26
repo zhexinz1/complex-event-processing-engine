@@ -64,7 +64,7 @@
             <tr><th>合约代码</th><th>目标市值（元）</th><th>实时价格</th><th>合约乘数</th><th>理论手数</th><th>四舍五入</th><th>留白</th><th>最终手数</th></tr>
           </thead>
           <tbody>
-            <tr v-for="(order, idx) in orders" :key="order.id">
+            <tr v-for="order in orders" :key="order.id">
               <td><strong>{{ order.asset_code }}</strong></td>
               <td>{{ fmtNum(order.target_market_value) }}</td>
               <td>

@@ -31,6 +31,12 @@ class FundInflowStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class UserSignalStatus(str, Enum):
+    """用户信号状态"""
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+
+
 class XtStatus(str, Enum):
     """迅投侧订单状态"""
     NOT_SENT = "not_sent"          # 订单已创建，尚未调用 SDK
@@ -110,3 +116,18 @@ class FundInflow:
     confirmed_by: Optional[str] = None  # 确认人
     confirmed_at: Optional[datetime] = None
     status: FundInflowStatus = FundInflowStatus.PENDING
+
+
+@dataclass
+class UserSignalDefinition:
+    """研究员编写的 Python 信号定义"""
+
+    id: Optional[int]
+    name: str
+    symbols: list[str]
+    bar_freq: str
+    source_code: str
+    status: UserSignalStatus = UserSignalStatus.DISABLED
+    created_by: str = "system"
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
