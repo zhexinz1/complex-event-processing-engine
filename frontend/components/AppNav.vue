@@ -1,26 +1,27 @@
 <template>
   <nav class="card"
-    style="margin:0 24px; padding:0 24px; border-radius:0; display:flex; gap:28px; border-bottom:none;">
-    <button class="tab-btn" :class="{ active: modelValue === 'allocations' }"
-      @click="$emit('update:modelValue', 'allocations')">
-      目标仓位配置
-    </button>
-    <button v-if="showBacktest" class="tab-btn" :class="{ active: modelValue === 'backtest' }"
-      @click="$emit('update:modelValue', 'backtest')">
-      策略回测
-    </button>
+    style="margin:0 24px; padding:0 24px; border-radius:0; display:flex; gap:0; border-bottom:none; overflow-x:auto;">
+    <router-link v-for="tab in tabs" :key="tab.to" :to="tab.to" class="tab-btn"
+      :class="{ active: $route.path === tab.to }">
+      {{ tab.label }}
+    </router-link>
   </nav>
 </template>
 
 <script setup lang="ts">
-import type { AppTab } from '../types';
-
-defineProps<{
-  modelValue: AppTab;
-  showBacktest: boolean;
-}>();
-
-defineEmits<{
-  'update:modelValue': [value: AppTab];
-}>();
+const tabs = [
+  { to: '/', label: '目标仓位配置' },
+  { to: '/fund-inflow', label: '净入金录入' },
+  { to: '/order-confirm', label: '订单确认' },
+  { to: '/order-list', label: '订单列表' },
+  { to: '/health', label: '行情健康检查' },
+  { to: '/backtest', label: '策略回测' },
+];
 </script>
+
+<style scoped>
+.tab-btn {
+  text-decoration: none;
+  white-space: nowrap;
+}
+</style>

@@ -45,5 +45,21 @@ htmlcov/
 .DS_Store
 Thumbs.db
 xt_sdk/
+
+# CTP runtime (会话数据，每次运行自动创建)
+ctp_flow/
+ctp_flow_b/
+ctp_flow_c/
+ctp_flow_thread/
+
+# AI tool configs
+.claude/
+.codex
+AGENTS.md
+
+# Legacy
+run_server.py
+
+# Frontend build
 node_modules/
 frontend/dist/

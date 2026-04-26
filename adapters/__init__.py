@@ -4,13 +4,13 @@
 提供与外部系统对接的抽象接口和具体实现：
 - 行情网关（Market Data Gateway）
 - 配置数据源（Config Data Source）
-- 订单执行网关（Order Execution Gateway）
+- 迅投交易服务（XunTou Trading Service）
 - 前端 API 接口（Frontend API）
 """
 
 from .market_gateway import MarketGateway, CTPMarketGateway, MockMarketGateway
 from .config_source import ConfigSource, DatabaseConfigSource, FileConfigSource, MySQLConfigSource
-from .order_gateway import OrderGateway, XunTouGTGateway, MockOrderGateway
+from .xuntou import XtQueryService, XtOrderService, XtConnectionManager, get_xt_connection_manager
 from .frontend_api import FrontendAPI
 
 __all__ = [
@@ -21,8 +21,9 @@ __all__ = [
     "DatabaseConfigSource",
     "FileConfigSource",
     "MySQLConfigSource",
-    "OrderGateway",
-    "XunTouGTGateway",
-    "MockOrderGateway",
+    "XtQueryService",
+    "XtOrderService",
+    "XtConnectionManager",
+    "get_xt_connection_manager",
     "FrontendAPI",
 ]
