@@ -38,6 +38,11 @@ const router = createRouter({
       name: 'signals',
       component: () => import('./views/SignalsView.vue'),
     },
+    {
+      path: '/signals/ctx-guide',
+      name: 'signal-ctx-guide',
+      component: () => import('./views/SignalCtxGuideView.vue'),
+    },
   ],
 });
 

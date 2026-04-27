@@ -12,6 +12,7 @@ import type {
   UserSignalDefinition,
   SignalDiagnostic,
   LiveSignal,
+  SignalCtxSchema,
   ProductInfo,
   FundInflow,
   PendingOrdersResponse,
@@ -124,6 +125,10 @@ export const CepApi: CepApiClient = {
 
   fetchRecentLiveSignals(): Promise<ApiResponse<LiveSignal[]>> {
     return this.requestJson('/api/signals/live/recent');
+  },
+
+  fetchSignalCtxSchema(): Promise<ApiResponse<SignalCtxSchema>> {
+    return this.requestJson('/api/signals/ctx-schema');
   },
 
   // ---- Fund Inflow ----

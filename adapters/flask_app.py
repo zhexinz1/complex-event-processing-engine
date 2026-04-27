@@ -65,6 +65,7 @@ from adapters.xuntou import XtQueryService
 from adapters.xuntou import get_xt_connection_manager
 from adapters.price_service import get_latest_price, get_tick_cache_detail
 from adapters.contract_config import get_contract_multiplier, normalize_asset_code
+from cep.core.context import get_local_context_reference
 from signals import (
     LiveSignalMonitor,
     SignalContractValidator,
@@ -131,19 +132,30 @@ CREATE TABLE IF NOT EXISTS user_signal_definitions (
 """
 
 FRONTEND_DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
-FRONTEND_SRC_DIR = Path(__file__).parent.parent / "frontend"
 
 # 全局 DAO 实例（在 create_app 中初始化）
 dao: DatabaseDAO = cast(DatabaseDAO, None)
 live_signal_monitor = LiveSignalMonitor()
 
 
+def is_frontend_built() -> bool:
+    return (FRONTEND_DIST_DIR / "index.html").exists()
+
+
 def get_frontend_dir() -> Path:
-    """Return the compiled Vite app directory if built, else fall back to raw frontend/."""
-    if (FRONTEND_DIST_DIR / "index.html").exists():
-        return FRONTEND_DIST_DIR
-    # 未构建 Vue 前端时，直接服务 frontend/ 下的原始 HTML 文件
-    return FRONTEND_SRC_DIR
+    """Return the compiled Vite app directory."""
+    return FRONTEND_DIST_DIR
+
+
+def frontend_setup_response() -> Any:
+    message = {
+        "success": False,
+        "message": (
+            "Frontend bundle not found. Run `npm install` and `npm run frontend:build` "
+            "from the project root, then reload this page."
+        ),
+    }
+    return jsonify(message), 503
 
 
 def get_conn() -> Any:
@@ -228,10 +240,14 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
+        if not is_frontend_built():
+            return frontend_setup_response()
         return send_from_directory(str(get_frontend_dir()), "index.html")
 
     @app.route("/<path:filename>")
     def static_files(filename: str):
+        if not is_frontend_built():
+            return frontend_setup_response()
         # 尝试直接提供静态文件（JS/CSS/图片等）
         frontend_dir = get_frontend_dir()
         file_path = frontend_dir / filename
@@ -1824,6 +1840,10 @@ def create_app() -> Flask:
             "message": "校验通过" if is_valid else "校验失败",
             "diagnostics": [item.to_dict() for item in diagnostics],
         }), 200 if is_valid else 400
+
+    @app.route("/api/signals/ctx-schema", methods=["GET"])
+    def get_signal_ctx_schema():
+        return jsonify({"success": True, "data": get_local_context_reference()})
 
     @app.route("/api/backtests/run-user-signal", methods=["POST"])
     def run_user_signal_backtest_api():

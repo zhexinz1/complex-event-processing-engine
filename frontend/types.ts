@@ -156,6 +156,22 @@ export interface LiveSignal {
   payload: BacktestSignalPayload;
 }
 
+export interface SignalCtxFieldDoc {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface SignalCtxSchema {
+  summary: string;
+  core_fields: SignalCtxFieldDoc[];
+  indicator_fields: SignalCtxFieldDoc[];
+  bar_fields: SignalCtxFieldDoc[];
+  tick_fields: SignalCtxFieldDoc[];
+  notes: string[];
+  example_code: string;
+}
+
 // ---- Fund Inflow ----
 
 export interface ProductInfo {
@@ -258,6 +274,7 @@ export interface CepApiClient {
   validateUserSignal(sourceCode: string): Promise<ApiResponse & { diagnostics: SignalDiagnostic[] }>;
   runUserSignalBacktest(payload: UserSignalBacktestRequest): Promise<ApiResponse<BacktestResult & { diagnostics?: SignalDiagnostic[] }>>;
   fetchRecentLiveSignals(): Promise<ApiResponse<LiveSignal[]>>;
+  fetchSignalCtxSchema(): Promise<ApiResponse<SignalCtxSchema>>;
   // Fund Inflow
   fetchProductList(): Promise<ApiResponse & { products: ProductInfo[] }>;
   submitFundInflow(payload: { product_name: string; net_inflow: number; input_by: string }): Promise<ApiResponse & { batch_id: string }>;
