@@ -166,7 +166,7 @@ openctp-ctp==6.7.10.0
 
 `openctp-ctp` PyPI 包安装后，其底层 C++ 动态库 (`libthostmduserapi_se.so`, `libthosttraderapi_se.so`) 默认对接的是 **SimNow 仿真环境**。
 
-我们已经**手动替换了 `.venv` 中的底层 `.so` 文件**，使其指向 OpenCTP 的 7x24 小时仿真环境：
+我们已经**手动替换了 `.venv` 中的底层 `.so` 文件**，使其指向当前使用的 OpenCTP 实时行情环境：
 
 ```
 .venv/lib/python3.13/site-packages/openctp_ctp/
@@ -183,11 +183,32 @@ openctp-ctp==6.7.10.0
 
 > **⚠️ 每次 `uv sync` 或重装 `openctp-ctp` 后，`.so` 文件会被还原为默认版本，需要重新替换！**
 
+仓库内提供了一个辅助脚本，可将已下载/已解压的 CTP/OpenCTP 二进制目录重新覆盖到当前 `.venv`。默认直接读取仓库内的 `ctp_package/`：
+
+```bash
+chmod +x scripts/swap_openctp_so.sh
+scripts/swap_openctp_so.sh
+```
+
+如果需要显式指定来源，也可以传 `--source`：
+
+```bash
+scripts/swap_openctp_so.sh --source ctp_package
+scripts/swap_openctp_so.sh --source /path/to/extracted_bundle
+```
+
+脚本支持两种来源结构：
+
+- 仓库当前使用的平铺 SDK 结构：`ctp_package/thostmduserapi_se.so`、`ctp_package/thosttraderapi_se.so`
+- Python wheel 解压结构：`openctp_ctp/` 与 `openctp_ctp.libs/`
+
+脚本会先备份当前 `.venv` 中已安装的 CTP `.so` 文件到 `.openctp_so_backup/`，再执行覆盖。
+
 ### CTP 连接参数
 
 | 参数 | 值 | 说明 |
 |------|------|------|
-| 前置地址 | `tcp://218.17.194.115:41413` | OpenCTP 7x24 仿真行情前置 |
+| 前置地址 | `tcp://218.17.194.115:41413` | 当前接入的 OpenCTP 行情前置 |
 | BrokerID | `8060` | OpenCTP 仿真 broker |
 | UserID | `99683265` | 仿真账号 |
 | Password | `456123` | 仿真密码 |

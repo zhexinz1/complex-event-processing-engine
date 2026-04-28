@@ -57,6 +57,9 @@ ctp_flow_thread/
 .codex
 AGENTS.md
 
+# Tracked native CTP bundle
+!ctp_package/*.so
+
 # Legacy
 run_server.py
 
