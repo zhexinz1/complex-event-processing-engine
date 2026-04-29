@@ -44,3 +44,4 @@ class BacktestResult:
     final_equity: float = 0.0
     realized_pnl: float = 0.0
     positions: dict[str, BacktestPosition] = field(default_factory=dict)
+    trade_log_path: str = ""

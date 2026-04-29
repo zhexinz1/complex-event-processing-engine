@@ -17,6 +17,7 @@ from .parser import HistoricalDataParser
 from .portfolio import PortfolioLedger
 from .queue import Dispatcher, EventQueue
 from .recorder import PerformanceRecorder
+from .trade_log import write_backtest_trade_log
 
 
 class BacktestEngine:
@@ -43,8 +44,10 @@ class BacktestEngine:
         self.recorder = PerformanceRecorder(self.event_bus, self.portfolio)
         self.broker = SimulatedBroker(
             event_bus=self.event_bus,
+            portfolio=self.portfolio,
             default_quantity=default_order_quantity,
             commission_rate=commission_rate,
+            contract_multipliers=contract_multipliers,
         )
         self.aggregator = MultiTimeframeBarAggregator(
             event_bus=self.event_bus,
@@ -105,7 +108,7 @@ class BacktestEngine:
                 market_events_processed += 1
                 self.recorder.capture_snapshot(event.timestamp)
 
-        return BacktestResult(
+        result = BacktestResult(
             market_events_processed=market_events_processed,
             signals=list(self.recorder.signals),
             orders=list(self.recorder.orders),
@@ -117,3 +120,6 @@ class BacktestEngine:
             realized_pnl=self.portfolio.realized_pnl,
             positions=self.portfolio.snapshot_positions(),
         )
+        log_path = write_backtest_trade_log(result)
+        result.trade_log_path = str(log_path)
+        return result

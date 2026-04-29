@@ -17,12 +17,15 @@ from typing import Any, Iterable
 from backtest.engine import BacktestEngine
 from backtest.preset_strategies import (
     PBX_MA_PRESET_CLOSES,
+    fetch_adjusted_main_contract_bars,
+    fetch_adjusted_main_contract_bars_multi,
     fetch_cross_section_tushare_bars,
     fetch_tushare_daily_bars,
     make_mock_bars,
     normalize_symbol_group,
     serialize_backtest_result,
 )
+from adapters.contract_config import get_contract_multiplier
 from cep.core.context import DEFAULT_INDICATOR_REGISTRY, LocalContext
 from cep.core.event_bus import EventBus
 from cep.core.events import BarEvent, BaseEvent, OrderSide, SignalEvent, SignalType
@@ -394,6 +397,15 @@ def run_user_signal_backtest(
         bars = make_mock_bars(symbol, PBX_MA_PRESET_CLOSES)
         run_symbols = [symbol]
         effective_freq = "1m"
+    elif data_source == "adjusted_main_contract":
+        if not start_date or not end_date:
+            raise ValueError("adjusted_main_contract 回测需要 start_date、end_date")
+        run_symbols = normalize_symbol_group(symbols, use_tushare_format=False) if symbols else [symbol.upper() for symbol in signal_symbols]
+        if len(run_symbols) == 1:
+            bars = fetch_adjusted_main_contract_bars(run_symbols[0], start_date, end_date)
+        else:
+            bars = fetch_adjusted_main_contract_bars_multi(run_symbols, start_date, end_date)
+        effective_freq = "1m"
     elif data_source == "tushare":
         if not start_date or not end_date:
             raise ValueError("Tushare 回测需要 start_date、end_date")
@@ -413,13 +425,22 @@ def run_user_signal_backtest(
         effective_freq,
         bar_freq,
     )
-    engine = BacktestEngine(initial_cash=initial_cash, base_bar_freq=effective_freq)
+    multiplier_symbols = {bar.symbol for bar in bars} or set(run_symbols)
+    contract_multipliers = {
+        symbol: float(get_contract_multiplier(symbol))
+        for symbol in multiplier_symbols
+    }
+    engine = BacktestEngine(
+        initial_cash=initial_cash,
+        base_bar_freq=effective_freq,
+        contract_multipliers=contract_multipliers,
+    )
     trigger = UserSignalTrigger(
         event_bus=engine.event_bus,
         trigger_id=f"USER_SIGNAL_{getattr(signal_class, 'name', 'Signal')}",
         signal_class=signal_class,
         symbols=run_symbols,
-        bar_freq=effective_freq if data_source == "tushare" else bar_freq,
+        bar_freq=effective_freq if data_source != "mock" else bar_freq,
     )
     trigger.register()
     engine._components.append(trigger)

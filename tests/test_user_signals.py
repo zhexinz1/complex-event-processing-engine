@@ -113,6 +113,76 @@ def test_user_signal_backtest_returns_result_payload():
     assert "diagnostics" in data
 
 
+def test_user_signal_backtest_supports_adjusted_main_contract(monkeypatch):
+    def fake_fetch_adjusted_main_contract_bars(symbol: str, start_date: str, end_date: str):
+        assert symbol == "AU9999.XSGE"
+        assert start_date == "20250601"
+        assert end_date == "20250630"
+        return [make_bar(index, close, symbol=symbol) for index, close in enumerate([10.0, 9.0, 8.0, 7.0])]
+
+    monkeypatch.setattr(
+        "signals.runtime.fetch_adjusted_main_contract_bars",
+        fake_fetch_adjusted_main_contract_bars,
+    )
+
+    data = run_user_signal_backtest(
+        source_code=VALID_SIGNAL.replace('symbols = ["TEST"]', 'symbols = ["AU9999.XSGE"]'),
+        data_source="adjusted_main_contract",
+        start_date="20250601",
+        end_date="20250630",
+    )
+
+    assert data["market_events_processed"] == 4
+    assert "equity_curve" in data
+    assert "signals" in data
+    assert data["diagnostics"] == []
+
+
+def test_user_signal_backtest_uses_futures_contract_multiplier(monkeypatch):
+    source = '''
+class Signal:
+    name = "Silver flip"
+    symbols = ["AG9999.XSGE"]
+    bar_freq = "1m"
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.step = 0
+
+    def on_bar(self, bar):
+        self.step += 1
+        if self.step == 1:
+            return {"side": "BUY", "reason": "enter", "price": bar.close, "quantity": 2}
+        if self.step == 2:
+            return {"side": "SELL", "reason": "exit", "price": bar.close, "quantity": 2}
+        return None
+'''
+
+    def fake_fetch_adjusted_main_contract_bars(symbol: str, start_date: str, end_date: str):
+        assert symbol == "AG9999.XSGE"
+        assert start_date == "20250601"
+        assert end_date == "20250630"
+        return [make_bar(index, close, symbol=symbol) for index, close in enumerate([100.0, 110.0])]
+
+    monkeypatch.setattr(
+        "signals.runtime.fetch_adjusted_main_contract_bars",
+        fake_fetch_adjusted_main_contract_bars,
+    )
+
+    data = run_user_signal_backtest(
+        source_code=source,
+        data_source="adjusted_main_contract",
+        start_date="20250601",
+        end_date="20250630",
+        initial_cash=1_000_000.0,
+    )
+
+    assert data["market_events_processed"] == 2
+    assert data["realized_pnl"] == 300.0
+    assert data["final_cash"] == 1_000_300.0
+    assert data["final_equity"] == 1_000_300.0
+
+
 def test_runtime_exception_is_captured_without_stopping_bus():
     source = '''
 class Signal:

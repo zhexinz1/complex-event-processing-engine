@@ -5,7 +5,7 @@
         <div style="max-width:640px;">
           <h2 style="font-size:18px; font-weight:700; margin:0 0 6px;">策略回测</h2>
           <p style="font-size:13px; color:var(--text-muted); line-height:1.6; margin:0;">
-            选择一个预设策略，使用内置 mock 行情运行事件驱动回测。
+            选择一个预设策略，使用 mock、Tushare 或主连历史库运行事件驱动回测。
           </p>
         </div>
         <button class="btn btn-primary" @click="$emit('run')" :disabled="backtestLoading || !selectedStrategyId">
@@ -54,21 +54,24 @@
                 <option value="tushare" :disabled="!presetSupportsDataSource(selectedPreset, 'tushare')">
                   Tushare A股日线
                 </option>
+                <option value="adjusted_main_contract" :disabled="!presetSupportsDataSource(selectedPreset, 'adjusted_main_contract')">
+                  复权主连 1 分钟库
+                </option>
               </select>
             </div>
 
-            <div v-if="backtestDataSource === 'tushare'" style="display:flex; flex-direction:column; gap:14px;">
+            <div v-if="backtestDataSource === 'tushare' || backtestDataSource === 'adjusted_main_contract'" style="display:flex; flex-direction:column; gap:14px;">
               <div>
                 <label
-                  style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">股票代码</label>
+                  style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">{{ backtestDataSource === 'tushare' ? '股票代码' : '主连代码' }}</label>
                 <div class="stock-combobox">
                   <input type="text" :value="backtestTsCode" class="inp" placeholder="输入代码、简称或公司名"
                     style="text-transform:uppercase;"
                     @input="$emit('update:backtestTsCode', ($event.target as HTMLInputElement).value)"
-                    @focus="$emit('update:stockSearchOpen', stockSearchResults.length > 0)" @blur="$emit('close-stock-search')"
-                    @keyup.enter="$emit('search-stocks')" />
+                    @focus="backtestDataSource === 'tushare' && $emit('update:stockSearchOpen', stockSearchResults.length > 0)" @blur="$emit('close-stock-search')"
+                    @keyup.enter="backtestDataSource === 'tushare' && $emit('search-stocks')" />
                   <div v-if="stockSearchLoading" class="stock-combobox-status">搜索中...</div>
-                  <div v-if="stockSearchOpen" class="stock-combobox-menu">
+                  <div v-if="backtestDataSource === 'tushare' && stockSearchOpen" class="stock-combobox-menu">
                     <button v-for="stock in stockSearchResults" :key="stock.ts_code" type="button"
                       class="stock-combobox-option" @mousedown.prevent="$emit('select-stock', stock)">
                       <span class="stock-combobox-row">
@@ -97,7 +100,9 @@
                 </div>
               </div>
               <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">
-                使用 Tushare daily 未复权日线。需要本机已配置可访问 daily 接口的 token。
+                {{ backtestDataSource === 'tushare'
+                  ? '使用 Tushare daily 未复权日线。需要本机已配置可访问 daily 接口的 token。'
+                  : '直接读取本地 adjusted_main_contract CSV 历史数据，代码示例：AU9999.XSGE、IF9999.CCFX。' }}
               </div>
             </div>
           </div>

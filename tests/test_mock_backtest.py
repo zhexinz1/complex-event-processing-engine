@@ -1,4 +1,6 @@
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from backtest import BacktestEngine
 from cep.core.events import BarEvent, OrderStatus, OrderSide, SignalType
@@ -95,3 +97,85 @@ def test_backtest_engine_processes_market_signal_order_and_trade_flow() -> None:
 
     assert result.final_equity > 0
     assert result.positions[symbol].quantity == 2.0
+    assert result.trade_log_path
+
+    log_path = Path(result.trade_log_path)
+    assert log_path.exists()
+    payload = json.loads(log_path.read_text(encoding="utf-8"))
+    assert payload["market_events_processed"] == len(bars)
+    assert payload["trades"]
+
+
+def test_backtest_engine_rejects_buy_signal_when_cash_is_insufficient() -> None:
+    symbol = "AG9999.XSGE"
+    bars = _make_bars(symbol, [100.0, 101.0, 102.0])
+    rule_tree = build_and(
+        build_comparison("close", Operator.GT, 0),
+        build_comparison("close", Operator.GT, 0),
+    )
+
+    engine = BacktestEngine(
+        initial_cash=1_000.0,
+        contract_multipliers={symbol: 15.0},
+        default_order_quantity=10.0,
+    )
+    engine.register_ast_rule(
+        symbol=symbol,
+        rule_tree=rule_tree,
+        trigger_id="BACKTEST_RULE",
+        rule_id="BACKTEST_RULE",
+        bar_freq="1m",
+        window_size=100,
+    )
+    engine.ingest_bars(bars)
+    result = engine.run()
+
+    rejected_orders = [order for order in result.orders if order.status == OrderStatus.REJECTED]
+    assert rejected_orders
+    assert rejected_orders[0].payload["reason"] == "insufficient_cash"
+    assert result.trades == []
+    assert symbol not in result.positions
+
+
+def test_backtest_engine_rejects_sell_signal_without_position() -> None:
+    symbol = "600519.SH"
+    bars = _make_bars(symbol, [100.0])
+
+    class SellOnlyTrigger:
+        def __init__(self, event_bus):
+            self.event_bus = event_bus
+
+        def register(self):
+            from cep.core.events import BarEvent, SignalEvent
+
+            def on_bar(event: BarEvent) -> None:
+                self.event_bus.publish(
+                    SignalEvent(
+                        source="SELL_ONLY",
+                        symbol=event.symbol,
+                        signal_type=SignalType.TRADE_OPPORTUNITY,
+                        timestamp=event.timestamp,
+                        payload={
+                            "side": "SELL",
+                            "price": event.close,
+                            "quantity": 1,
+                            "bar_time": event.bar_time.isoformat(),
+                        },
+                    )
+                )
+
+            self.event_bus.subscribe(BarEvent, on_bar, symbol=symbol)
+            self._handler = on_bar
+
+    engine = BacktestEngine(initial_cash=1_000_000.0)
+    trigger = SellOnlyTrigger(engine.event_bus)
+    trigger.register()
+    engine._components.append(trigger)
+    engine.ingest_bars(bars)
+    result = engine.run()
+
+    rejected_orders = [order for order in result.orders if order.status == OrderStatus.REJECTED]
+    assert rejected_orders
+    assert rejected_orders[0].payload["reason"] == "insufficient_position"
+    assert result.trades == []
+    assert symbol not in result.positions

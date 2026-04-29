@@ -98,7 +98,7 @@
           <div class="panel-head">
             <div>
               <h2>回测验证</h2>
-              <p>{{ activeTab?.backtestResult ? `${activeTab.backtestResult.signals.length} 个信号` : '使用 mock 或 Tushare 数据验证' }}</p>
+              <p>{{ activeTab?.backtestResult ? `${activeTab.backtestResult.signals.length} 个信号` : '使用 mock、Tushare 或主连历史库验证' }}</p>
             </div>
             <button class="btn btn-primary" :disabled="busy || !activeTab" @click="runBacktest">运行回测</button>
           </div>
@@ -108,6 +108,7 @@
               <select v-model="backtestDataSource" class="inp">
                 <option value="mock">mock</option>
                 <option value="tushare">tushare</option>
+                <option value="adjusted_main_contract">adjusted_main_contract</option>
               </select>
             </label>
             <label>

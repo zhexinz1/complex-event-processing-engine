@@ -78,6 +78,54 @@ def test_backtest_api_runs_pbx_ma_with_tushare_source(monkeypatch) -> None:
     assert payload["data"]["signals"][0]["symbol"] == "000001.SZ"
 
 
+def test_backtest_api_runs_pbx_ma_with_adjusted_main_contract_source(monkeypatch) -> None:
+    def fake_fetch_adjusted_main_contract_bars(symbol: str, start_date: str, end_date: str):
+        assert symbol == "AU9999.XSGE"
+        assert start_date == "20250601"
+        assert end_date == "20250630"
+
+        start = datetime(2025, 6, 1, 9, 0)
+        return [
+            BarEvent(
+                symbol=symbol,
+                freq="1m",
+                open=close,
+                high=close + 0.2,
+                low=close - 0.2,
+                close=close,
+                volume=1000 + index,
+                turnover=close * (1000 + index),
+                bar_time=start + timedelta(minutes=index),
+                timestamp=start + timedelta(minutes=index),
+            )
+            for index, close in enumerate(PBX_MA_PRESET_CLOSES)
+        ]
+
+    monkeypatch.setattr(
+        "backtest.preset_strategies.fetch_adjusted_main_contract_bars",
+        fake_fetch_adjusted_main_contract_bars,
+    )
+
+    app = create_app()
+    client = app.test_client()
+    response = client.post(
+        "/api/backtests/run",
+        json={
+            "strategy_id": "pbx_ma",
+            "data_source": "adjusted_main_contract",
+            "ts_code": "AU9999.XSGE",
+            "start_date": "20250601",
+            "end_date": "20250630",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["market_events_processed"] == 38
+    assert payload["data"]["signals"][0]["symbol"] == "AU9999.XSGE"
+
+
 def test_backtest_api_runs_cross_section_momentum_preset() -> None:
     app = create_app()
     client = app.test_client()

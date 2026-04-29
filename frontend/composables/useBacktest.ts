@@ -89,8 +89,11 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       showToast('请选择预设策略', 'error');
       return;
     }
-    if (backtestDataSource.value === 'tushare' && (!backtestTsCode.value || !backtestStartDate.value || !backtestEndDate.value)) {
-      showToast('请填写股票代码和日期范围', 'error');
+    if (
+      (backtestDataSource.value === 'tushare' || backtestDataSource.value === 'adjusted_main_contract')
+      && (!backtestTsCode.value || !backtestStartDate.value || !backtestEndDate.value)
+    ) {
+      showToast('请填写标的代码和日期范围', 'error');
       return;
     }
     if (backtestDataSource.value === 'tushare' && !isTushareCode(backtestTsCode.value)) {
@@ -104,7 +107,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
         strategy_id: selectedStrategyId.value,
         data_source: backtestDataSource.value,
       };
-      if (backtestDataSource.value === 'tushare') {
+      if (backtestDataSource.value === 'tushare' || backtestDataSource.value === 'adjusted_main_contract') {
         payload.ts_code = backtestTsCode.value.trim().toUpperCase();
         payload.start_date = toTushareDate(backtestStartDate.value);
         payload.end_date = toTushareDate(backtestEndDate.value);
