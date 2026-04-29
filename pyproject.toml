@@ -3,7 +3,7 @@ name = "complex-event-processing-engine"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "==3.12.*"
 dependencies = [
     "anthropic>=0.50.0",
     "openctp-ctp==6.7.10.0",
