@@ -404,12 +404,14 @@ def run_pbx_ma_backtest(
     pbx_period: int = 4,
     ma_period: int = 10,
     bar_freq: str = "1m",
+    write_trade_log: bool = True,
 ) -> BacktestResult:
     """Run PBX/MA strategy on caller-provided bars."""
     engine = BacktestEngine(
         initial_cash=initial_cash,
         default_order_quantity=quantity,
         commission_rate=0.0003,
+        write_trade_log=write_trade_log,
     )
     trigger = PbxMaEmotionTrigger(
         engine=engine,
@@ -421,7 +423,7 @@ def run_pbx_ma_backtest(
     )
     trigger.register()
 
-    engine.ingest_bars(bars)
+    engine.ingest_bars(bars, assume_sorted=True)
     return engine.run()
 
 
@@ -432,12 +434,14 @@ def run_cross_section_momentum_backtest(
     quantity: float = 100.0,
     lookback: int = 5,
     bar_freq: str = "1m",
+    write_trade_log: bool = True,
 ) -> BacktestResult:
     """Run a cross-sectional momentum rotation strategy."""
     engine = BacktestEngine(
         initial_cash=initial_cash,
         default_order_quantity=quantity,
         commission_rate=0.0003,
+        write_trade_log=write_trade_log,
     )
     trigger = CrossSectionMomentumTrigger(
         engine=engine,
@@ -448,7 +452,7 @@ def run_cross_section_momentum_backtest(
     )
     trigger.register()
 
-    engine.ingest_bars(bars)
+    engine.ingest_bars(bars, assume_sorted=True)
     return engine.run()
 
 
@@ -459,6 +463,7 @@ def run_preset_backtest(
     symbols: Any = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    write_trade_log: bool = True,
 ) -> BacktestResult:
     """Run a supported preset strategy against its preset dataset."""
     if strategy_id not in PRESET_STRATEGIES:
@@ -494,6 +499,7 @@ def run_preset_backtest(
             quantity=float(parameters["quantity"]),
             lookback=int(parameters["lookback"]),
             bar_freq=bar_freq,
+            write_trade_log=write_trade_log,
         )
 
     if data_source == "mock":
@@ -525,6 +531,7 @@ def run_preset_backtest(
         pbx_period=int(parameters["pbx_period"]),
         ma_period=int(parameters["ma_period"]),
         bar_freq=bar_freq,
+        write_trade_log=write_trade_log,
     )
 
 

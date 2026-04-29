@@ -126,6 +126,47 @@ def test_backtest_api_runs_pbx_ma_with_adjusted_main_contract_source(monkeypatch
     assert payload["data"]["signals"][0]["symbol"] == "AU9999.XSGE"
 
 
+def test_backtest_api_passes_write_trade_log_flag(monkeypatch) -> None:
+    captured = {}
+
+    def fake_run_preset_backtest(**kwargs):
+        captured.update(kwargs)
+        return type(
+            "FakeResult",
+            (),
+            {
+                "market_events_processed": 0,
+                "final_cash": 1_000_000.0,
+                "final_market_value": 0.0,
+                "final_equity": 1_000_000.0,
+                "realized_pnl": 0.0,
+                "trade_log_path": "",
+                "signals": [],
+                "trades": [],
+                "positions": {},
+                "snapshots": [],
+            },
+        )()
+
+    monkeypatch.setattr("adapters.flask_app.run_preset_backtest", fake_run_preset_backtest)
+
+    app = create_app()
+    client = app.test_client()
+    response = client.post(
+        "/api/backtests/run",
+        json={
+            "strategy_id": "pbx_ma",
+            "data_source": "mock",
+            "write_trade_log": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert captured["write_trade_log"] is False
+
+
 def test_backtest_api_runs_cross_section_momentum_preset() -> None:
     app = create_app()
     client = app.test_client()

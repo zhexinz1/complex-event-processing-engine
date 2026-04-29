@@ -125,6 +125,8 @@ Runtime entry points that understand this data source:
 - `backtest.preset_strategies.run_preset_backtest(..., data_source="adjusted_main_contract")`
 - `signals.runtime.run_user_signal_backtest(..., data_source="adjusted_main_contract")`
 
+For iterative research runs, both entry points also accept `write_trade_log=False` to skip JSON log persistence under `backtest/logs/`.
+
 ## Trade Logs
 
 Each completed backtest now writes a JSON trade log into `backtest/logs/`.

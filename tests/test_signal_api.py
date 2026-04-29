@@ -1,17 +1,49 @@
 from pathlib import Path
 import sys
+from datetime import datetime
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from adapters.flask_app import create_app
+from database.models import UserSignalDefinition, UserSignalStatus
 
 
 VALID_SIGNAL = '''
 class Signal:
     name = "Test RSI"
     symbols = ["TEST"]
+    bar_freq = "1m"
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def on_bar(self, bar):
+        if self.ctx.rsi is not None and self.ctx.rsi < 30:
+            return {"side": "BUY", "reason": "oversold", "price": bar.close}
+        return None
+'''
+
+AU_SIGNAL = '''
+class Signal:
+    name = "Gold RSI"
+    symbols = ["AU9999.XSGE"]
+    bar_freq = "1m"
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def on_bar(self, bar):
+        if self.ctx.rsi is not None and self.ctx.rsi < 30:
+            return {"side": "BUY", "reason": "oversold", "price": bar.close}
+        return None
+'''
+
+AG_SIGNAL = '''
+class Signal:
+    name = "Silver RSI"
+    symbols = ["AG9999.XSGE"]
     bar_freq = "1m"
 
     def __init__(self, ctx):
@@ -123,6 +155,38 @@ def test_run_user_signal_backtest_uses_runtime_result(client, monkeypatch) -> No
     assert captured["symbols"] == ["TEST"]
 
 
+def test_run_user_signal_backtest_passes_write_trade_log_flag(client, monkeypatch) -> None:
+    captured = {}
+
+    def fake_run_user_signal_backtest(**kwargs):
+        captured.update(kwargs)
+        return {
+            "market_events_processed": 1,
+            "signals": [],
+            "trades": [],
+            "equity_curve": [],
+            "diagnostics": [],
+            "final_equity": 1_000_000.0,
+            "realized_pnl": 0.0,
+        }
+
+    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+
+    response = client.post(
+        "/api/backtests/run-user-signal",
+        json={
+            "source_code": VALID_SIGNAL,
+            "data_source": "mock",
+            "write_trade_log": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert captured["write_trade_log"] is False
+
+
 def test_run_user_signal_backtest_loads_source_code_from_signal_id(client, monkeypatch) -> None:
     captured = {}
 
@@ -165,3 +229,138 @@ def test_run_user_signal_backtest_loads_source_code_from_signal_id(client, monke
     }
     assert captured["source_code"] == VALID_SIGNAL
     assert captured["data_source"] == "mock"
+
+
+def test_create_user_signal_persists_adjusted_main_contract_signal(client, monkeypatch) -> None:
+    saved_signals: dict[int, UserSignalDefinition] = {}
+
+    class FakeDao:
+        def create_user_signal(self, signal: UserSignalDefinition) -> int:
+            saved_signals[7] = UserSignalDefinition(
+                id=7,
+                name=signal.name,
+                symbols=list(signal.symbols),
+                bar_freq=signal.bar_freq,
+                source_code=signal.source_code,
+                status=signal.status,
+                created_by=signal.created_by,
+                created_at=None,
+                updated_at=None,
+            )
+            return 7
+
+        def get_user_signal(self, signal_id: int):
+            return saved_signals.get(signal_id)
+
+    monkeypatch.setattr("adapters.flask_app.dao", FakeDao())
+
+    response = client.post(
+        "/api/signals",
+        json={
+            "name": "Gold RSI",
+            "symbols": ["AU9999.XSGE"],
+            "bar_freq": "1m",
+            "source_code": AU_SIGNAL,
+            "created_by": "research",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["message"] == "信号已保存"
+    assert payload["data"]["id"] == 7
+    assert payload["data"]["symbols"] == ["AU9999.XSGE"]
+    assert saved_signals[7].symbols == ["AU9999.XSGE"]
+
+
+def test_run_user_signal_backtest_with_saved_au_signal_on_adjusted_main_contract(client, monkeypatch) -> None:
+    captured = {}
+
+    class FakeDao:
+        def get_user_signal(self, signal_id: int):
+            assert signal_id == 11
+            return UserSignalDefinition(
+                id=11,
+                name="Gold RSI",
+                symbols=["AU9999.XSGE"],
+                bar_freq="1m",
+                source_code=AU_SIGNAL,
+                status=UserSignalStatus.DISABLED,
+                created_by="research",
+                created_at=datetime(2026, 4, 1, 9, 30),
+                updated_at=datetime(2026, 4, 1, 9, 30),
+            )
+
+    def fake_run_user_signal_backtest(**kwargs):
+        captured.update(kwargs)
+        return {
+            "market_events_processed": 4,
+            "final_equity": 1000010.0,
+            "realized_pnl": 10.0,
+            "equity_curve": [],
+            "signals": [{"symbol": "AU9999.XSGE", "timestamp": "2025-06-09T09:01:00", "payload": {"side": "BUY"}}],
+            "trades": [],
+            "diagnostics": [],
+        }
+
+    monkeypatch.setattr("adapters.flask_app.dao", FakeDao())
+    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+
+    response = client.post(
+        "/api/backtests/run-user-signal",
+        json={
+            "signal_id": 11,
+            "data_source": "adjusted_main_contract",
+            "symbols": ["AU9999.XSGE"],
+            "start_date": "20250601",
+            "end_date": "20250630",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["signals"][0]["symbol"] == "AU9999.XSGE"
+    assert captured["source_code"] == AU_SIGNAL
+    assert captured["data_source"] == "adjusted_main_contract"
+    assert captured["symbols"] == ["AU9999.XSGE"]
+    assert captured["start_date"] == "20250601"
+    assert captured["end_date"] == "20250630"
+
+
+def test_run_user_signal_backtest_with_inline_ag_signal_on_adjusted_main_contract(client, monkeypatch) -> None:
+    captured = {}
+
+    def fake_run_user_signal_backtest(**kwargs):
+        captured.update(kwargs)
+        return {
+            "market_events_processed": 5,
+            "final_equity": 1000020.0,
+            "realized_pnl": 20.0,
+            "equity_curve": [],
+            "signals": [{"symbol": "AG9999.XSGE", "timestamp": "2025-06-10T09:02:00", "payload": {"side": "BUY"}}],
+            "trades": [],
+            "diagnostics": [],
+        }
+
+    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+
+    response = client.post(
+        "/api/backtests/run-user-signal",
+        json={
+            "source_code": AG_SIGNAL,
+            "data_source": "adjusted_main_contract",
+            "symbols": ["AG9999.XSGE"],
+            "start_date": "20250601",
+            "end_date": "20250630",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["signals"][0]["symbol"] == "AG9999.XSGE"
+    assert captured["source_code"] == AG_SIGNAL
+    assert captured["data_source"] == "adjusted_main_contract"
+    assert captured["symbols"] == ["AG9999.XSGE"]

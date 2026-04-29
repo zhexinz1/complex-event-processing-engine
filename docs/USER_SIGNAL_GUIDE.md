@@ -7,7 +7,7 @@ This v1 feature lets internal researchers save Python `Signal` classes, validate
 ```python
 class Signal:
     name = "沪金RSI超卖"
-    symbols = ["au2506"]
+    symbols = ["AU9999.XSGE"]
     bar_freq = "1m"
 
     def __init__(self, ctx):
@@ -40,3 +40,68 @@ class Signal:
 - `GET /api/signals/live/stream`
 
 Live monitoring subscribes to Redis-published `BarEvent` objects on `CEP_REDIS_CHANNEL` (`cep_events` by default). Tick-to-bar aggregation is expected to happen upstream.
+
+`POST /api/backtests/run-user-signal` also accepts optional `write_trade_log: false` for research runs that should skip writing `backtest/logs/*.json`.
+
+## Local Commodity CSV Backtests
+
+When backtesting against local `adjusted_main_contract/*.csv` minute history, use the continuous symbol that matches the CSV filename, for example:
+
+- `AU9999.XSGE`
+- `AG9999.XSGE`
+
+The save API can persist the signal first, then the backtest API can reference the saved `signal_id`.
+
+Create a gold signal:
+
+```bash
+curl -X POST http://localhost:5000/api/signals \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "沪金RSI超卖",
+    "symbols": ["AU9999.XSGE"],
+    "bar_freq": "1m",
+    "created_by": "research",
+    "source_code": "class Signal:\n    name = \"沪金RSI超卖\"\n    symbols = [\"AU9999.XSGE\"]\n    bar_freq = \"1m\"\n\n    def __init__(self, ctx):\n        self.ctx = ctx\n\n    def on_bar(self, bar):\n        if self.ctx.rsi is not None and self.ctx.rsi < 30:\n            return {\"side\": \"BUY\", \"reason\": \"rsi_oversold\", \"price\": bar.close}\n        return None\n"
+  }'
+```
+
+Backtest the saved gold signal on local `AU9999.XSGE.csv`:
+
+```bash
+curl -X POST http://localhost:5000/api/backtests/run-user-signal \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "signal_id": 1,
+    "data_source": "adjusted_main_contract",
+    "symbols": ["AU9999.XSGE"],
+    "start_date": "20250601",
+    "end_date": "20250630"
+  }'
+```
+
+Create a silver signal and backtest it on local `AG9999.XSGE.csv`:
+
+```bash
+curl -X POST http://localhost:5000/api/signals \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "沪银双均线翻转",
+    "symbols": ["AG9999.XSGE"],
+    "bar_freq": "1m",
+    "created_by": "research",
+    "source_code": "class Signal:\n    name = \"沪银双均线翻转\"\n    symbols = [\"AG9999.XSGE\"]\n    bar_freq = \"1m\"\n\n    def __init__(self, ctx):\n        self.ctx = ctx\n\n    def on_bar(self, bar):\n        if self.ctx.ma5 is None or self.ctx.ma10 is None:\n            return None\n        if self.ctx.ma5 > self.ctx.ma10:\n            return {\"side\": \"BUY\", \"reason\": \"ma5_above_ma10\", \"price\": bar.close}\n        if self.ctx.ma5 < self.ctx.ma10:\n            return {\"side\": \"SELL\", \"reason\": \"ma5_below_ma10\", \"price\": bar.close}\n        return None\n"
+  }'
+```
+
+```bash
+curl -X POST http://localhost:5000/api/backtests/run-user-signal \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "data_source": "adjusted_main_contract",
+    "source_code": "class Signal:\n    name = \"沪银双均线翻转\"\n    symbols = [\"AG9999.XSGE\"]\n    bar_freq = \"1m\"\n\n    def __init__(self, ctx):\n        self.ctx = ctx\n\n    def on_bar(self, bar):\n        if self.ctx.ma5 is None or self.ctx.ma10 is None:\n            return None\n        if self.ctx.ma5 > self.ctx.ma10:\n            return {\"side\": \"BUY\", \"reason\": \"ma5_above_ma10\", \"price\": bar.close}\n        if self.ctx.ma5 < self.ctx.ma10:\n            return {\"side\": \"SELL\", \"reason\": \"ma5_below_ma10\", \"price\": bar.close}\n        return None\n",
+    "symbols": ["AG9999.XSGE"],
+    "start_date": "20250601",
+    "end_date": "20250630"
+  }'
+```

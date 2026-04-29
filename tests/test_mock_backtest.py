@@ -179,3 +179,48 @@ def test_backtest_engine_rejects_sell_signal_without_position() -> None:
     assert rejected_orders[0].payload["reason"] == "insufficient_position"
     assert result.trades == []
     assert symbol not in result.positions
+
+
+def test_backtest_engine_can_skip_trade_log(monkeypatch) -> None:
+    symbol = "600519.SH"
+    bars = _make_bars(symbol, [100.0, 101.0])
+
+    def fail_if_called(_result) -> None:
+        raise AssertionError("trade log writer should be skipped")
+
+    monkeypatch.setattr("backtest.engine.write_backtest_trade_log", fail_if_called)
+
+    engine = BacktestEngine(initial_cash=1_000_000.0, write_trade_log=False)
+    engine.ingest_bars(bars, assume_sorted=True)
+    result = engine.run()
+
+    assert result.market_events_processed == len(bars)
+    assert result.trade_log_path == ""
+
+
+def test_backtest_engine_ingest_bars_uses_sorted_fast_path(monkeypatch) -> None:
+    engine = BacktestEngine(initial_cash=1_000_000.0, write_trade_log=False)
+    bars = _make_bars("600519.SH", [100.0, 101.0])
+    captured: dict[str, object] = {}
+
+    def fake_parse_bars(raw_bars, *, assume_sorted: bool = False):
+        captured["parse_input"] = list(raw_bars)
+        captured["parse_assume_sorted"] = assume_sorted
+        return bars
+
+    def fake_extend_sorted(events):
+        captured["extend_sorted"] = list(events)
+
+    def fake_extend(events):
+        captured["extend"] = list(events)
+
+    monkeypatch.setattr(engine.parser, "parse_bars", fake_parse_bars)
+    monkeypatch.setattr(engine.event_queue, "extend_sorted", fake_extend_sorted)
+    monkeypatch.setattr(engine.event_queue, "extend", fake_extend)
+
+    engine.ingest_bars(bars, assume_sorted=True)
+
+    assert captured["parse_input"] == bars
+    assert captured["parse_assume_sorted"] is True
+    assert captured["extend_sorted"] == bars
+    assert "extend" not in captured

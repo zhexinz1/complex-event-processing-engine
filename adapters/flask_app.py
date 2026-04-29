@@ -219,6 +219,19 @@ def _reload_live_signal_monitor() -> None:
     live_signal_monitor.load_definitions(enabled)
 
 
+def _parse_bool_arg(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"无法解析布尔值: {value}")
+
+
 # ---------------------------------------------------------------------------
 # Flask 应用工厂
 # ---------------------------------------------------------------------------
@@ -1694,15 +1707,17 @@ def create_app() -> Flask:
         symbols = body.get("symbols", body.get("ts_codes"))
         start_date = body.get("start_date")
         end_date = body.get("end_date")
+        write_trade_log = _parse_bool_arg(body.get("write_trade_log"), True)
         logger.info(
             "Backtest API request: strategy_id=%s, data_source=%s, ts_code=%s, symbols=%s, "
-            "start_date=%s, end_date=%s, raw_body=%s",
+            "start_date=%s, end_date=%s, write_trade_log=%s, raw_body=%s",
             strategy_id,
             data_source,
             ts_code,
             symbols,
             start_date,
             end_date,
+            write_trade_log,
             body,
         )
         try:
@@ -1713,6 +1728,7 @@ def create_app() -> Flask:
                 symbols=symbols,
                 start_date=start_date,
                 end_date=end_date,
+                write_trade_log=write_trade_log,
             )
         except ValueError as e:
             return jsonify({"success": False, "message": str(e)}), 400
@@ -1868,6 +1884,7 @@ def create_app() -> Flask:
                 start_date=body.get("start_date"),
                 end_date=body.get("end_date"),
                 initial_cash=float(body.get("initial_cash", 1_000_000.0)),
+                write_trade_log=_parse_bool_arg(body.get("write_trade_log"), True),
             )
             return jsonify({"success": True, "message": "回测完成", "data": data})
         except ValueError as e:

@@ -113,6 +113,7 @@ export interface BacktestRequest {
   ts_code?: string;
   start_date?: string;
   end_date?: string;
+  write_trade_log?: boolean;
 }
 
 export interface SignalDiagnostic {
@@ -144,6 +145,7 @@ export interface UserSignalBacktestRequest {
   start_date?: string;
   end_date?: string;
   initial_cash?: number;
+  write_trade_log?: boolean;
 }
 
 export interface LiveSignal {

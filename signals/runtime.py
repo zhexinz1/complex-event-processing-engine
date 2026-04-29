@@ -376,6 +376,7 @@ def run_user_signal_backtest(
     start_date: str | None = None,
     end_date: str | None = None,
     initial_cash: float = 1_000_000.0,
+    write_trade_log: bool = True,
 ) -> dict[str, Any]:
     """Run a user-authored Signal class through BacktestEngine."""
 
@@ -434,6 +435,7 @@ def run_user_signal_backtest(
         initial_cash=initial_cash,
         base_bar_freq=effective_freq,
         contract_multipliers=contract_multipliers,
+        write_trade_log=write_trade_log,
     )
     trigger = UserSignalTrigger(
         event_bus=engine.event_bus,
@@ -444,7 +446,7 @@ def run_user_signal_backtest(
     )
     trigger.register()
     engine._components.append(trigger)
-    engine.ingest_bars(bars)
+    engine.ingest_bars(bars, assume_sorted=True)
     result = engine.run()
     payload = serialize_backtest_result(result)
     payload["diagnostics"] = [item.to_dict() for item in [*diagnostics, *trigger.diagnostics]]

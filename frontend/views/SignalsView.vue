@@ -204,7 +204,7 @@ import { useToast } from '../composables/useToast';
 
 const sampleCode = `class Signal:
     name = "沪金RSI超卖"
-    symbols = ["au2506"]
+    symbols = ["AU9999.XSGE"]
     bar_freq = "1m"
 
     def __init__(self, ctx):
@@ -246,7 +246,7 @@ function createDefaultSignal(): UserSignalDefinition {
   return {
     id: undefined,
     name: '沪金RSI超卖',
-    symbols: ['au2506'],
+    symbols: ['AU9999.XSGE'],
     bar_freq: '1m',
     source_code: sampleCode,
     status: 'disabled',
