@@ -146,6 +146,7 @@ export interface UserSignalBacktestRequest {
   end_date?: string;
   initial_cash?: number;
   write_trade_log?: boolean;
+  execution_timing?: 'current_bar' | 'next_bar';
 }
 
 export interface LiveSignal {

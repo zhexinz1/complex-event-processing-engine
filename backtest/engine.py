@@ -11,7 +11,7 @@ from cep.engine.ast_engine import Node
 from cep.triggers.triggers import AstRuleTrigger
 
 from .aggregation import MultiTimeframeBarAggregator
-from .broker import SimulatedBroker
+from .broker import ExecutionTiming, SimulatedBroker, _validate_execution_timing
 from .models import BacktestResult
 from .parser import HistoricalDataParser
 from .portfolio import PortfolioLedger
@@ -32,7 +32,9 @@ class BacktestEngine:
         default_order_quantity: float = 1.0,
         commission_rate: float = 0.0,
         write_trade_log: bool = True,
+        execution_timing: ExecutionTiming = "next_bar",
     ) -> None:
+        execution_timing = _validate_execution_timing(execution_timing)
         self.event_bus = EventBus()
         self.event_queue = EventQueue()
         self.parser = HistoricalDataParser()
@@ -49,6 +51,7 @@ class BacktestEngine:
             default_quantity=default_order_quantity,
             commission_rate=commission_rate,
             contract_multipliers=contract_multipliers,
+            execution_timing=execution_timing,
         )
         self.aggregator = MultiTimeframeBarAggregator(
             event_bus=self.event_bus,
@@ -56,6 +59,7 @@ class BacktestEngine:
             target_freqs=aggregate_freqs,
         )
         self.write_trade_log = write_trade_log
+        self.execution_timing = execution_timing
 
         # EventBus 保存弱引用，必须显式持有这些对象。
         self._components = [self.portfolio, self.recorder, self.broker, self.aggregator]
@@ -119,6 +123,7 @@ class BacktestEngine:
                 market_events_processed += 1
                 self.recorder.capture_snapshot(event.timestamp)
 
+        self.broker.finalize()
         result = BacktestResult(
             market_events_processed=market_events_processed,
             signals=list(self.recorder.signals),

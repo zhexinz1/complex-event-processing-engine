@@ -25,6 +25,7 @@ from backtest.preset_strategies import (
     normalize_symbol_group,
     serialize_backtest_result,
 )
+from backtest.broker import ExecutionTiming
 from adapters.contract_config import get_contract_multiplier
 from cep.core.context import DEFAULT_INDICATOR_REGISTRY, LocalContext
 from cep.core.event_bus import EventBus
@@ -377,6 +378,7 @@ def run_user_signal_backtest(
     end_date: str | None = None,
     initial_cash: float = 1_000_000.0,
     write_trade_log: bool = True,
+    execution_timing: ExecutionTiming = "next_bar",
 ) -> dict[str, Any]:
     """Run a user-authored Signal class through BacktestEngine."""
 
@@ -436,6 +438,7 @@ def run_user_signal_backtest(
         base_bar_freq=effective_freq,
         contract_multipliers=contract_multipliers,
         write_trade_log=write_trade_log,
+        execution_timing=execution_timing,
     )
     trigger = UserSignalTrigger(
         event_bus=engine.event_bus,

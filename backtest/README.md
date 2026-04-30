@@ -97,6 +97,7 @@ The current module supports:
 - local `adjusted_main_contract` CSV history as a reusable 1-minute data source
 - AST-triggered signal generation
 - simulated market-order execution
+- next-bar-open execution by default to avoid same-bar look-ahead bias
 - invalid-order rejection for malformed, over-budget, and over-positioned trades
 - portfolio cash/position updates
 - equity snapshots and event capture
@@ -124,6 +125,8 @@ Runtime entry points that understand this data source:
 
 - `backtest.preset_strategies.run_preset_backtest(..., data_source="adjusted_main_contract")`
 - `signals.runtime.run_user_signal_backtest(..., data_source="adjusted_main_contract")`
+
+User-signal backtests also accept `execution_timing="current_bar"` to reproduce the legacy same-bar-close fill behavior when comparing old research runs.
 
 For iterative research runs, both entry points also accept `write_trade_log=False` to skip JSON log persistence under `backtest/logs/`.
 

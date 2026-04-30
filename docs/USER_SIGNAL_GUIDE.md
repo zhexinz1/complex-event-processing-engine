@@ -41,7 +41,11 @@ class Signal:
 
 Live monitoring subscribes to Redis-published `BarEvent` objects on `CEP_REDIS_CHANNEL` (`cep_events` by default). Tick-to-bar aggregation is expected to happen upstream.
 
-`POST /api/backtests/run-user-signal` also accepts optional `write_trade_log: false` for research runs that should skip writing `backtest/logs/*.json`.
+`POST /api/backtests/run-user-signal` also accepts:
+
+- `write_trade_log: false` to skip writing `backtest/logs/*.json`
+- `execution_timing: "next_bar"` to fill on the next bar open and avoid same-bar look-ahead bias
+- `execution_timing: "current_bar"` to reproduce the legacy same-bar-close behavior for comparison
 
 ## Local Commodity CSV Backtests
 

@@ -72,6 +72,7 @@ from signals import (
     load_signal_class,
     run_user_signal_backtest,
 )
+from backtest.broker import ExecutionTiming
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +231,17 @@ def _parse_bool_arg(value: Any, default: bool = True) -> bool:
     if text in {"0", "false", "no", "off"}:
         return False
     raise ValueError(f"无法解析布尔值: {value}")
+
+
+def _parse_execution_timing(value: Any, default: ExecutionTiming = "next_bar") -> ExecutionTiming:
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"current_bar", "next_bar"}:
+        return cast(ExecutionTiming, text)
+    raise ValueError(
+        f"无法解析 execution_timing: {value}，可选值为 current_bar / next_bar"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1885,6 +1897,7 @@ def create_app() -> Flask:
                 end_date=body.get("end_date"),
                 initial_cash=float(body.get("initial_cash", 1_000_000.0)),
                 write_trade_log=_parse_bool_arg(body.get("write_trade_log"), True),
+                execution_timing=_parse_execution_timing(body.get("execution_timing"), "next_bar"),
             )
             return jsonify({"success": True, "message": "回测完成", "data": data})
         except ValueError as e:

@@ -187,6 +187,38 @@ def test_run_user_signal_backtest_passes_write_trade_log_flag(client, monkeypatc
     assert captured["write_trade_log"] is False
 
 
+def test_run_user_signal_backtest_passes_execution_timing_flag(client, monkeypatch) -> None:
+    captured = {}
+
+    def fake_run_user_signal_backtest(**kwargs):
+        captured.update(kwargs)
+        return {
+            "market_events_processed": 1,
+            "signals": [],
+            "trades": [],
+            "equity_curve": [],
+            "diagnostics": [],
+            "final_equity": 1_000_000.0,
+            "realized_pnl": 0.0,
+        }
+
+    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+
+    response = client.post(
+        "/api/backtests/run-user-signal",
+        json={
+            "source_code": VALID_SIGNAL,
+            "data_source": "mock",
+            "execution_timing": "current_bar",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert captured["execution_timing"] == "current_bar"
+
+
 def test_run_user_signal_backtest_loads_source_code_from_signal_id(client, monkeypatch) -> None:
     captured = {}
 

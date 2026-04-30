@@ -175,11 +175,57 @@ class Signal:
         start_date="20250601",
         end_date="20250630",
         initial_cash=1_000_000.0,
+        execution_timing="current_bar",
     )
 
     assert data["market_events_processed"] == 2
     assert data["realized_pnl"] == 300.0
     assert data["final_cash"] == 1_000_300.0
+    assert data["final_equity"] == 1_000_300.0
+
+
+def test_user_signal_backtest_executes_on_next_bar_open(monkeypatch):
+    source = '''
+class Signal:
+    name = "Silver flip"
+    symbols = ["AG9999.XSGE"]
+    bar_freq = "1m"
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.step = 0
+
+    def on_bar(self, bar):
+        self.step += 1
+        if self.step == 1:
+            return {"side": "BUY", "reason": "enter", "price": bar.close, "quantity": 2}
+        if self.step == 2:
+            return {"side": "SELL", "reason": "exit", "price": bar.close, "quantity": 2}
+        return None
+'''
+
+    def fake_fetch_adjusted_main_contract_bars(symbol: str, start_date: str, end_date: str):
+        return [make_bar(index, close, symbol=symbol) for index, close in enumerate([100.0, 110.0, 120.0])]
+
+    monkeypatch.setattr(
+        "signals.runtime.fetch_adjusted_main_contract_bars",
+        fake_fetch_adjusted_main_contract_bars,
+    )
+
+    data = run_user_signal_backtest(
+        source_code=source,
+        data_source="adjusted_main_contract",
+        start_date="20250601",
+        end_date="20250630",
+        initial_cash=1_000_000.0,
+        execution_timing="next_bar",
+    )
+
+    assert data["trades"][0]["price"] == 110.0
+    assert data["trades"][0]["timestamp"] == make_bar(1, 110.0, symbol="AG9999.XSGE").timestamp.isoformat()
+    assert data["trades"][1]["price"] == 120.0
+    assert data["trades"][1]["timestamp"] == make_bar(2, 120.0, symbol="AG9999.XSGE").timestamp.isoformat()
+    assert data["realized_pnl"] == 300.0
     assert data["final_equity"] == 1_000_300.0
 
 
