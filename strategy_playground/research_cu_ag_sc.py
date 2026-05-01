@@ -37,212 +37,28 @@ class Signal:
 '''
 
 
-RATIO_MOMENTUM_SOURCE = '''
+def build_lagged_ratio_source(
+    *,
+    signal_name: str,
+    buy_reason: str,
+    sell_reason: str,
+    min_hold_bars: int | None = None,
+) -> str:
+    hold_state = ""
+    hold_tick = ""
+    hold_reset = ""
+    hold_gate = ""
+    hold_payload = ""
+    if min_hold_bars is not None:
+        hold_state = f"    min_hold_bars = {min_hold_bars}\n    holding_bars = 0\n"
+        hold_tick = "\n        if cls.invested:\n            cls.holding_bars = cls.holding_bars + 1\n"
+        hold_reset = "\n            cls.holding_bars = 0"
+        hold_gate = "\n            and cls.holding_bars >= cls.min_hold_bars"
+        hold_payload = '\n                "holding_bars": cls.holding_bars,'
+
+    return f'''
 class Signal:
-    name = "CU AG Ratio Momentum Predicts SC"
-    symbols = ["CU9999.XSGE", "AG9999.XSGE", "SC9999.XINE"]
-    bar_freq = "1m"
-    last_cu = 0.0
-    last_ag = 0.0
-    ratios = []
-    invested = False
-    lookback = 240
-    entry_threshold = 0.004
-    exit_threshold = 0.0
-
-    def __init__(self, ctx):
-        self.ctx = ctx
-
-    def on_bar(self, bar):
-        cls = self.__class__
-        if bar.symbol == "CU9999.XSGE":
-            cls.last_cu = bar.close
-            return None
-        if bar.symbol == "AG9999.XSGE":
-            cls.last_ag = bar.close
-            return None
-        if bar.symbol != "SC9999.XINE":
-            return None
-        if cls.last_cu <= 0 or cls.last_ag <= 0:
-            return None
-
-        ratio = cls.last_cu / cls.last_ag
-        cls.ratios.append(ratio)
-        if len(cls.ratios) > 2000:
-            cls.ratios.pop(0)
-        if len(cls.ratios) <= cls.lookback:
-            return None
-
-        momentum = (ratio / cls.ratios[-cls.lookback - 1]) - 1.0
-        if not cls.invested and momentum > cls.entry_threshold:
-            cls.invested = True
-            return {
-                "side": "BUY",
-                "quantity": 1,
-                "reason": "cu_ag_ratio_momentum_up",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-            }
-        if cls.invested and momentum < cls.exit_threshold:
-            cls.invested = False
-            return {
-                "side": "SELL",
-                "quantity": 1,
-                "reason": "cu_ag_ratio_momentum_faded",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-            }
-        return None
-'''
-
-
-RATIO_WITH_OIL_TREND_SOURCE = '''
-class Signal:
-    name = "CU AG Ratio Momentum With SC Trend"
-    symbols = ["CU9999.XSGE", "AG9999.XSGE", "SC9999.XINE"]
-    bar_freq = "1m"
-    last_cu = 0.0
-    last_ag = 0.0
-    ratios = []
-    oil_closes = []
-    invested = False
-    lookback = 240
-    trend_window = 120
-    entry_threshold = 0.004
-    exit_threshold = 0.0
-
-    def __init__(self, ctx):
-        self.ctx = ctx
-
-    def on_bar(self, bar):
-        cls = self.__class__
-        if bar.symbol == "CU9999.XSGE":
-            cls.last_cu = bar.close
-            return None
-        if bar.symbol == "AG9999.XSGE":
-            cls.last_ag = bar.close
-            return None
-        if bar.symbol != "SC9999.XINE":
-            return None
-        cls.oil_closes.append(bar.close)
-        if len(cls.oil_closes) > 2000:
-            cls.oil_closes.pop(0)
-        if cls.last_cu <= 0 or cls.last_ag <= 0:
-            return None
-
-        ratio = cls.last_cu / cls.last_ag
-        cls.ratios.append(ratio)
-        if len(cls.ratios) > 2000:
-            cls.ratios.pop(0)
-        if len(cls.ratios) <= cls.lookback or len(cls.oil_closes) < cls.trend_window:
-            return None
-
-        momentum = (ratio / cls.ratios[-cls.lookback - 1]) - 1.0
-        oil_ma = sum(cls.oil_closes[-cls.trend_window:]) / cls.trend_window
-        oil_trend_ok = bar.close > oil_ma
-        if not cls.invested and momentum > cls.entry_threshold and oil_trend_ok:
-            cls.invested = True
-            return {
-                "side": "BUY",
-                "quantity": 1,
-                "reason": "ratio_momentum_confirmed_by_oil_trend",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-                "oil_ma": oil_ma,
-            }
-        if cls.invested and (momentum < cls.exit_threshold or not oil_trend_ok):
-            cls.invested = False
-            return {
-                "side": "SELL",
-                "quantity": 1,
-                "reason": "ratio_or_oil_trend_exit",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-                "oil_ma": oil_ma,
-            }
-        return None
-'''
-
-
-RATIO_WITH_CONFIRMATION_SOURCE = '''
-class Signal:
-    name = "CU AG Ratio Momentum Confirmed"
-    symbols = ["CU9999.XSGE", "AG9999.XSGE", "SC9999.XINE"]
-    bar_freq = "1m"
-    last_cu = 0.0
-    last_ag = 0.0
-    ratios = []
-    invested = False
-    lookback = 240
-    entry_threshold = 0.004
-    exit_threshold = 0.0
-    positive_count = 0
-    negative_count = 0
-
-    def __init__(self, ctx):
-        self.ctx = ctx
-
-    def on_bar(self, bar):
-        cls = self.__class__
-        if bar.symbol == "CU9999.XSGE":
-            cls.last_cu = bar.close
-            return None
-        if bar.symbol == "AG9999.XSGE":
-            cls.last_ag = bar.close
-            return None
-        if bar.symbol != "SC9999.XINE":
-            return None
-        if cls.last_cu <= 0 or cls.last_ag <= 0:
-            return None
-
-        ratio = cls.last_cu / cls.last_ag
-        cls.ratios.append(ratio)
-        if len(cls.ratios) > 2000:
-            cls.ratios.pop(0)
-        if len(cls.ratios) <= cls.lookback:
-            return None
-
-        momentum = (ratio / cls.ratios[-cls.lookback - 1]) - 1.0
-        if momentum > cls.entry_threshold:
-            cls.positive_count = cls.positive_count + 1
-        else:
-            cls.positive_count = 0
-        if momentum < cls.exit_threshold:
-            cls.negative_count = cls.negative_count + 1
-        else:
-            cls.negative_count = 0
-
-        if not cls.invested and cls.positive_count >= 3:
-            cls.invested = True
-            return {
-                "side": "BUY",
-                "quantity": 1,
-                "reason": "ratio_momentum_three_bar_confirmed",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-            }
-        if cls.invested and cls.negative_count >= 3:
-            cls.invested = False
-            return {
-                "side": "SELL",
-                "quantity": 1,
-                "reason": "ratio_momentum_three_bar_exit",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-            }
-        return None
-'''
-
-
-LAGGED_RATIO_WITH_CONFIRMATION_SOURCE = '''
-class Signal:
-    name = "CU AG Lagged Ratio Momentum Confirmed"
+    name = "{signal_name}"
     symbols = ["CU9999.XSGE", "AG9999.XSGE", "SC9999.XINE"]
     bar_freq = "1m"
     last_cu = 0.0
@@ -253,6 +69,7 @@ class Signal:
     lookback = 240
     entry_threshold = 0.004
     exit_threshold = 0.0
+{hold_state}    confirmation_bars = 3
     positive_count = 0
     negative_count = 0
 
@@ -268,7 +85,7 @@ class Signal:
             cls.last_ag = bar.close
             return None
         if bar.symbol != "SC9999.XINE":
-            return None
+            return None{hold_tick}
 
         ratio = cls.pending_ratio
         if cls.last_cu > 0 and cls.last_ag > 0:
@@ -292,199 +109,52 @@ class Signal:
         else:
             cls.negative_count = 0
 
-        if not cls.invested and cls.positive_count >= 3:
-            cls.invested = True
-            return {
+        if not cls.invested and cls.positive_count >= cls.confirmation_bars:
+            cls.invested = True{hold_reset}
+            return {{
                 "side": "BUY",
                 "quantity": 1,
-                "reason": "lagged_ratio_momentum_three_bar_confirmed",
+                "reason": "{buy_reason}",
                 "price": bar.close,
                 "ratio": ratio,
                 "ratio_momentum": momentum,
-            }
-        if cls.invested and cls.negative_count >= 3:
-            cls.invested = False
-            return {
-                "side": "SELL",
-                "quantity": 1,
-                "reason": "lagged_ratio_momentum_three_bar_exit",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-            }
-        return None
-'''
-
-
-LAGGED_RATIO_WITH_MIN_HOLD_SOURCE = '''
-class Signal:
-    name = "CU AG Lagged Ratio Momentum Confirmed Min Hold"
-    symbols = ["CU9999.XSGE", "AG9999.XSGE", "SC9999.XINE"]
-    bar_freq = "1m"
-    last_cu = 0.0
-    last_ag = 0.0
-    pending_ratio = 0.0
-    ratios = []
-    invested = False
-    lookback = 240
-    entry_threshold = 0.004
-    exit_threshold = 0.0
-    min_hold_bars = 120
-    holding_bars = 0
-    positive_count = 0
-    negative_count = 0
-
-    def __init__(self, ctx):
-        self.ctx = ctx
-
-    def on_bar(self, bar):
-        cls = self.__class__
-        if bar.symbol == "CU9999.XSGE":
-            cls.last_cu = bar.close
-            return None
-        if bar.symbol == "AG9999.XSGE":
-            cls.last_ag = bar.close
-            return None
-        if bar.symbol != "SC9999.XINE":
-            return None
-
-        if cls.invested:
-            cls.holding_bars = cls.holding_bars + 1
-
-        ratio = cls.pending_ratio
-        if cls.last_cu > 0 and cls.last_ag > 0:
-            cls.pending_ratio = cls.last_cu / cls.last_ag
-        if ratio <= 0:
-            return None
-
-        cls.ratios.append(ratio)
-        if len(cls.ratios) > 2000:
-            cls.ratios.pop(0)
-        if len(cls.ratios) <= cls.lookback:
-            return None
-
-        momentum = (ratio / cls.ratios[-cls.lookback - 1]) - 1.0
-        if momentum > cls.entry_threshold:
-            cls.positive_count = cls.positive_count + 1
-        else:
-            cls.positive_count = 0
-        if momentum < cls.exit_threshold:
-            cls.negative_count = cls.negative_count + 1
-        else:
-            cls.negative_count = 0
-
-        if not cls.invested and cls.positive_count >= 3:
-            cls.invested = True
-            cls.holding_bars = 0
-            return {
-                "side": "BUY",
-                "quantity": 1,
-                "reason": "lagged_ratio_momentum_three_bar_confirmed_min_hold",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-            }
+            }}
         if (
-            cls.invested
-            and cls.holding_bars >= cls.min_hold_bars
-            and cls.negative_count >= 3
+            cls.invested{hold_gate}
+            and cls.negative_count >= cls.confirmation_bars
         ):
-            held_bars = cls.holding_bars
             cls.invested = False
-            cls.holding_bars = 0
-            return {
+            return {{
                 "side": "SELL",
                 "quantity": 1,
-                "reason": "lagged_ratio_momentum_three_bar_exit_after_min_hold",
+                "reason": "{sell_reason}",
                 "price": bar.close,
                 "ratio": ratio,
-                "ratio_momentum": momentum,
-                "holding_bars": held_bars,
-            }
-        return None
-'''
-
-
-SLOW_RATIO_REGIME_SOURCE = '''
-class Signal:
-    name = "CU AG Slow Ratio Regime Predicts SC"
-    symbols = ["CU9999.XSGE", "AG9999.XSGE", "SC9999.XINE"]
-    bar_freq = "1m"
-    last_cu = 0.0
-    last_ag = 0.0
-    ratios = []
-    invested = False
-    lookback = 1200
-    entry_threshold = 0.01
-    exit_threshold = 0.002
-    positive_count = 0
-    negative_count = 0
-
-    def __init__(self, ctx):
-        self.ctx = ctx
-
-    def on_bar(self, bar):
-        cls = self.__class__
-        if bar.symbol == "CU9999.XSGE":
-            cls.last_cu = bar.close
-            return None
-        if bar.symbol == "AG9999.XSGE":
-            cls.last_ag = bar.close
-            return None
-        if bar.symbol != "SC9999.XINE":
-            return None
-        if cls.last_cu <= 0 or cls.last_ag <= 0:
-            return None
-
-        ratio = cls.last_cu / cls.last_ag
-        cls.ratios.append(ratio)
-        if len(cls.ratios) > 4000:
-            cls.ratios.pop(0)
-        if len(cls.ratios) <= cls.lookback:
-            return None
-
-        momentum = (ratio / cls.ratios[-cls.lookback - 1]) - 1.0
-        if momentum > cls.entry_threshold:
-            cls.positive_count = cls.positive_count + 1
-        else:
-            cls.positive_count = 0
-        if momentum < cls.exit_threshold:
-            cls.negative_count = cls.negative_count + 1
-        else:
-            cls.negative_count = 0
-
-        if not cls.invested and cls.positive_count >= 5:
-            cls.invested = True
-            return {
-                "side": "BUY",
-                "quantity": 1,
-                "reason": "slow_cu_ag_ratio_regime_up",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-            }
-        if cls.invested and cls.negative_count >= 5:
-            cls.invested = False
-            return {
-                "side": "SELL",
-                "quantity": 1,
-                "reason": "slow_cu_ag_ratio_regime_faded",
-                "price": bar.close,
-                "ratio": ratio,
-                "ratio_momentum": momentum,
-            }
+                "ratio_momentum": momentum,{hold_payload}
+            }}
         return None
 '''
 
 
 EXPERIMENTS = {
     "buy_hold_sc": (BUY_HOLD_SOURCE, ["SC9999.XINE"]),
-    "ratio_momentum": (RATIO_MOMENTUM_SOURCE, SYMBOLS),
-    "ratio_plus_oil_trend": (RATIO_WITH_OIL_TREND_SOURCE, SYMBOLS),
-    "ratio_three_bar_confirm": (RATIO_WITH_CONFIRMATION_SOURCE, SYMBOLS),
-    "lagged_ratio_three_bar_confirm": (LAGGED_RATIO_WITH_CONFIRMATION_SOURCE, SYMBOLS),
-    "lagged_ratio_min_hold": (LAGGED_RATIO_WITH_MIN_HOLD_SOURCE, SYMBOLS),
-    "slow_ratio_regime": (SLOW_RATIO_REGIME_SOURCE, SYMBOLS),
+    "lagged_ratio_three_bar_confirm": (
+        build_lagged_ratio_source(
+            signal_name="CU AG Lagged Ratio Momentum Confirmed",
+            buy_reason="lagged_ratio_momentum_three_bar_confirmed",
+            sell_reason="lagged_ratio_momentum_three_bar_exit",
+        ),
+        SYMBOLS,
+    ),
+    "lagged_ratio_min_hold": (
+        build_lagged_ratio_source(
+            signal_name="CU AG Lagged Ratio Momentum Confirmed Min Hold",
+            buy_reason="lagged_ratio_momentum_three_bar_confirmed_min_hold",
+            sell_reason="lagged_ratio_momentum_three_bar_exit_after_min_hold",
+            min_hold_bars=120,
+        ),
+        SYMBOLS,
+    ),
 }
 
 

@@ -17,8 +17,10 @@ POST /api/backtests/run-user-signal
 Example:
 
 ```bash
-uv run python strategy_playground/research_cu_ag_sc.py --base-url http://localhost:5000 --only lagged_ratio_three_bar_confirm
+uv run python strategy_playground/research_cu_ag_sc.py --base-url http://localhost:5000 --only lagged_ratio_min_hold
 ```
+
+The script intentionally keeps only runnable active experiments to preserve future context window: `buy_hold_sc`, `lagged_ratio_three_bar_confirm`, and `lagged_ratio_min_hold`. Discarded historical strategy bodies were removed from code; their outcomes remain in the table below.
 
 ### Backtest Setup
 
