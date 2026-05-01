@@ -219,8 +219,6 @@ export interface CepApiClient {
   fetchAllOrders(params?: Record<string, string>): Promise<ApiResponse>;
   updateOrder(orderId: number, finalQuantity: number): Promise<ApiResponse>;
   confirmOrders(batchId: string, confirmedBy: string, priceType: string): Promise<ApiResponse>;
-  reconcileOrders(): Promise<ApiResponse>;
-  fetchXtCache(): Promise<ApiResponse>;
   // Prices
   fetchRealtimePrices(symbols: string): Promise<ApiResponse & { prices: Record<string, RealtimePrice> }>;
   // Market Health

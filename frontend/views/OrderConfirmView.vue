@@ -64,7 +64,7 @@
             <tr><th>合约代码</th><th>目标市值（元）</th><th>实时价格</th><th>合约乘数</th><th>理论手数</th><th>四舍五入</th><th>留白</th><th>最终手数</th></tr>
           </thead>
           <tbody>
-            <tr v-for="(order, idx) in orders" :key="order.id">
+            <tr v-for="order in orders" :key="order.id">
               <td><strong>{{ order.asset_code }}</strong></td>
               <td>{{ fmtNum(order.target_market_value) }}</td>
               <td>
@@ -218,15 +218,15 @@ async function confirmAll() {
   if (priceTimer) { clearInterval(priceTimer); priceTimer = null; }
 
   try {
-    // update quantities first
-    for (const order of orders.value) {
-      await CepApi.updateOrder(order.id, order.final_quantity);
-    }
+    // update quantities in parallel to massively speed up execution without hanging the UI
+    await Promise.all(orders.value.map(order => CepApi.updateOrder(order.id, order.final_quantity)));
     const data = await CepApi.confirmOrders(batchId.value, '交易员', priceType.value);
     if (data.success) {
-      alertMsg.value = `订单执行成功！（${priceTypeLabels[priceType.value]}）`;
+      alertMsg.value = `订单已送入后台执行！（${priceTypeLabels[priceType.value]}）`;
       alertType.value = 'success';
       if (batchInfo.value) batchInfo.value.status = 'confirmed';
+      confirming.value = false;
+      router.push('/order-confirm');
     } else {
       alertMsg.value = '订单执行失败: ' + (data.message || '');
       alertType.value = 'error';

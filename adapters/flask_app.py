@@ -934,28 +934,11 @@ def create_app() -> Flask:
 
     @app.route("/api/orders/confirm", methods=["POST"])
     def confirm_orders():
-        """
-        确认订单并调用迅投API执行。
-
-        请求体:
-        {
-            "batch_id": "uuid",
-            "confirmed_by": "交易员姓名"
-        }
-
-        返回:
-        {
-            "success": true,
-            "executed_orders": [...],
-            "failed_orders": [...]
-        }
-        """
         data = request.get_json()
         batch_id = data.get("batch_id")
         confirmed_by = data.get("confirmed_by", "")
-        price_type_str = data.get("price_type", "limit")  # 前端传来的价格类型
+        price_type_str = data.get("price_type", "limit")
 
-        # 映射价格类型
         price_type_map = {
             "limit": OrderPriceType.LIMIT,
             "market": OrderPriceType.MARKET,
@@ -969,135 +952,109 @@ def create_app() -> Flask:
             return jsonify({"success": False, "message": "参数错误"}), 400
 
         try:
-            # 1. 查询待确认订单
             orders = dao.get_pending_orders_by_batch(batch_id)
             if not orders:
                 return jsonify({"success": False, "message": "批次不存在或已处理"}), 404
 
-            # 2. 更新净入金记录状态
             dao.update_fund_inflow_status(batch_id, FundInflowStatus.CONFIRMED, confirmed_by)
+            
+            # 使用独立线程执行实际报单请求，前端瞬间跳转无需等待
+            import threading
+            
+            def async_place_orders(order_list, price_type_val, batch_str):
+                with app.app_context():
+                    for order in order_list:
+                        if order.final_quantity == 0:
+                            logger.info(f"订单 {order.asset_code} 最终数量为 0, 取消执行")
+                            dao.update_order_status(order.id, OrderStatus.CANCELLED)
+                            continue
 
-            # 3. 执行订单（调用迅投API）
-            executed_orders = []
-            failed_orders = []
+                        try:
+                            conn = dao._get_connection()
+                            with conn.cursor() as cursor:
+                                cursor.execute(
+                                    "UPDATE pending_orders SET order_price_type = %s WHERE id = %s",
+                                    (price_type_val, order.id)
+                                )
+                            conn.commit()
+                            conn.close()
+                        except Exception:
+                            pass
 
-            for order in orders:
-                if order.final_quantity == 0:
-                    # 跳过数量为0的订单
-                    dao.update_order_status(order.id, OrderStatus.CANCELLED)
-                    continue
+                        try:
+                            product = dao.get_product_by_name(order.product_name)
+                            if not product or not product.xt_username or not product.xt_password:
+                                continue
 
-                # 记录订单价格类型到 DB
-                try:
-                    conn = dao._get_connection()
-                    with conn.cursor() as cursor:
-                        cursor.execute(
-                            "UPDATE pending_orders SET order_price_type = %s WHERE id = %s",
-                            (price_type_str, order.id)
-                        )
-                    conn.commit()
-                    conn.close()
-                except Exception:
-                    pass  # 非关键字段，失败不阻断下单流程
+                            xt_manager = get_xt_connection_manager()
+                            xt_service = xt_manager.get_connection(
+                                username=product.xt_username,
+                                password=product.xt_password,
+                                account_id=product.account_id,
+                                timeout=30.0,
+                                dao=dao,
+                            )
+                            if not xt_service:
+                                continue
 
-                try:
-                    # 获取产品配置以获取迅投账号信息
-                    product = dao.get_product_by_name(order.product_name)
-                    if not product:
-                        raise ValueError(f"产品不存在: {order.product_name}")
+                            normalized_code = normalize_asset_code(order.asset_code)
+                            parts = normalized_code.split(".")
+                            if len(parts) != 2:
+                                continue
+                            instrument, market = parts[0], parts[1]
 
-                    if not product.xt_username or not product.xt_password:
-                        raise ValueError(f"产品 {order.product_name} 未配置迅投账号")
+                            is_futures = market.upper() in ["CFFEX", "DCE", "CZCE", "SHFE", "INE"]
 
-                    # 获取或创建迅投连接
-                    xt_manager = get_xt_connection_manager()
-                    xt_service = xt_manager.get_connection(
-                        username=product.xt_username,
-                        password=product.xt_password,
-                        account_id=product.account_id,
-                        timeout=30.0,
-                        dao=dao,
-                    )
+                            if order.final_quantity > 0:
+                                direction = OrderDirection.OPEN_LONG if is_futures else OrderDirection.BUY
+                                quantity = order.final_quantity
+                            else:
+                                direction = OrderDirection.CLOSE_LONG if is_futures else OrderDirection.SELL
+                                quantity = abs(order.final_quantity)
 
-                    if not xt_service:
-                        raise RuntimeError(f"无法连接迅投账号: {product.xt_username}")
+                            try:
+                                live_price = float(get_latest_price(order.asset_code))
+                            except ValueError:
+                                live_price = float(order.price) if order.price else 0.0
 
-                    # 标准化资产代码（自动添加交易所后缀）
-                    normalized_code = normalize_asset_code(order.asset_code)
+                            actual_account_id = product.fund_account if product.fund_account else product.account_id
+                            order_req = OrderRequest(
+                                account_id=actual_account_id,
+                                asset_code=normalized_code,
+                                direction=direction,
+                                quantity=quantity,
+                                price=live_price,
+                                price_type=selected_price_type,
+                                market=market,
+                                instrument=instrument
+                            )
 
-                    # 解析资产代码（如 "AG2606.SHFE" -> instrument="AG2606", market="SHFE"）
-                    parts = normalized_code.split('.')
-                    if len(parts) != 2:
-                        raise ValueError(f"资产代码格式错误: {order.asset_code} (标准化后: {normalized_code})")
-                    instrument, market = parts[0], parts[1]
+                            result = xt_service.place_order(order_req)
 
-                    # 判断资产类型和买卖方向
-                    # 期货市场：CFFEX(中金所), DCE(大商所), CZCE(郑商所), SHFE(上期所), INE(能源中心)
-                    is_futures = market.upper() in ['CFFEX', 'DCE', 'CZCE', 'SHFE', 'INE']
+                            if result.success:
+                                dao.update_order_status(order.id, OrderStatus.CONFIRMED)
+                                if result.order_id:
+                                    dao.update_order_xt_id(order.id, result.order_id)
+                                dao.update_fractional_share(
+                                    order.product_name,
+                                    order.asset_code,
+                                    order.fractional_part
+                                )
+                            else:
+                                error_msg = result.error_msg or "下单失败"
+                                dao.update_order_xt_send_failed(order.id, error_msg)
 
-                    if order.final_quantity > 0:
-                        # 正数：买入/开多
-                        direction = OrderDirection.OPEN_LONG if is_futures else OrderDirection.BUY
-                        quantity = order.final_quantity
-                    else:
-                        # 负数：卖出/平多
-                        direction = OrderDirection.CLOSE_LONG if is_futures else OrderDirection.SELL
-                        quantity = abs(order.final_quantity)
-
-                    # 获取最新实时价格（而不是录入时的快照价格）
-                    try:
-                        live_price = float(get_latest_price(order.asset_code))
-                    except ValueError:
-                        live_price = float(order.price) if order.price else 0.0
-
-                    # 构造下单请求
-                    # 注意：account_id 应该使用 fund_account（真实账号ID），而不是 product.account_id（可能是用户名）
-                    actual_account_id = product.fund_account if product.fund_account else product.account_id
-                    order_req = OrderRequest(
-                        account_id=actual_account_id,
-                        asset_code=normalized_code,  # 使用标准化后的代码
-                        direction=direction,
-                        quantity=quantity,
-                        price=live_price,
-                        price_type=selected_price_type,
-                        market=market,
-                        instrument=instrument
-                    )
-
-                    # 调用迅投API下单
-                    result = xt_service.place_order(order_req)
-
-                    if result.success:
-                        # 仅标记为"已确认提交"，而非"已执行"
-                        # 真正的终态（EXECUTED/FAILED/CANCELLED）由回调/对账更新
-                        dao.update_order_status(order.id, OrderStatus.CONFIRMED)
-                        executed_orders.append(order.asset_code)
-
-                        # 将迅投返回的指令ID写入数据库（同时标记 xt_status='sent'）
-                        if result.order_id:
-                            dao.update_order_xt_id(order.id, result.order_id)
-
-                        # 更新留白数据
-                        dao.update_fractional_share(
-                            order.product_name,
-                            order.asset_code,
-                            order.fractional_part
-                        )
-                    else:
-                        # SDK 调用返回失败 — 记录 xt_status='send_failed'
-                        error_msg = result.error_msg or "下单失败"
-                        dao.update_order_xt_send_failed(order.id, error_msg)
-                        raise RuntimeError(error_msg)
-
-                except Exception as e:
-                    logger.exception(f"执行订单失败: {order.asset_code}")
-                    dao.update_order_status(order.id, OrderStatus.FAILED, str(e))
-                    failed_orders.append({"asset_code": order.asset_code, "error": str(e)})
+                        except Exception as e:
+                            logger.exception(f"异步执行订单失败: {order.asset_code}")
+                            dao.update_order_status(order.id, OrderStatus.FAILED, str(e))
+                            
+            threading.Thread(target=async_place_orders, args=(orders, price_type_str, batch_id), daemon=True).start()
 
             return jsonify({
                 "success": True,
-                "executed_orders": executed_orders,
-                "failed_orders": failed_orders
+                "message": "订单正在后台执行",
+                "executed_orders": [],
+                "failed_orders": []
             })
 
         except Exception as e:
@@ -1272,7 +1229,7 @@ def create_app() -> Flask:
                 instr_map[instr["order_id"]] = instr
 
             # 2. 从 DB 取出未终结的订单
-            pending_statuses = ["sent", "running"]
+            pending_statuses = ["not_sent", "sent", "running"]
             pending_orders = dao.get_orders_by_xt_status(pending_statuses)
 
             # 3. 逐笔精确匹配并更新
@@ -1293,6 +1250,18 @@ def create_app() -> Flask:
 
             for order in pending_orders:
                 if order.xt_order_id is None:
+                    if order.status.value == "confirmed" and order.xt_status == "not_sent":
+                        for instr in instructions:
+                            db_ast = order.asset_code.split(".")[0].lower()
+                            xt_ast = instr.get("instrument", "").split(".")[0].lower()
+                            xt_vol = instr.get("volume", 0)
+                            if db_ast == xt_ast and xt_vol == order.final_quantity:
+                                _INSTR_STATUS_MAP_LOCAL = {"OCS_FINISHED": "filled", "OCS_RUNNING": "running", "OCS_STOPPED": "stopped", "OCS_REJECTED": "rejected", "OCS_CHECKING": "running", "OCS_APPROVING": "running", "OCS_CANCELING": "cancelled"}
+                                fixed_status = _INSTR_STATUS_MAP_LOCAL.get(instr.get("status"), "sent")
+                                dao.update_order_xt_id(order.id, instr["order_id"])
+                                dao.update_order_xt_status(xt_order_id=instr["order_id"], xt_status=fixed_status, xt_error_msg=instr.get("error_msg", ""))
+                                updated += 1
+                                break
                     continue
 
                 matched = instr_map.get(order.xt_order_id)
