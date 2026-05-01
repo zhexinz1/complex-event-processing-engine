@@ -136,6 +136,151 @@ class Signal:
 '''
 
 
+def build_ratio_breakout_corr_source(
+    *,
+    signal_name: str,
+    breakout_lookback: int,
+    breakout_margin: float,
+    corr_entry_threshold: float | None = None,
+) -> str:
+    corr_entry_state = ""
+    corr_entry_gate = ""
+    if corr_entry_threshold is not None:
+        corr_entry_state = f"    corr_entry_threshold = {corr_entry_threshold}\n"
+        corr_entry_gate = (
+            "\n            and has_corr"
+            "\n            and corr > cls.corr_entry_threshold"
+        )
+
+    return f'''
+class Signal:
+    name = "{signal_name}"
+    symbols = ["CU9999.XSGE", "AG9999.XSGE", "SC9999.XINE"]
+    bar_freq = "1m"
+    last_cu = 0.0
+    last_ag = 0.0
+    pending_ratio = 0.0
+    last_ratio = 0.0
+    last_sc_close = 0.0
+    ratios = []
+    ratio_returns = []
+    oil_returns = []
+    invested = False
+    breakout_lookback = {breakout_lookback}
+    breakout_margin = {breakout_margin}
+    confirmation_bars = 3
+    corr_window = 240
+    corr_exit_threshold = 0.05
+{corr_entry_state}    min_hold_bars = 120
+    holding_bars = 0
+    breakout_count = 0
+    corr_revert_count = 0
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def on_bar(self, bar):
+        cls = self.__class__
+        if bar.symbol == "CU9999.XSGE":
+            cls.last_cu = bar.close
+            return None
+        if bar.symbol == "AG9999.XSGE":
+            cls.last_ag = bar.close
+            return None
+        if bar.symbol != "SC9999.XINE":
+            return None
+
+        if cls.invested:
+            cls.holding_bars = cls.holding_bars + 1
+
+        ratio = cls.pending_ratio
+        if cls.last_cu > 0 and cls.last_ag > 0:
+            cls.pending_ratio = cls.last_cu / cls.last_ag
+        if ratio <= 0:
+            return None
+
+        if cls.last_ratio > 0 and cls.last_sc_close > 0:
+            cls.ratio_returns.append((ratio / cls.last_ratio) - 1.0)
+            cls.oil_returns.append((bar.close / cls.last_sc_close) - 1.0)
+            if len(cls.ratio_returns) > 2000:
+                cls.ratio_returns.pop(0)
+                cls.oil_returns.pop(0)
+
+        corr = 0.0
+        has_corr = False
+        if len(cls.ratio_returns) >= cls.corr_window:
+            ratio_window = cls.ratio_returns[-cls.corr_window:]
+            oil_window = cls.oil_returns[-cls.corr_window:]
+            mean_ratio = sum(ratio_window) / cls.corr_window
+            mean_oil = sum(oil_window) / cls.corr_window
+            covariance = 0.0
+            ratio_variance = 0.0
+            oil_variance = 0.0
+            for index in range(cls.corr_window):
+                ratio_diff = ratio_window[index] - mean_ratio
+                oil_diff = oil_window[index] - mean_oil
+                covariance = covariance + (ratio_diff * oil_diff)
+                ratio_variance = ratio_variance + (ratio_diff * ratio_diff)
+                oil_variance = oil_variance + (oil_diff * oil_diff)
+            if ratio_variance > 0 and oil_variance > 0:
+                corr = covariance / ((ratio_variance ** 0.5) * (oil_variance ** 0.5))
+                has_corr = True
+
+        breakout = False
+        if len(cls.ratios) >= cls.breakout_lookback:
+            prior_high = max(cls.ratios[-cls.breakout_lookback:])
+            breakout = ratio > prior_high * (1.0 + cls.breakout_margin)
+        if breakout:
+            cls.breakout_count = cls.breakout_count + 1
+        else:
+            cls.breakout_count = 0
+
+        if has_corr and corr < cls.corr_exit_threshold:
+            cls.corr_revert_count = cls.corr_revert_count + 1
+        else:
+            cls.corr_revert_count = 0
+
+        cls.ratios.append(ratio)
+        if len(cls.ratios) > 4000:
+            cls.ratios.pop(0)
+        cls.last_ratio = ratio
+        cls.last_sc_close = bar.close
+
+        if (
+            not cls.invested
+            and cls.breakout_count >= cls.confirmation_bars{corr_entry_gate}
+        ):
+            cls.invested = True
+            cls.holding_bars = 0
+            return {{
+                "side": "BUY",
+                "quantity": 1,
+                "reason": "cu_ag_ratio_breakout_leads_oil",
+                "price": bar.close,
+                "ratio": ratio,
+                "rolling_corr": corr,
+            }}
+        if (
+            cls.invested
+            and cls.holding_bars >= cls.min_hold_bars
+            and cls.corr_revert_count >= cls.confirmation_bars
+        ):
+            cls.invested = False
+            held_bars = cls.holding_bars
+            cls.holding_bars = 0
+            return {{
+                "side": "SELL",
+                "quantity": 1,
+                "reason": "ratio_oil_correlation_reverted",
+                "price": bar.close,
+                "ratio": ratio,
+                "rolling_corr": corr,
+                "holding_bars": held_bars,
+            }}
+        return None
+'''
+
+
 EXPERIMENTS = {
     "buy_hold_sc": (BUY_HOLD_SOURCE, ["SC9999.XINE"]),
     "lagged_ratio_three_bar_confirm": (
@@ -152,6 +297,15 @@ EXPERIMENTS = {
             buy_reason="lagged_ratio_momentum_three_bar_confirmed_min_hold",
             sell_reason="lagged_ratio_momentum_three_bar_exit_after_min_hold",
             min_hold_bars=120,
+        ),
+        SYMBOLS,
+    ),
+    "ratio_breakout_mid_corr_gate": (
+        build_ratio_breakout_corr_source(
+            signal_name="CU AG Ratio Mid Breakout Positive Correlation Gate",
+            breakout_lookback=720,
+            breakout_margin=0.0,
+            corr_entry_threshold=0.0,
         ),
         SYMBOLS,
     ),

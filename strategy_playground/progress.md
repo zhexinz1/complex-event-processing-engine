@@ -17,10 +17,10 @@ POST /api/backtests/run-user-signal
 Example:
 
 ```bash
-uv run python strategy_playground/research_cu_ag_sc.py --base-url http://localhost:5000 --only lagged_ratio_min_hold
+uv run python strategy_playground/research_cu_ag_sc.py --base-url http://localhost:5000 --only ratio_breakout_mid_corr_gate
 ```
 
-The script intentionally keeps only runnable active experiments to preserve future context window: `buy_hold_sc`, `lagged_ratio_three_bar_confirm`, and `lagged_ratio_min_hold`. Discarded historical strategy bodies were removed from code; their outcomes remain in the table below.
+The script intentionally keeps only runnable active experiments to preserve future context window: `buy_hold_sc`, `lagged_ratio_three_bar_confirm`, `lagged_ratio_min_hold`, and `ratio_breakout_mid_corr_gate`. Discarded historical strategy bodies were removed from code; their outcomes remain in the table below.
 
 ### Backtest Setup
 
@@ -43,6 +43,10 @@ The script intentionally keeps only runnable active experiments to preserve futu
 | Slow CU/AG ratio regime | `next_bar` | 918,150 | -8.18% | -21.03% | -0.244 | 259 | Discard |
 | Lagged CU/AG ratio with 3-bar confirmation | `next_bar` | 1,078,260 | 7.83% | -14.51% | 0.348 | 1,096 | Revise |
 | Lagged CU/AG ratio + 120-bar minimum hold | `next_bar` | 1,085,920 | 8.59% | -14.18% | 0.352 | 924 | Keep |
+| CU/AG ratio breakout + correlation reversion exit | `next_bar` | 1,051,460 | 5.15% | -6.44% | 0.419 | 16 | Revise |
+| Soft CU/AG breakout + correlation reversion exit | `next_bar` | 951,200 | -4.88% | -12.40% | -0.221 | 461 | Discard |
+| Soft CU/AG breakout + positive correlation gate | `next_bar` | 998,400 | -0.16% | -9.84% | 0.031 | 268 | Revise |
+| Mid CU/AG breakout + positive correlation gate | `next_bar` | 1,036,760 | 3.68% | -9.57% | 0.254 | 206 | Revise |
 
 ### Timing Validation
 
@@ -63,6 +67,7 @@ The 120-bar minimum-hold variant is the best candidate so far, but it is not pro
 - It still underperforms buy-and-hold SC on total return.
 - It reduces drawdown versus buy-and-hold, but only modestly.
 - The 120-bar minimum hold reduced turnover from roughly `562x` to `472x` notional over the test window, but turnover remains very high.
+- The best breakout/correlation variant so far is the 720-bar breakout with a positive-correlation entry gate: it has lower drawdown and turnover than the min-hold baseline, but still weaker return and Sharpe.
 - Results still assume zero commission and no slippage.
 
 ## Iteration 7
@@ -131,3 +136,24 @@ Validate whether the kept candidate survives realistic execution assumptions:
 - Add commission/slippage assumptions or a per-trade cost stress test.
 - Re-run through the Flask API with `execution_timing="next_bar"`.
 - If costs erase the edge, test a stronger churn filter such as a wider exit band instead of extending the hold period further.
+
+## Breakout/Correlation Sweep
+
+Working idea: CU/AG often reacts faster than crude to PMI, so a lagged CU/AG ratio breakout may lead a long SC move; exit when rolling CU/AG-return to SC-return correlation weakens.
+
+Tested variants:
+
+| Variant | Key parameters | Result | Decision |
+|---|---|---|---|
+| Strict breakout/reversion | `lookback=1200`, `margin=0.1%`, no entry corr gate | Very low drawdown and turnover, but only 16 fills and too little evidence | Revise |
+| Soft breakout/reversion | `lookback=480`, `margin=0`, no entry corr gate | Trade count improved, but return turned negative | Discard |
+| Soft breakout + corr gate | `lookback=480`, `margin=0`, `corr>0` at entry | Reduced damage versus soft breakout, but still no edge | Revise |
+| Mid breakout + corr gate | `lookback=720`, `margin=0`, `corr>0` at entry | Best breakout version so far: 3.68% return, -9.57% max DD, 206 trades | Revise |
+
+Current read: the breakout/correlation family is useful as a drawdown and turnover control, but the tested entry quality is still too weak. The mid-window variant is the only breakout candidate kept runnable in code.
+
+Next step:
+
+- Raise `corr_entry_threshold` from `0.0` to `0.05` or `0.10`.
+- Keep `breakout_lookback = 720` so only the correlation filter changes.
+- Compare against both `ratio_breakout_mid_corr_gate` and `lagged_ratio_min_hold`.
