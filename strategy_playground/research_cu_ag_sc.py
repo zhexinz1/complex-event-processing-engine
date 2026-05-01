@@ -316,6 +316,95 @@ class Signal:
 '''
 
 
+LAGGED_RATIO_WITH_MIN_HOLD_SOURCE = '''
+class Signal:
+    name = "CU AG Lagged Ratio Momentum Confirmed Min Hold"
+    symbols = ["CU9999.XSGE", "AG9999.XSGE", "SC9999.XINE"]
+    bar_freq = "1m"
+    last_cu = 0.0
+    last_ag = 0.0
+    pending_ratio = 0.0
+    ratios = []
+    invested = False
+    lookback = 240
+    entry_threshold = 0.004
+    exit_threshold = 0.0
+    min_hold_bars = 120
+    holding_bars = 0
+    positive_count = 0
+    negative_count = 0
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def on_bar(self, bar):
+        cls = self.__class__
+        if bar.symbol == "CU9999.XSGE":
+            cls.last_cu = bar.close
+            return None
+        if bar.symbol == "AG9999.XSGE":
+            cls.last_ag = bar.close
+            return None
+        if bar.symbol != "SC9999.XINE":
+            return None
+
+        if cls.invested:
+            cls.holding_bars = cls.holding_bars + 1
+
+        ratio = cls.pending_ratio
+        if cls.last_cu > 0 and cls.last_ag > 0:
+            cls.pending_ratio = cls.last_cu / cls.last_ag
+        if ratio <= 0:
+            return None
+
+        cls.ratios.append(ratio)
+        if len(cls.ratios) > 2000:
+            cls.ratios.pop(0)
+        if len(cls.ratios) <= cls.lookback:
+            return None
+
+        momentum = (ratio / cls.ratios[-cls.lookback - 1]) - 1.0
+        if momentum > cls.entry_threshold:
+            cls.positive_count = cls.positive_count + 1
+        else:
+            cls.positive_count = 0
+        if momentum < cls.exit_threshold:
+            cls.negative_count = cls.negative_count + 1
+        else:
+            cls.negative_count = 0
+
+        if not cls.invested and cls.positive_count >= 3:
+            cls.invested = True
+            cls.holding_bars = 0
+            return {
+                "side": "BUY",
+                "quantity": 1,
+                "reason": "lagged_ratio_momentum_three_bar_confirmed_min_hold",
+                "price": bar.close,
+                "ratio": ratio,
+                "ratio_momentum": momentum,
+            }
+        if (
+            cls.invested
+            and cls.holding_bars >= cls.min_hold_bars
+            and cls.negative_count >= 3
+        ):
+            held_bars = cls.holding_bars
+            cls.invested = False
+            cls.holding_bars = 0
+            return {
+                "side": "SELL",
+                "quantity": 1,
+                "reason": "lagged_ratio_momentum_three_bar_exit_after_min_hold",
+                "price": bar.close,
+                "ratio": ratio,
+                "ratio_momentum": momentum,
+                "holding_bars": held_bars,
+            }
+        return None
+'''
+
+
 SLOW_RATIO_REGIME_SOURCE = '''
 class Signal:
     name = "CU AG Slow Ratio Regime Predicts SC"
@@ -394,6 +483,7 @@ EXPERIMENTS = {
     "ratio_plus_oil_trend": (RATIO_WITH_OIL_TREND_SOURCE, SYMBOLS),
     "ratio_three_bar_confirm": (RATIO_WITH_CONFIRMATION_SOURCE, SYMBOLS),
     "lagged_ratio_three_bar_confirm": (LAGGED_RATIO_WITH_CONFIRMATION_SOURCE, SYMBOLS),
+    "lagged_ratio_min_hold": (LAGGED_RATIO_WITH_MIN_HOLD_SOURCE, SYMBOLS),
     "slow_ratio_regime": (SLOW_RATIO_REGIME_SOURCE, SYMBOLS),
 }
 

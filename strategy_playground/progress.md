@@ -40,6 +40,7 @@ uv run python strategy_playground/research_cu_ag_sc.py --base-url http://localho
 | CU/AG ratio with 3-bar confirmation | `next_bar` | 1,063,000 | 6.30% | -13.90% | 0.291 | 1,096 | Revise |
 | Slow CU/AG ratio regime | `next_bar` | 918,150 | -8.18% | -21.03% | -0.244 | 259 | Discard |
 | Lagged CU/AG ratio with 3-bar confirmation | `next_bar` | 1,078,260 | 7.83% | -14.51% | 0.348 | 1,096 | Revise |
+| Lagged CU/AG ratio + 120-bar minimum hold | `next_bar` | 1,085,920 | 8.59% | -14.18% | 0.352 | 924 | Keep |
 
 ### Timing Validation
 
@@ -55,17 +56,76 @@ The 3-bar confirmed ratio signal was rerun with both fill modes:
 
 ### Current Read
 
-The lagged 3-bar confirmed version is the best candidate so far, but it is not production-ready:
+The 120-bar minimum-hold variant is the best candidate so far, but it is not production-ready:
 
 - It still underperforms buy-and-hold SC on total return.
 - It reduces drawdown versus buy-and-hold, but only modestly.
-- Turnover remains very high at roughly `562x` notional over the test window.
+- The 120-bar minimum hold reduced turnover from roughly `562x` to `472x` notional over the test window, but turnover remains very high.
 - Results still assume zero commission and no slippage.
 
-### Next Iteration
+## Iteration 7
 
-Focus on churn reduction before optimizing return:
+### Hypothesis
 
-- Add a minimum holding period or wider exit band.
+Adding a minimum holding period to the lagged 3-bar confirmed CU/AG ratio signal should reduce rapid exit/re-entry churn while preserving the core inter-market timing edge.
+
+Expected effect: fewer trades, lower turnover, and similar or slightly better drawdown if short-lived ratio reversals are mostly noise.
+
+Expected risk: delayed exits can keep losing positions open longer and increase average loss or drawdown.
+
+Files/modules likely affected: `strategy_playground/research_cu_ag_sc.py`, `strategy_playground/progress.md`.
+
+Metrics to compare: final equity, total return, max drawdown, daily Sharpe, trades, win rate, average win/loss, exposure, turnover.
+
+### Change
+
+Added `lagged_ratio_min_hold`, preserving the lagged 240-bar ratio momentum, 0.004 entry threshold, 0.0 exit threshold, and 3-bar confirmation. The only behavioral change is `min_hold_bars = 120`, which blocks exits until the position has been held for at least 120 SC bars.
+
+### Backtest Setup
+
+- Data source: `adjusted_main_contract`
+- Symbols: `CU9999.XSGE`, `AG9999.XSGE`, `SC9999.XINE`
+- Date range: `20240101` to `20260422`
+- Initial capital: `1,000,000`
+- Costs/slippage: `0` commission and no slippage
+- Baseline version: `lagged_ratio_three_bar_confirm`
+- Execution timing: `next_bar`
+- API base URL used in this run: `http://127.0.0.1:5001`
+
+### Results
+
+| Metric | Baseline | Candidate | Delta |
+|---|---:|---:|---:|
+| Final equity | 1,078,260 | 1,085,920 | +7,660 |
+| Total return | 7.83% | 8.59% | +0.77 pp |
+| Max drawdown | -14.51% | -14.18% | +0.32 pp |
+| Daily Sharpe | 0.348 | 0.352 | +0.004 |
+| Trades | 1,096 | 924 | -172 |
+| Closed trades | 548 | 462 | -86 |
+| Win rate | 51.64% | 54.76% | +3.12 pp |
+| Average win | 4,291 | 4,934 | +643 |
+| Average loss | -4,287 | -5,562 | -1,275 |
+| Exposure | 34.34% | 39.05% | +4.72 pp |
+| Turnover | 562.44x | 471.92x | -90.52x |
+
+### Diagnostics
+
+- Lookahead/data leakage: candidate keeps the existing one-SC-bar lag for CU/AG ratio observations and uses `next_bar` fills.
+- Trade count: improved but still high at 924 fills and 462 completed round trips.
+- Regime dependence: not separately validated in this iteration; all metrics use the full `20240101` to `20260422` sample.
+- Runtime issues: none from the backtest API; diagnostics returned `[]`.
+- Suspicious behavior: no empty-signal or duplicate-signal diagnostics. The average loss worsened materially, which is consistent with delayed exits and needs cost/tail-risk validation before production use.
+
+### Decision
+
+KEEP
+
+Reason: the minimum hold reduced churn by 15.7%, reduced turnover by about 16.1%, and improved final equity, drawdown, Sharpe, and win rate without adding complex logic. The worsened average loss keeps this from being a final version.
+
+### Next Step
+
+Validate whether the kept candidate survives realistic execution assumptions:
+
+- Add commission/slippage assumptions or a per-trade cost stress test.
 - Re-run through the Flask API with `execution_timing="next_bar"`.
-- Add realistic transaction costs/slippage once the trade count is reasonable.
+- If costs erase the edge, test a stronger churn filter such as a wider exit band instead of extending the hold period further.
