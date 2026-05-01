@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -12,6 +13,8 @@ from cep.core.events import BarEvent
 DATA_PROVIDER_DIR = Path(__file__).parent
 PROJECT_ROOT = DATA_PROVIDER_DIR.parent
 DEFAULT_SOURCE_DIR = PROJECT_ROOT / "adjusted_main_contract"
+CSV_CACHE_SIZE = 5
+_ADJUSTED_MAIN_CONTRACT_BAR_CACHE: OrderedDict[Path, tuple[BarEvent, ...]] = OrderedDict()
 
 
 def list_adjusted_main_contract_symbols(
@@ -44,28 +47,11 @@ def fetch_adjusted_main_contract_bars(
 
     start_ts = _normalize_datetime_boundary(start_date, is_end=False)
     end_ts = _normalize_datetime_boundary(end_date, is_end=True)
-    bars: list[BarEvent] = []
-
-    with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            bar_time = datetime.strptime(row["date"].strip(), "%Y-%m-%d %H:%M:%S")
-            if bar_time < start_ts or bar_time > end_ts:
-                continue
-            bars.append(
-                BarEvent(
-                    symbol=normalized_symbol,
-                    freq="1m",
-                    open=float(row["open"]),
-                    high=float(row["high"]),
-                    low=float(row["low"]),
-                    close=float(row["close"]),
-                    volume=int(float(row["volume"])),
-                    turnover=float(row["money"]),
-                    bar_time=bar_time,
-                    timestamp=bar_time,
-                )
-            )
+    bars = [
+        bar
+        for bar in _load_adjusted_main_contract_csv(csv_path, normalized_symbol)
+        if start_ts <= bar.bar_time <= end_ts
+    ]
 
     if not bars:
         raise ValueError(
@@ -120,3 +106,40 @@ def _normalize_datetime_boundary(value: str, is_end: bool) -> datetime:
     except ValueError as exc:
         raise ValueError(f"无法解析日期时间: {value}") from exc
     return dt
+
+
+def _load_adjusted_main_contract_csv(
+    csv_path: Path,
+    normalized_symbol: str,
+) -> tuple[BarEvent, ...]:
+    cached = _ADJUSTED_MAIN_CONTRACT_BAR_CACHE.get(csv_path)
+    if cached is not None:
+        _ADJUSTED_MAIN_CONTRACT_BAR_CACHE.move_to_end(csv_path)
+        return cached
+
+    bars: list[BarEvent] = []
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            bar_time = datetime.strptime(row["date"].strip(), "%Y-%m-%d %H:%M:%S")
+            bars.append(
+                BarEvent(
+                    symbol=normalized_symbol,
+                    freq="1m",
+                    open=float(row["open"]),
+                    high=float(row["high"]),
+                    low=float(row["low"]),
+                    close=float(row["close"]),
+                    volume=int(float(row["volume"])),
+                    turnover=float(row["money"]),
+                    bar_time=bar_time,
+                    timestamp=bar_time,
+                )
+            )
+
+    cached_bars = tuple(bars)
+    _ADJUSTED_MAIN_CONTRACT_BAR_CACHE[csv_path] = cached_bars
+    _ADJUSTED_MAIN_CONTRACT_BAR_CACHE.move_to_end(csv_path)
+    while len(_ADJUSTED_MAIN_CONTRACT_BAR_CACHE) > CSV_CACHE_SIZE:
+        _ADJUSTED_MAIN_CONTRACT_BAR_CACHE.popitem(last=False)
+    return cached_bars
