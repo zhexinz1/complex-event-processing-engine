@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [
     "anthropic>=0.50.0",
-    "openctp-ctp==6.7.10.0",
+    "openctp-ctp==6.7.10.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "pytest>=8.4.2",
     "pyright>=1.1.408",
     "ruff>=0.15.9",

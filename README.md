@@ -59,7 +59,7 @@
 requires-python = ">=3.13"
 dependencies = [
     "anthropic>=0.50.0",       # Claude API (NLP 规则解析)
-    "openctp-ctp==6.7.10.0",   # CTP 行情 SDK (仿真)
+    "openctp-ctp==6.7.10.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",   # 仅 Linux x86_64 安装
     "flask>=3.0.0",            # Web 控制台
     "pymysql>=1.1.0",          # MySQL 驱动
     "redis>=7.4.0",            # Redis 跨进程桥接
@@ -79,6 +79,8 @@ uv sync
 ```
 
 > **PyPI 镜像**：项目已配置清华镜像 `https://pypi.tuna.tsinghua.edu.cn/simple`（见 `pyproject.toml`）。
+>
+> **Apple Silicon / ARM 开发说明**：`openctp-ctp` 现在仅在 `Linux x86_64` 环境安装。Mac ARM 上执行 `uv sync` 时会自动跳过该依赖，因此可以继续开发回测和前端相关功能；但 CTP 实时行情能力在该环境下不可用。
 
 ---
 
@@ -161,6 +163,8 @@ openctp-ctp==6.7.10.0
 ```
 
 这是 [OpenCTP](https://github.com/openctp) 社区维护的 CTP Python 封装，提供与上期技术官方 CTP SDK 兼容的 API。
+
+项目代码已对该依赖做运行时隔离：当 `openctp-ctp` 缺失或底层 `.so` 无法加载时，回测、前端和其他非 CTP 模块仍可正常导入；只有 `CTPMarketGateway` 连接实时行情会被禁用并输出日志。
 
 ### ⚠️ 关键：底层 .so 文件替换
 
