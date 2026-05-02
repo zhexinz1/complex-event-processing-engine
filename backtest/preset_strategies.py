@@ -404,7 +404,7 @@ def run_pbx_ma_backtest(
     pbx_period: int = 4,
     ma_period: int = 10,
     bar_freq: str = "1m",
-    write_trade_log: bool = True,
+    write_trade_log: bool = False,
 ) -> BacktestResult:
     """Run PBX/MA strategy on caller-provided bars."""
     engine = BacktestEngine(
@@ -434,7 +434,7 @@ def run_cross_section_momentum_backtest(
     quantity: float = 100.0,
     lookback: int = 5,
     bar_freq: str = "1m",
-    write_trade_log: bool = True,
+    write_trade_log: bool = False,
 ) -> BacktestResult:
     """Run a cross-sectional momentum rotation strategy."""
     engine = BacktestEngine(
@@ -463,7 +463,7 @@ def run_preset_backtest(
     symbols: Any = None,
     start_date: str | None = None,
     end_date: str | None = None,
-    write_trade_log: bool = True,
+    write_trade_log: bool = False,
 ) -> BacktestResult:
     """Run a supported preset strategy against its preset dataset."""
     if strategy_id not in PRESET_STRATEGIES:
@@ -537,12 +537,22 @@ def run_preset_backtest(
 
 def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
     """Convert BacktestResult into a JSON-ready response payload."""
+    initial_cash = float(getattr(result, "initial_cash", 1_000_000.0))
+    unrealized_pnl = float(
+        getattr(
+            result,
+            "unrealized_pnl",
+            result.final_equity - initial_cash - result.realized_pnl,
+        )
+    )
     return {
         "market_events_processed": result.market_events_processed,
+        "initial_cash": round(initial_cash, 2),
         "final_cash": round(result.final_cash, 2),
         "final_market_value": round(result.final_market_value, 2),
         "final_equity": round(result.final_equity, 2),
         "realized_pnl": round(result.realized_pnl, 2),
+        "unrealized_pnl": round(unrealized_pnl, 2),
         "trade_log_path": result.trade_log_path,
         "signals": [
             {

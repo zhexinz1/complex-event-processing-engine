@@ -20,6 +20,7 @@ Endpoints:
 
     # 回测
     GET  /api/backtests/presets 获取可回测预设策略列表
+    GET  /api/backtests/history 获取历史回测日志
     POST /api/backtests/run     运行预设策略回测
     GET  /api/stocks/search     搜索本地 A 股股票索引
     GET  /                     前端大屏页面
@@ -43,6 +44,7 @@ from backtest.preset_strategies import (
     run_preset_backtest,
     serialize_backtest_result,
 )
+from backtest.trade_log import list_backtest_trade_logs
 from data_provider import search_stocks
 
 from database.config import (
@@ -1683,6 +1685,21 @@ def create_app() -> Flask:
     @app.route("/api/backtests/presets", methods=["GET"])
     def get_backtest_presets():
         return jsonify({"success": True, "data": list(PRESET_STRATEGIES.values())})
+
+    @app.route("/api/backtests/history", methods=["GET"])
+    def get_backtest_history():
+        raw_limit = request.args.get("limit", "100")
+        try:
+            limit = max(1, min(int(raw_limit), 500))
+        except ValueError:
+            return jsonify({"success": False, "message": "limit 必须是整数", "data": []}), 400
+
+        try:
+            records = list_backtest_trade_logs(limit=limit)
+        except Exception as e:
+            logger.exception("Backtest history failed: %s", e)
+            return jsonify({"success": False, "message": f"加载回测历史失败: {e}", "data": []}), 500
+        return jsonify({"success": True, "data": records, "total": len(records)})
 
     # -----------------------------------------------------------------------
     # GET /api/stocks/search — 搜索本地 A 股股票索引

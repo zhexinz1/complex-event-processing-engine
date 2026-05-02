@@ -58,10 +58,10 @@ frontend/
 - `components/AllocationTable.vue`: Renders allocation rows and row actions.
 - `components/AllocationModal.vue`: Renders the create/update allocation form.
 - `components/AssetDictionaryModal.vue`: Renders the allowed-asset dictionary editor.
-- `components/BacktestPanel.vue`: Renders preset selection, Tushare/main-contract inputs, metrics, chart, and signal table.
+- `components/BacktestPanel.vue`: Renders preset selection, Tushare/main-contract inputs, run results, and the local JSON backtest history tab.
 - `components/ToastNotice.vue`: Renders request feedback.
 - `composables/useAllocations.ts`: Loads and edits target allocation rows, products, allowed assets, and allocation form state.
-- `composables/useBacktest.ts`: Loads preset strategies, runs backtests, manages Tushare stock autocomplete, and shapes chart data.
+- `composables/useBacktest.ts`: Loads preset strategies and persisted history, runs backtests, manages Tushare stock autocomplete, and shapes chart data.
 - `composables/useClock.ts`: Maintains the header clock.
 - `composables/useToast.ts`: Provides success/error notifications.
 - `types.ts`: Defines the API responses and UI data models used by the modules above.
@@ -71,7 +71,7 @@ frontend/
 - **Target allocation table**: Filters by date/product, displays weights with progress bars, and supports edit/delete actions.
 - **Allocation modal**: Handles create/update flow, required-field validation, and weight-total warnings.
 - **Asset dictionary modal**: Maintains the allowed asset list used by the allocation form.
-- **Backtest panel**: Runs preset strategies on mock, Tushare, or local adjusted-main-contract CSV data, displays metrics, signal rows, and a compact equity chart.
+- **Backtest panel**: Runs preset strategies on mock, Tushare, or local adjusted-main-contract CSV data, displays metrics, signal rows, a compact equity chart, and historical logs from `backtest/logs/*.json`.
 - **Stock autocomplete**: Searches the local A-share stock index and normalizes selected symbols to Tushare `ts_code`.
 - **Status and toast feedback**: Shows DB connection state and request outcomes without blocking the page.
 

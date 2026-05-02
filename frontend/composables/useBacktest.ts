@@ -1,6 +1,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type {
   BacktestPreset,
+  BacktestHistoryItem,
   BacktestRequest,
   BacktestResult,
   CepApiClient,
@@ -28,9 +29,12 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
   const backtestStartDate = ref('2024-01-01');
   const backtestEndDate = ref(new Date().toISOString().slice(0, 10));
   const backtestResult = ref<BacktestResult | null>(null);
+  const backtestHistory = ref<BacktestHistoryItem[]>([]);
+  const selectedHistoryId = ref('');
   const stockSearchResults = ref<StockSearchResult[]>([]);
   const stockSearchOpen = ref(false);
   const backtestLoading = ref(false);
+  const backtestHistoryLoading = ref(false);
   const stockSearchLoading = ref(false);
 
   let stockSearchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -54,6 +58,10 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
     if (points.length <= 48) return points;
     const step = Math.ceil(points.length / 48);
     return points.filter((_, index) => index % step === 0 || index === points.length - 1);
+  });
+
+  const selectedHistory = computed(() => {
+    return backtestHistory.value.find((item) => item.id === selectedHistoryId.value) || backtestHistory.value[0] || null;
   });
 
   function equityBarHeight(equity: number) {
@@ -80,6 +88,29 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       }
     } catch (error: unknown) {
       showToast(`加载回测策略失败: ${errorMessage(error)}`, 'error');
+    }
+  }
+
+  async function fetchBacktestHistory() {
+    if (!enabled) return;
+    backtestHistoryLoading.value = true;
+    try {
+      const json = await api.fetchBacktestHistory(100);
+      if (json.success) {
+        backtestHistory.value = json.data || [];
+        if (!selectedHistoryId.value && backtestHistory.value.length) {
+          selectedHistoryId.value = backtestHistory.value[0].id;
+        }
+        if (selectedHistoryId.value && !backtestHistory.value.some((item) => item.id === selectedHistoryId.value)) {
+          selectedHistoryId.value = backtestHistory.value[0]?.id || '';
+        }
+      } else {
+        showToast(json.message || '加载回测历史失败', 'error');
+      }
+    } catch (error: unknown) {
+      showToast(`加载回测历史失败: ${errorMessage(error)}`, 'error');
+    } finally {
+      backtestHistoryLoading.value = false;
     }
   }
 
@@ -115,6 +146,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       const json = await api.runBacktest(payload);
       if (json.success) {
         backtestResult.value = json.data ?? null;
+        fetchBacktestHistory();
         showToast('回测完成');
       } else {
         showToast(json.message || '回测失败', 'error');
@@ -214,6 +246,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
 
     onMounted(() => {
       fetchBacktestPresets();
+      fetchBacktestHistory();
     });
   }
 
@@ -229,14 +262,19 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
     backtestStartDate,
     backtestEndDate,
     backtestResult,
+    backtestHistory,
+    selectedHistoryId,
     stockSearchResults,
     stockSearchOpen,
     backtestLoading,
+    backtestHistoryLoading,
     stockSearchLoading,
     selectedPreset,
     selectedPresetParameters,
+    selectedHistory,
     sampledEquityCurve,
     fetchBacktestPresets,
+    fetchBacktestHistory,
     runBacktest,
     searchStocks,
     selectStock,

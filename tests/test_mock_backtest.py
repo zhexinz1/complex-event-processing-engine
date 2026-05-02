@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from backtest import BacktestEngine
+from backtest.trade_log import write_backtest_trade_log
 from cep.core.events import BarEvent, OrderStatus, OrderSide, SignalType
 from cep.engine.ast_engine import Operator, build_and, build_comparison
 
@@ -36,7 +37,7 @@ def _make_bars(symbol: str, closes: list[float]) -> list[BarEvent]:
     return bars
 
 
-def test_backtest_engine_processes_market_signal_order_and_trade_flow() -> None:
+def test_backtest_engine_processes_market_signal_order_and_trade_flow(monkeypatch, tmp_path) -> None:
     symbol = "600519.SH"
 
     # 这组 close 序列满足：
@@ -59,6 +60,11 @@ def test_backtest_engine_processes_market_signal_order_and_trade_flow() -> None:
         initial_cash=1_000_000.0,
         default_order_quantity=2.0,
         execution_timing="current_bar",
+        write_trade_log=True,
+    )
+    monkeypatch.setattr(
+        "backtest.engine.write_backtest_trade_log",
+        lambda result: write_backtest_trade_log(result, log_dir=tmp_path),
     )
     engine.register_ast_rule(
         symbol=symbol,
@@ -107,6 +113,8 @@ def test_backtest_engine_processes_market_signal_order_and_trade_flow() -> None:
     assert log_path.exists()
     payload = json.loads(log_path.read_text(encoding="utf-8"))
     assert payload["market_events_processed"] == len(bars)
+    assert payload["initial_cash"] == 1_000_000.0
+    assert "unrealized_pnl" in payload
     assert payload["trades"]
 
 
@@ -156,6 +164,9 @@ def test_backtest_engine_executes_trade_on_next_bar_open_by_default() -> None:
     assert result.trades[0].price == 100.0
     assert result.trades[0].timestamp == bars[1].timestamp
     assert result.positions[symbol].quantity == 1.0
+    assert result.initial_cash == 1_000_000.0
+    assert result.realized_pnl == 0.0
+    assert result.unrealized_pnl == 20.0
     assert result.final_equity == 1_000_020.0
 
 
@@ -288,6 +299,23 @@ def test_backtest_engine_can_skip_trade_log(monkeypatch) -> None:
     monkeypatch.setattr("backtest.engine.write_backtest_trade_log", fail_if_called)
 
     engine = BacktestEngine(initial_cash=1_000_000.0, write_trade_log=False)
+    engine.ingest_bars(bars, assume_sorted=True)
+    result = engine.run()
+
+    assert result.market_events_processed == len(bars)
+    assert result.trade_log_path == ""
+
+
+def test_backtest_engine_does_not_write_trade_log_by_default(monkeypatch) -> None:
+    symbol = "600519.SH"
+    bars = _make_bars(symbol, [100.0, 101.0])
+
+    def fail_if_called(_result) -> None:
+        raise AssertionError("trade log writer should be opt-in outside the API")
+
+    monkeypatch.setattr("backtest.engine.write_backtest_trade_log", fail_if_called)
+
+    engine = BacktestEngine(initial_cash=1_000_000.0)
     engine.ingest_bars(bars, assume_sorted=True)
     result = engine.run()
 

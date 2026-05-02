@@ -3,6 +3,7 @@ import type {
   Asset,
   AllocationRow,
   BacktestRequest,
+  BacktestHistoryItem,
   BacktestResult,
   CepApiClient,
   SaveWeightPayload,
@@ -64,6 +65,11 @@ export const CepApi: CepApiClient = {
 
   fetchBacktestPresets(): Promise<ApiResponse<BacktestPreset[]>> {
     return this.requestJson('/api/backtests/presets');
+  },
+
+  fetchBacktestHistory(limit = 100): Promise<ApiResponse<BacktestHistoryItem[]>> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return this.requestJson(`/api/backtests/history?${params.toString()}`);
   },
 
   searchStocks(keyword: string, limit = 20): Promise<ApiResponse<StockSearchResult[]>> {

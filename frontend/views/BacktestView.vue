@@ -8,14 +8,19 @@
     v-model:stock-search-open="stockSearchOpen"
     :backtest-presets="backtestPresets"
     :backtest-result="backtestResult"
+    :backtest-history="backtestHistory"
+    :selected-history="selectedHistory"
     :stock-search-results="stockSearchResults"
     :backtest-loading="backtestLoading"
+    :backtest-history-loading="backtestHistoryLoading"
     :stock-search-loading="stockSearchLoading"
     :selected-preset="selectedPreset"
     :selected-preset-parameters="selectedPresetParameters"
     :sampled-equity-curve="sampledEquityCurve"
     :equity-bar-height="equityBarHeight"
     @run="runBacktest"
+    @refresh-history="fetchBacktestHistory"
+    @select-history="selectedHistoryId = $event"
     @search-stocks="searchStocks()"
     @select-stock="selectStock"
     @close-stock-search="closeStockSearchSoon"
@@ -37,14 +42,19 @@ const {
   backtestStartDate,
   backtestEndDate,
   backtestResult,
+  backtestHistory,
+  selectedHistoryId,
   stockSearchResults,
   stockSearchOpen,
   backtestLoading,
+  backtestHistoryLoading,
   stockSearchLoading,
   selectedPreset,
   selectedPresetParameters,
+  selectedHistory,
   sampledEquityCurve,
   runBacktest,
+  fetchBacktestHistory,
   searchStocks,
   selectStock,
   closeStockSearchSoon,

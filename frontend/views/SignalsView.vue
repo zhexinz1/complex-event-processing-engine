@@ -53,7 +53,7 @@
               :class="{ active: tab.key === activeTabKey }"
               @click="setActiveTab(tab.key)"
             >
-              <span class="editor-tab-label">{{ tab.draft.name || '未命名信号' }}</span>
+              <span class="editor-tab-label">{{ signalDisplayName(tab.draft) }}</span>
               <span
                 v-if="tabs.length > 1"
                 class="editor-tab-close"
@@ -65,10 +65,6 @@
           </div>
 
           <div v-if="activeTab" class="form-grid">
-            <label>
-              <span>名称</span>
-              <input v-model="activeTab.draft.name" class="inp" />
-            </label>
             <label>
               <span>创建人</span>
               <input v-model="activeTab.draft.created_by" class="inp" />
@@ -121,14 +117,41 @@
             </label>
           </div>
 
+          <div
+            v-if="activeTab?.backtestMessage"
+            class="backtest-message"
+            :class="{
+              'backtest-message-success': activeTab.backtestStatus === 'success',
+              'backtest-message-error': activeTab.backtestStatus === 'error',
+            }"
+          >
+            {{ activeTab.backtestMessage }}
+          </div>
+
           <div v-if="activeTab?.backtestResult" class="metric-grid signal-metrics">
             <div class="stat-block">
               <span class="stat-label">最终权益</span>
               <span class="stat-value">{{ activeTab.backtestResult.final_equity.toFixed(2) }}</span>
             </div>
             <div class="stat-block">
-              <span class="stat-label">已实现盈亏</span>
+              <span class="stat-label">总盈亏</span>
+              <span class="stat-value">{{ totalPnl(activeTab.backtestResult).toFixed(2) }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">已实现盈亏（平仓）</span>
               <span class="stat-value">{{ activeTab.backtestResult.realized_pnl.toFixed(2) }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">未实现盈亏（持仓）</span>
+              <span class="stat-value">{{ unrealizedPnl(activeTab.backtestResult).toFixed(2) }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">期末现金</span>
+              <span class="stat-value">{{ metricValue(activeTab.backtestResult.final_cash).toFixed(2) }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">持仓市值</span>
+              <span class="stat-value">{{ metricValue(activeTab.backtestResult.final_market_value).toFixed(2) }}</span>
             </div>
             <div class="stat-block">
               <span class="stat-label">信号数</span>
@@ -137,6 +160,10 @@
             <div class="stat-block">
               <span class="stat-label">成交数</span>
               <span class="stat-value">{{ activeTab.backtestResult.trades.length }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">未平仓</span>
+              <span class="stat-value">{{ openPositionCount(activeTab.backtestResult) }}</span>
             </div>
           </div>
 
@@ -236,6 +263,8 @@ interface SignalEditorTab {
   draft: UserSignalDefinition;
   diagnostics: SignalDiagnostic[];
   backtestResult: (BacktestResult & { diagnostics?: SignalDiagnostic[] }) | null;
+  backtestStatus: 'idle' | 'running' | 'success' | 'error';
+  backtestMessage: string;
 }
 
 const tabs = ref<SignalEditorTab[]>([]);
@@ -270,6 +299,8 @@ function createDraftTab(signal?: UserSignalDefinition): SignalEditorTab {
     draft,
     diagnostics: [],
     backtestResult: null,
+    backtestStatus: 'idle',
+    backtestMessage: '',
   };
 }
 
@@ -293,8 +324,28 @@ function equityBarHeight(equity: number) {
   return 12 + ((equity - min) / (max - min)) * 88;
 }
 
+function metricValue(value: number | null | undefined) {
+  return Number(value || 0);
+}
+
+function totalPnl(result: BacktestResult) {
+  return result.final_equity - metricValue(result.initial_cash ?? 1_000_000);
+}
+
+function unrealizedPnl(result: BacktestResult) {
+  if (result.unrealized_pnl !== undefined) return result.unrealized_pnl;
+  return totalPnl(result) - result.realized_pnl;
+}
+
+function openPositionCount(result: BacktestResult) {
+  return (result.positions || []).filter((position) => position.quantity !== 0).length;
+}
+
 function deriveSignalConfig(draft: UserSignalDefinition) {
   const source = draft.source_code;
+
+  const nameMatch = source.match(/name\s*=\s*["']([^"'\\]+)["']/);
+  const name = nameMatch?.[1]?.trim() || draft.name;
 
   const symbolsMatch = source.match(/symbols\s*=\s*\[(.*?)\]/s);
   const symbols = symbolsMatch
@@ -305,9 +356,14 @@ function deriveSignalConfig(draft: UserSignalDefinition) {
   const barFreq = barFreqMatch?.[1]?.trim() || draft.bar_freq;
 
   return {
+    name,
     symbols,
     bar_freq: barFreq,
   };
+}
+
+function signalDisplayName(draft: UserSignalDefinition) {
+  return deriveSignalConfig(draft).name || '未命名信号';
 }
 
 function newSignal() {
@@ -390,6 +446,7 @@ async function saveSignal() {
     const payload = {
       ...activeTab.value.draft,
       ...derivedConfig,
+      name: derivedConfig.name,
       symbols: [...derivedConfig.symbols],
     };
     const json = activeTab.value.draft.id
@@ -432,26 +489,38 @@ async function toggleSignal() {
 
 async function runBacktest() {
   if (!activeTab.value) return;
+  const tab = activeTab.value;
   busy.value = true;
+  tab.backtestStatus = 'running';
+  tab.backtestMessage = '回测运行中...';
+  tab.backtestResult = null;
   try {
-    const derivedConfig = deriveSignalConfig(activeTab.value.draft);
+    const derivedConfig = deriveSignalConfig(tab.draft);
     const json = await CepApi.runUserSignalBacktest({
-      signal_id: activeTab.value.draft.id,
-      source_code: activeTab.value.draft.id ? undefined : activeTab.value.draft.source_code,
+      signal_id: tab.draft.id,
+      source_code: tab.draft.source_code,
       data_source: backtestDataSource.value,
       symbols: derivedConfig.symbols,
       start_date: toTushareDate(backtestStartDate.value),
       end_date: toTushareDate(backtestEndDate.value),
     });
     if (json.success) {
-      activeTab.value.backtestResult = json.data || null;
-      activeTab.value.diagnostics = json.data?.diagnostics || [];
-      showToast('回测完成');
+      tab.backtestResult = json.data || null;
+      tab.diagnostics = json.data?.diagnostics || [];
+      tab.backtestStatus = 'success';
+      tab.backtestMessage = json.data
+        ? `回测完成：${json.data.signals.length} 个信号，${json.data.trades.length} 笔成交`
+        : '回测完成，但后端没有返回结果数据';
+      showToast(json.message || '回测完成');
     } else {
-      showToast(json.message || '回测失败', 'error');
+      tab.backtestStatus = 'error';
+      tab.backtestMessage = json.message || '回测失败';
+      showToast(tab.backtestMessage, 'error');
     }
   } catch (error: unknown) {
-    showToast(`回测失败: ${errorMessage(error)}`, 'error');
+    tab.backtestStatus = 'error';
+    tab.backtestMessage = `回测失败: ${errorMessage(error)}`;
+    showToast(tab.backtestMessage, 'error');
   } finally {
     busy.value = false;
   }
@@ -655,6 +724,28 @@ label span {
 
 .signal-metrics {
   margin: 16px 0;
+}
+
+.backtest-message {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-size: 13px;
+  margin-top: -4px;
+  padding: 8px 10px;
+}
+
+.backtest-message-success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.backtest-message-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
 }
 
 .table-wrap {

@@ -128,6 +128,7 @@ def test_user_signal_backtest_supports_adjusted_main_contract(monkeypatch):
     data = run_user_signal_backtest(
         source_code=VALID_SIGNAL.replace('symbols = ["TEST"]', 'symbols = ["AU9999.XSGE"]'),
         data_source="adjusted_main_contract",
+        symbols=["AU9999.XSGE"],
         start_date="20250601",
         end_date="20250630",
     )

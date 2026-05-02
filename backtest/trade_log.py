@@ -6,11 +6,93 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
+from typing import Any
 
 from .models import BacktestResult
 
 BACKTEST_DIR = Path(__file__).parent
 DEFAULT_LOG_DIR = BACKTEST_DIR / "logs"
+
+
+def _log_timestamp(path: Path) -> str:
+    prefix = "backtest-"
+    stem = path.stem
+    if stem.startswith(prefix):
+        raw_timestamp = stem[len(prefix):].split("-", 1)[0]
+        try:
+            return datetime.strptime(raw_timestamp, "%Y%m%dT%H%M%S").replace(tzinfo=UTC).isoformat()
+        except ValueError:
+            pass
+    return datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat()
+
+
+def _summarize_symbols(payload: dict[str, Any]) -> list[str]:
+    symbols: set[str] = set()
+    for key in ("signals", "orders", "trades", "positions"):
+        rows = payload.get(key, [])
+        if isinstance(rows, list):
+            symbols.update(str(row.get("symbol")) for row in rows if isinstance(row, dict) and row.get("symbol"))
+    return sorted(symbols)
+
+
+def _first_last_timestamp(payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    timestamps: list[str] = []
+    for key in ("equity_curve", "signals", "orders", "trades"):
+        rows = payload.get(key, [])
+        if isinstance(rows, list):
+            timestamps.extend(
+                str(row["timestamp"])
+                for row in rows
+                if isinstance(row, dict) and isinstance(row.get("timestamp"), str)
+            )
+    if not timestamps:
+        return None, None
+    return min(timestamps), max(timestamps)
+
+
+def list_backtest_trade_logs(log_dir: Path | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    """Read persisted backtest trade logs, newest first."""
+    target_dir = log_dir or DEFAULT_LOG_DIR
+    if not target_dir.exists():
+        return []
+
+    records: list[dict[str, Any]] = []
+    for path in sorted(target_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+        if len(records) >= limit:
+            break
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+
+        first_timestamp, last_timestamp = _first_last_timestamp(payload)
+        records.append(
+            {
+                "id": path.stem,
+                "filename": path.name,
+                "created_at": _log_timestamp(path),
+                "modified_at": datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
+                "path": str(path),
+                "market_events_processed": payload.get("market_events_processed", 0),
+                "initial_cash": payload.get("initial_cash", 0.0),
+                "final_cash": payload.get("final_cash", 0.0),
+                "final_market_value": payload.get("final_market_value", 0.0),
+                "final_equity": payload.get("final_equity", 0.0),
+                "realized_pnl": payload.get("realized_pnl", 0.0),
+                "unrealized_pnl": payload.get("unrealized_pnl", 0.0),
+                "signal_count": len(payload.get("signals", [])) if isinstance(payload.get("signals"), list) else 0,
+                "order_count": len(payload.get("orders", [])) if isinstance(payload.get("orders"), list) else 0,
+                "trade_count": len(payload.get("trades", [])) if isinstance(payload.get("trades"), list) else 0,
+                "position_count": len(payload.get("positions", [])) if isinstance(payload.get("positions"), list) else 0,
+                "symbols": _summarize_symbols(payload),
+                "first_timestamp": first_timestamp,
+                "last_timestamp": last_timestamp,
+                "data": payload,
+            }
+        )
+    return records
 
 
 def write_backtest_trade_log(
@@ -24,10 +106,12 @@ def write_backtest_trade_log(
 
     payload = {
         "market_events_processed": result.market_events_processed,
+        "initial_cash": result.initial_cash,
         "final_cash": result.final_cash,
         "final_market_value": result.final_market_value,
         "final_equity": result.final_equity,
         "realized_pnl": result.realized_pnl,
+        "unrealized_pnl": result.unrealized_pnl,
         "positions": [
             {
                 "symbol": position.symbol,

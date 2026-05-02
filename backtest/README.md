@@ -128,18 +128,24 @@ Runtime entry points that understand this data source:
 
 User-signal backtests also accept `execution_timing="current_bar"` to reproduce the legacy same-bar-close fill behavior when comparing old research runs.
 
-For iterative research runs, both entry points also accept `write_trade_log=False` to skip JSON log persistence under `backtest/logs/`.
+Direct engine and helper calls do not persist JSON logs unless `write_trade_log=True` is passed.
+The Flask backtest APIs opt in by default, and still accept `write_trade_log=False` to skip JSON log persistence under `backtest/logs/`.
 
 ## Trade Logs
 
-Each completed backtest now writes a JSON trade log into `backtest/logs/`.
+Each persisted API backtest writes a JSON trade log into `backtest/logs/`.
 That folder is gitignored so runs stay local to the workspace.
+The frontend history tab reads these local JSON files through `GET /api/backtests/history`.
 
 The log includes:
 
 - summary metrics
+- initial cash, final cash, market value, final equity, realized PnL, and unrealized PnL
 - positions
 - signals
 - orders, including rejected orders
 - trades
 - equity curve
+
+`realized_pnl` only changes when a position is closed or reduced by an opposite-side trade.
+Open-position mark-to-market gains and losses are reported as `unrealized_pnl` and are included in `final_equity`.

@@ -32,6 +32,7 @@ This repository contains a complex event processing system for quantitative trad
 - Make changes in the most specific module that owns the behavior instead of centralizing special cases.
 - If you add or change behavior, update the closest documentation that explains that behavior.
 - Prefer small, consistent changes that fit the existing architecture and naming patterns.
+- Add or update tests. A bug fix should generally come with test coverage that fails before your change and passes afterwards. 100% coverage is not required, but aim for meaningful assertions.
 - Do not duplicate implementation details here; if more explanation is needed, add it near the owning module.
 
 ## Coding Guidelines

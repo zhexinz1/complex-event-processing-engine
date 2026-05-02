@@ -22,7 +22,6 @@ from backtest.preset_strategies import (
     fetch_cross_section_tushare_bars,
     fetch_tushare_daily_bars,
     make_mock_bars,
-    normalize_symbol_group,
     serialize_backtest_result,
 )
 from backtest.broker import ExecutionTiming
@@ -31,10 +30,41 @@ from cep.core.context import DEFAULT_INDICATOR_REGISTRY, LocalContext
 from cep.core.event_bus import EventBus
 from cep.core.events import BarEvent, BaseEvent, OrderSide, SignalEvent, SignalType
 from cep.triggers import BaseTrigger
+from data_provider.tushare_data import normalize_ts_code
 
 from .models import SignalDiagnostic
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_user_signal_symbols(raw_symbols: Any, *, use_tushare_format: bool = True) -> list[str]:
+    """Normalize user-signal symbols while allowing single-symbol strategies."""
+    if raw_symbols is None:
+        return []
+
+    if isinstance(raw_symbols, str):
+        candidates = [part.strip() for part in raw_symbols.split(",")]
+    elif isinstance(raw_symbols, list):
+        candidates = [str(part).strip() for part in raw_symbols]
+    else:
+        raise ValueError("symbols 必须是股票代码数组，或逗号分隔字符串")
+
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        symbol = normalize_ts_code(candidate) if use_tushare_format else candidate.upper()
+        if symbol in seen:
+            continue
+        seen.add(symbol)
+        symbols.append(symbol)
+
+    if not symbols:
+        raise ValueError("用户信号回测至少需要 1 个标的")
+    if len(symbols) > 50:
+        raise ValueError("用户信号回测最多支持 50 个标的")
+    return symbols
 
 ALLOWED_BUILTINS = MappingProxyType(
     {
@@ -377,7 +407,7 @@ def run_user_signal_backtest(
     start_date: str | None = None,
     end_date: str | None = None,
     initial_cash: float = 1_000_000.0,
-    write_trade_log: bool = True,
+    write_trade_log: bool = False,
     execution_timing: ExecutionTiming = "next_bar",
 ) -> dict[str, Any]:
     """Run a user-authored Signal class through BacktestEngine."""
@@ -403,7 +433,7 @@ def run_user_signal_backtest(
     elif data_source == "adjusted_main_contract":
         if not start_date or not end_date:
             raise ValueError("adjusted_main_contract 回测需要 start_date、end_date")
-        run_symbols = normalize_symbol_group(symbols, use_tushare_format=False) if symbols else [symbol.upper() for symbol in signal_symbols]
+        run_symbols = normalize_user_signal_symbols(symbols, use_tushare_format=False) if symbols else [symbol.upper() for symbol in signal_symbols]
         if len(run_symbols) == 1:
             bars = fetch_adjusted_main_contract_bars(run_symbols[0], start_date, end_date)
         else:
@@ -412,7 +442,7 @@ def run_user_signal_backtest(
     elif data_source == "tushare":
         if not start_date or not end_date:
             raise ValueError("Tushare 回测需要 start_date、end_date")
-        run_symbols = normalize_symbol_group(symbols) if symbols else signal_symbols
+        run_symbols = normalize_user_signal_symbols(symbols) if symbols else signal_symbols
         if len(run_symbols) == 1:
             bars = fetch_tushare_daily_bars(ts_code or run_symbols[0], start_date, end_date)
         else:

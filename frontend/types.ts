@@ -89,12 +89,50 @@ export interface BacktestTrade {
   [key: string]: unknown;
 }
 
+export interface BacktestPosition {
+  symbol: string;
+  quantity: number;
+  avg_price: number;
+  realized_pnl: number;
+}
+
 export interface BacktestResult {
+  initial_cash?: number;
+  final_cash?: number;
+  final_market_value?: number;
   final_equity: number;
   realized_pnl: number;
+  unrealized_pnl?: number;
   equity_curve: EquityPoint[];
   signals: BacktestSignal[];
   trades: BacktestTrade[];
+  positions?: BacktestPosition[];
+}
+
+export interface BacktestHistoryItem {
+  id: string;
+  filename: string;
+  created_at: string;
+  modified_at: string;
+  path: string;
+  market_events_processed: number;
+  initial_cash: number;
+  final_cash: number;
+  final_market_value: number;
+  final_equity: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  signal_count: number;
+  order_count: number;
+  trade_count: number;
+  position_count: number;
+  symbols: string[];
+  first_timestamp?: string | null;
+  last_timestamp?: string | null;
+  data: BacktestResult & {
+    orders?: Record<string, unknown>[];
+    positions?: BacktestPosition[];
+  };
 }
 
 export interface StockSearchResult {
@@ -268,6 +306,7 @@ export interface CepApiClient {
   saveWeight(payload: SaveWeightPayload): Promise<ApiResponse>;
   deleteWeight(recordId: number): Promise<ApiResponse>;
   fetchBacktestPresets(): Promise<ApiResponse<BacktestPreset[]>>;
+  fetchBacktestHistory(limit?: number): Promise<ApiResponse<BacktestHistoryItem[]>>;
   searchStocks(keyword: string, limit?: number): Promise<ApiResponse<StockSearchResult[]>>;
   runBacktest(payload: BacktestRequest): Promise<ApiResponse<BacktestResult>>;
   fetchUserSignals(): Promise<ApiResponse<UserSignalDefinition[]>>;

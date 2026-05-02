@@ -31,10 +31,11 @@ class BacktestEngine:
         contract_multipliers: Optional[dict[str, float]] = None,
         default_order_quantity: float = 1.0,
         commission_rate: float = 0.0,
-        write_trade_log: bool = True,
+        write_trade_log: bool = False,
         execution_timing: ExecutionTiming = "next_bar",
     ) -> None:
         execution_timing = _validate_execution_timing(execution_timing)
+        self.initial_cash = initial_cash
         self.event_bus = EventBus()
         self.event_queue = EventQueue()
         self.parser = HistoricalDataParser()
@@ -130,10 +131,12 @@ class BacktestEngine:
             orders=list(self.recorder.orders),
             trades=list(self.recorder.trades),
             snapshots=list(self.recorder.snapshots),
+            initial_cash=self.initial_cash,
             final_cash=self.portfolio.cash,
             final_market_value=self.portfolio.market_value,
             final_equity=self.portfolio.equity,
             realized_pnl=self.portfolio.realized_pnl,
+            unrealized_pnl=self.portfolio.equity - self.initial_cash - self.portfolio.realized_pnl,
             positions=self.portfolio.snapshot_positions(),
         )
         if self.write_trade_log:

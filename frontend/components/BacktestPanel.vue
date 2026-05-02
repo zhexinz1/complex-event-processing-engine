@@ -8,12 +8,27 @@
             选择一个预设策略，使用 mock、Tushare 或主连历史库运行事件驱动回测。
           </p>
         </div>
-        <button class="btn btn-primary" @click="$emit('run')" :disabled="backtestLoading || !selectedStrategyId">
-          {{ backtestLoading ? '回测运行中...' : '运行回测' }}
-        </button>
+        <div style="display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+          <div style="display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:#fff;">
+            <button type="button" class="btn" :class="activePanel === 'run' ? 'btn-primary' : 'btn-default'"
+              style="border-radius:0; border:0; box-shadow:none;" @click="activePanel = 'run'">
+              运行回测
+            </button>
+            <button type="button" class="btn" :class="activePanel === 'history' ? 'btn-primary' : 'btn-default'"
+              style="border-radius:0; border:0; box-shadow:none;" @click="activePanel = 'history'; $emit('refresh-history')">
+              历史记录
+            </button>
+          </div>
+          <button v-if="activePanel === 'run'" class="btn btn-primary" @click="$emit('run')" :disabled="backtestLoading || !selectedStrategyId">
+            {{ backtestLoading ? '回测运行中...' : '运行回测' }}
+          </button>
+          <button v-else class="btn btn-default" @click="$emit('refresh-history')" :disabled="backtestHistoryLoading">
+            {{ backtestHistoryLoading ? '刷新中...' : '刷新' }}
+          </button>
+        </div>
       </div>
 
-      <div class="backtest-grid">
+      <div v-if="activePanel === 'run'" class="backtest-grid">
         <div>
           <label
             style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">预设策略</label>
@@ -179,12 +194,111 @@
           </div>
         </div>
       </div>
+
+      <div v-else class="backtest-history-grid" style="margin-top:24px;">
+        <div style="overflow-x:auto; border:1px solid var(--border); border-radius:8px;">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>标的</th>
+                <th>最终权益</th>
+                <th>成交</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in backtestHistory" :key="item.id" style="cursor:pointer;"
+                :style="{ background: selectedHistory?.id === item.id ? '#eff6ff' : undefined }"
+                @click="$emit('select-history', item.id)">
+                <td>
+                  <div style="font-weight:600;">{{ formatDateTime(item.created_at) }}</div>
+                  <div style="font-size:12px; color:var(--text-muted);">{{ item.filename }}</div>
+                </td>
+                <td>{{ formatSymbols(item.symbols) }}</td>
+                <td>{{ formatMoney(item.final_equity) }}</td>
+                <td>{{ item.trade_count }}</td>
+              </tr>
+              <tr v-if="!backtestHistory.length">
+                <td colspan="4" style="text-align:center; color:var(--text-muted);">
+                  {{ backtestHistoryLoading ? '正在加载历史记录...' : '还没有历史回测日志' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="selectedHistory" style="display:flex; flex-direction:column; gap:18px;">
+          <div class="metric-grid">
+            <div class="stat-block">
+              <span class="stat-label">最终权益</span>
+              <span class="stat-value">{{ formatMoney(selectedHistory.final_equity) }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">已实现盈亏</span>
+              <span class="stat-value" :style="{ color: selectedHistory.realized_pnl >= 0 ? 'var(--success)' : 'var(--danger)' }">
+                {{ formatMoney(selectedHistory.realized_pnl) }}
+              </span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">信号数</span>
+              <span class="stat-value">{{ selectedHistory.signal_count }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">订单数</span>
+              <span class="stat-value">{{ selectedHistory.order_count }}</span>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;">
+            <div>
+              <div class="stat-label">区间开始</div>
+              <div style="font-size:14px; font-weight:600;">{{ formatDateTime(selectedHistory.first_timestamp) }}</div>
+            </div>
+            <div>
+              <div class="stat-label">区间结束</div>
+              <div style="font-size:14px; font-weight:600;">{{ formatDateTime(selectedHistory.last_timestamp) }}</div>
+            </div>
+            <div>
+              <div class="stat-label">日志路径</div>
+              <div style="font-size:12px; color:var(--text-muted); word-break:break-all;">{{ selectedHistory.path }}</div>
+            </div>
+          </div>
+
+          <div style="overflow-x:auto; border:1px solid var(--border); border-radius:8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>标的</th>
+                  <th>方向</th>
+                  <th>数量</th>
+                  <th>价格</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(trade, idx) in latestTrades(selectedHistory)" :key="idx">
+                  <td style="font-size:13px; color:var(--text-muted);">{{ formatDateTime(asString(trade.timestamp)) }}</td>
+                  <td>{{ trade.symbol }}</td>
+                  <td>{{ trade.side }}</td>
+                  <td>{{ trade.quantity }}</td>
+                  <td>{{ trade.price }}</td>
+                </tr>
+                <tr v-if="latestTrades(selectedHistory).length === 0">
+                  <td colspan="5" style="text-align:center; color:var(--text-muted);">没有成交记录</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import type {
+  BacktestHistoryItem,
   BacktestPreset,
   BacktestResult,
   EquityPoint,
@@ -208,15 +322,20 @@ defineProps<{
   backtestStartDate: string;
   backtestEndDate: string;
   backtestResult: BacktestResult | null;
+  backtestHistory: BacktestHistoryItem[];
+  selectedHistory: BacktestHistoryItem | null;
   stockSearchResults: StockSearchResult[];
   stockSearchOpen: boolean;
   backtestLoading: boolean;
+  backtestHistoryLoading: boolean;
   stockSearchLoading: boolean;
   selectedPreset: BacktestPreset | null;
   selectedPresetParameters: PresetParameter[];
   sampledEquityCurve: EquityPoint[];
   equityBarHeight: (equity: number) => number;
 }>();
+
+const activePanel = ref<'run' | 'history'>('run');
 
 defineEmits<{
   'update:selectedStrategyId': [value: string];
@@ -226,8 +345,31 @@ defineEmits<{
   'update:backtestEndDate': [value: string];
   'update:stockSearchOpen': [value: boolean];
   run: [];
+  'refresh-history': [];
+  'select-history': [id: string];
   'search-stocks': [];
   'select-stock': [stock: StockSearchResult];
   'close-stock-search': [];
 }>();
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function formatSymbols(symbols: string[]) {
+  if (!symbols.length) return '-';
+  if (symbols.length <= 2) return symbols.join(', ');
+  return `${symbols.slice(0, 2).join(', ')} +${symbols.length - 2}`;
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function latestTrades(item: BacktestHistoryItem) {
+  return [...(item.data.trades || [])].slice(-8).reverse();
+}
 </script>

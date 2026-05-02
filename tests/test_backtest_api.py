@@ -1,7 +1,9 @@
+import json
 from datetime import datetime, timedelta
 
 from adapters.flask_app import create_app
 from backtest.preset_strategies import PBX_MA_PRESET_CLOSES
+from backtest.trade_log import list_backtest_trade_logs
 from cep.core.events import BarEvent
 
 
@@ -15,7 +17,7 @@ def test_backtest_api_runs_pbx_ma_preset() -> None:
     assert presets_payload["success"] is True
     assert presets_payload["data"][0]["id"] == "pbx_ma"
 
-    run_response = client.post("/api/backtests/run", json={"strategy_id": "pbx_ma"})
+    run_response = client.post("/api/backtests/run", json={"strategy_id": "pbx_ma", "write_trade_log": False})
     assert run_response.status_code == 200
     run_payload = run_response.get_json()
     assert run_payload["success"] is True
@@ -68,6 +70,7 @@ def test_backtest_api_runs_pbx_ma_with_tushare_source(monkeypatch) -> None:
             "ts_code": "000001",
             "start_date": "20240101",
             "end_date": "20241231",
+            "write_trade_log": False,
         },
     )
 
@@ -116,6 +119,7 @@ def test_backtest_api_runs_pbx_ma_with_adjusted_main_contract_source(monkeypatch
             "ts_code": "AU9999.XSGE",
             "start_date": "20250601",
             "end_date": "20250630",
+            "write_trade_log": False,
         },
     )
 
@@ -167,13 +171,45 @@ def test_backtest_api_passes_write_trade_log_flag(monkeypatch) -> None:
     assert captured["write_trade_log"] is False
 
 
+def test_backtest_api_defaults_write_trade_log_for_real_requests(monkeypatch) -> None:
+    captured = {}
+
+    def fake_run_preset_backtest(**kwargs):
+        captured.update(kwargs)
+        return type(
+            "FakeResult",
+            (),
+            {
+                "market_events_processed": 0,
+                "final_cash": 1_000_000.0,
+                "final_market_value": 0.0,
+                "final_equity": 1_000_000.0,
+                "realized_pnl": 0.0,
+                "trade_log_path": "",
+                "signals": [],
+                "trades": [],
+                "positions": {},
+                "snapshots": [],
+            },
+        )()
+
+    monkeypatch.setattr("adapters.flask_app.run_preset_backtest", fake_run_preset_backtest)
+
+    app = create_app()
+    client = app.test_client()
+    response = client.post("/api/backtests/run", json={"strategy_id": "pbx_ma", "data_source": "mock"})
+
+    assert response.status_code == 200
+    assert captured["write_trade_log"] is True
+
+
 def test_backtest_api_runs_cross_section_momentum_preset() -> None:
     app = create_app()
     client = app.test_client()
 
     response = client.post(
         "/api/backtests/run",
-        json={"strategy_id": "cross_section_momentum", "data_source": "mock"},
+        json={"strategy_id": "cross_section_momentum", "data_source": "mock", "write_trade_log": False},
     )
 
     assert response.status_code == 200
@@ -236,6 +272,7 @@ def test_backtest_api_runs_cross_section_momentum_with_tushare_source(monkeypatc
             "symbols": ["000001", "600000.SH"],
             "start_date": "20240101",
             "end_date": "20240131",
+            "write_trade_log": False,
         },
     )
 
@@ -265,6 +302,49 @@ def test_backtest_api_rejects_too_many_cross_section_symbols() -> None:
     payload = response.get_json()
     assert payload["success"] is False
     assert "最多支持 50" in payload["message"]
+
+
+def test_backtest_history_api_returns_json_logs(monkeypatch, tmp_path) -> None:
+    log_path = tmp_path / "backtest-20260502T010203-deadbeef.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "market_events_processed": 2,
+                "initial_cash": 1_000_000.0,
+                "final_cash": 999_000.0,
+                "final_market_value": 1_500.0,
+                "final_equity": 1_000_500.0,
+                "realized_pnl": 500.0,
+                "unrealized_pnl": 0.0,
+                "positions": [{"symbol": "AU9999.XSGE", "quantity": 1}],
+                "signals": [{"timestamp": "2026-05-02T01:00:00", "symbol": "AU9999.XSGE"}],
+                "orders": [],
+                "trades": [{"timestamp": "2026-05-02T01:01:00", "symbol": "AU9999.XSGE"}],
+                "equity_curve": [{"timestamp": "2026-05-02T01:01:00", "equity": 1_000_500.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "broken.json").write_text("{", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "adapters.flask_app.list_backtest_trade_logs",
+        lambda limit=100: list_backtest_trade_logs(tmp_path, limit),
+    )
+
+    app = create_app()
+    client = app.test_client()
+    response = client.get("/api/backtests/history")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["total"] == 1
+    item = payload["data"][0]
+    assert item["filename"] == log_path.name
+    assert item["final_equity"] == 1_000_500.0
+    assert item["symbols"] == ["AU9999.XSGE"]
+    assert item["trade_count"] == 1
 
 
 def test_stock_search_api_returns_indexed_matches(monkeypatch) -> None:
