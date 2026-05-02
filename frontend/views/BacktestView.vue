@@ -10,9 +10,11 @@
     :backtest-result="backtestResult"
     :backtest-history="backtestHistory"
     :selected-history="selectedHistory"
+    :selected-history-detail="selectedHistoryDetail"
     :stock-search-results="stockSearchResults"
     :backtest-loading="backtestLoading"
     :backtest-history-loading="backtestHistoryLoading"
+    :backtest-history-detail-loading="backtestHistoryDetailLoading"
     :stock-search-loading="stockSearchLoading"
     :selected-preset="selectedPreset"
     :selected-preset-parameters="selectedPresetParameters"
@@ -20,7 +22,7 @@
     :equity-bar-height="equityBarHeight"
     @run="runBacktest"
     @refresh-history="fetchBacktestHistory"
-    @select-history="selectedHistoryId = $event"
+    @select-history="selectBacktestHistory"
     @search-stocks="searchStocks()"
     @select-stock="selectStock"
     @close-stock-search="closeStockSearchSoon"
@@ -43,11 +45,12 @@ const {
   backtestEndDate,
   backtestResult,
   backtestHistory,
-  selectedHistoryId,
+  selectedHistoryDetail,
   stockSearchResults,
   stockSearchOpen,
   backtestLoading,
   backtestHistoryLoading,
+  backtestHistoryDetailLoading,
   stockSearchLoading,
   selectedPreset,
   selectedPresetParameters,
@@ -55,6 +58,7 @@ const {
   sampledEquityCurve,
   runBacktest,
   fetchBacktestHistory,
+  selectBacktestHistory,
   searchStocks,
   selectStock,
   closeStockSearchSoon,

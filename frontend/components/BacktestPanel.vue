@@ -234,18 +234,38 @@
               <span class="stat-value">{{ formatMoney(selectedHistory.final_equity) }}</span>
             </div>
             <div class="stat-block">
-              <span class="stat-label">已实现盈亏</span>
+              <span class="stat-label">总盈亏</span>
+              <span class="stat-value">{{ formatMoney(historyTotalPnl(selectedHistory, selectedHistoryDetail)) }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">已实现盈亏（平仓）</span>
               <span class="stat-value" :style="{ color: selectedHistory.realized_pnl >= 0 ? 'var(--success)' : 'var(--danger)' }">
                 {{ formatMoney(selectedHistory.realized_pnl) }}
               </span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">未实现盈亏（持仓）</span>
+              <span class="stat-value">{{ formatMoney(historyMetric(selectedHistory.unrealized_pnl)) }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">期末现金</span>
+              <span class="stat-value">{{ formatMoney(historyMetric(selectedHistory.final_cash)) }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">持仓市值</span>
+              <span class="stat-value">{{ formatMoney(historyMetric(selectedHistory.final_market_value)) }}</span>
             </div>
             <div class="stat-block">
               <span class="stat-label">信号数</span>
               <span class="stat-value">{{ selectedHistory.signal_count }}</span>
             </div>
             <div class="stat-block">
-              <span class="stat-label">订单数</span>
-              <span class="stat-value">{{ selectedHistory.order_count }}</span>
+              <span class="stat-label">成交数</span>
+              <span class="stat-value">{{ selectedHistory.trade_count }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">未平仓</span>
+              <span class="stat-value">{{ historyOpenPositionCount(selectedHistory, selectedHistoryDetail) }}</span>
             </div>
           </div>
 
@@ -264,6 +284,17 @@
             </div>
           </div>
 
+          <div v-if="historyEquityCurve(selectedHistoryDetail).length" class="mini-chart">
+            <div
+              v-for="(point, idx) in historyEquityCurve(selectedHistoryDetail)"
+              :key="idx"
+              class="chart-bar"
+              :style="{ height: historyEquityBarHeight(selectedHistoryDetail, point.equity) + '%' }"
+              :title="formatMoney(point.equity)"
+            >
+            </div>
+          </div>
+
           <div style="overflow-x:auto; border:1px solid var(--border); border-radius:8px;">
             <table>
               <thead>
@@ -276,19 +307,24 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(trade, idx) in latestTrades(selectedHistory)" :key="idx">
+                <tr v-for="(trade, idx) in latestTrades(selectedHistoryDetail)" :key="idx">
                   <td style="font-size:13px; color:var(--text-muted);">{{ formatDateTime(asString(trade.timestamp)) }}</td>
                   <td>{{ trade.symbol }}</td>
                   <td>{{ trade.side }}</td>
                   <td>{{ trade.quantity }}</td>
                   <td>{{ trade.price }}</td>
                 </tr>
-                <tr v-if="latestTrades(selectedHistory).length === 0">
-                  <td colspan="5" style="text-align:center; color:var(--text-muted);">没有成交记录</td>
+                <tr v-if="latestTrades(selectedHistoryDetail).length === 0">
+                  <td colspan="5" style="text-align:center; color:var(--text-muted);">
+                    {{ backtestHistoryDetailLoading ? '正在加载成交详情...' : '没有成交记录' }}
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </div>
+        <div v-else style="min-height:220px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); background:#f9fafb; border:1px dashed #d1d5db; border-radius:8px;">
+          选择一条历史记录查看详情
         </div>
       </div>
     </div>
@@ -298,6 +334,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import type {
+  BacktestHistoryDetail,
   BacktestHistoryItem,
   BacktestPreset,
   BacktestResult,
@@ -324,10 +361,12 @@ defineProps<{
   backtestResult: BacktestResult | null;
   backtestHistory: BacktestHistoryItem[];
   selectedHistory: BacktestHistoryItem | null;
+  selectedHistoryDetail: BacktestHistoryDetail | null;
   stockSearchResults: StockSearchResult[];
   stockSearchOpen: boolean;
   backtestLoading: boolean;
   backtestHistoryLoading: boolean;
+  backtestHistoryDetailLoading: boolean;
   stockSearchLoading: boolean;
   selectedPreset: BacktestPreset | null;
   selectedPresetParameters: PresetParameter[];
@@ -369,7 +408,40 @@ function asString(value: unknown) {
   return typeof value === 'string' ? value : undefined;
 }
 
-function latestTrades(item: BacktestHistoryItem) {
+function latestTrades(item: BacktestHistoryDetail | null) {
+  if (!item) return [];
   return [...(item.data.trades || [])].slice(-8).reverse();
+}
+
+function historyMetric(value: number | null | undefined) {
+  return Number(value || 0);
+}
+
+function historyTotalPnl(item: BacktestHistoryItem, detail: BacktestHistoryDetail | null) {
+  const initialCash = historyMetric(detail?.data.initial_cash ?? item.initial_cash ?? 1_000_000);
+  return historyMetric(detail?.data.final_equity ?? item.final_equity) - initialCash;
+}
+
+function historyOpenPositionCount(item: BacktestHistoryItem, detail: BacktestHistoryDetail | null) {
+  const positions = detail?.data.positions;
+  if (positions) return positions.filter((position) => position.quantity !== 0).length;
+  return item.position_count;
+}
+
+function historyEquityCurve(item: BacktestHistoryDetail | null) {
+  const points = item?.data.equity_curve || [];
+  if (points.length <= 48) return points;
+  const step = Math.ceil(points.length / 48);
+  return points.filter((_, index) => index % step === 0 || index === points.length - 1);
+}
+
+function historyEquityBarHeight(item: BacktestHistoryDetail | null, equity: number) {
+  const points = historyEquityCurve(item);
+  if (!points.length) return 4;
+  const values = points.map((point) => point.equity);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (max === min) return 50;
+  return 12 + ((equity - min) / (max - min)) * 88;
 }
 </script>

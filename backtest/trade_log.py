@@ -50,8 +50,63 @@ def _first_last_timestamp(payload: dict[str, Any]) -> tuple[str | None, str | No
     return min(timestamps), max(timestamps)
 
 
+def _read_log_payload(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _sample_sequence(rows: Any, limit: int | None) -> Any:
+    if not isinstance(rows, list) or limit is None or limit <= 0 or len(rows) <= limit:
+        return rows
+    if limit == 1:
+        return [rows[-1]]
+    step = (len(rows) - 1) / (limit - 1)
+    indexes = {round(index * step) for index in range(limit)}
+    indexes.add(0)
+    indexes.add(len(rows) - 1)
+    return [rows[index] for index in sorted(indexes)]
+
+
+def _summarize_log_payload(path: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    first_timestamp, last_timestamp = _first_last_timestamp(payload)
+    return {
+        "id": path.stem,
+        "filename": path.name,
+        "created_at": _log_timestamp(path),
+        "modified_at": datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
+        "path": str(path),
+        "market_events_processed": payload.get("market_events_processed", 0),
+        "initial_cash": payload.get("initial_cash", 0.0),
+        "final_cash": payload.get("final_cash", 0.0),
+        "final_market_value": payload.get("final_market_value", 0.0),
+        "final_equity": payload.get("final_equity", 0.0),
+        "realized_pnl": payload.get("realized_pnl", 0.0),
+        "unrealized_pnl": payload.get("unrealized_pnl", 0.0),
+        "signal_count": len(payload.get("signals", [])) if isinstance(payload.get("signals"), list) else 0,
+        "order_count": len(payload.get("orders", [])) if isinstance(payload.get("orders"), list) else 0,
+        "trade_count": len(payload.get("trades", [])) if isinstance(payload.get("trades"), list) else 0,
+        "position_count": len(payload.get("positions", [])) if isinstance(payload.get("positions"), list) else 0,
+        "symbols": _summarize_symbols(payload),
+        "equity_curve_count": len(payload.get("equity_curve", [])) if isinstance(payload.get("equity_curve"), list) else 0,
+        "first_timestamp": first_timestamp,
+        "last_timestamp": last_timestamp,
+    }
+
+
+def _resolve_log_path(log_id: str, log_dir: Path) -> Path:
+    if "/" in log_id or "\\" in log_id or log_id in {"", ".", ".."}:
+        raise ValueError("Invalid backtest log id")
+    path = log_dir / f"{log_id}.json"
+    if path.parent != log_dir:
+        raise ValueError("Invalid backtest log id")
+    return path
+
+
 def list_backtest_trade_logs(log_dir: Path | None = None, limit: int = 100) -> list[dict[str, Any]]:
-    """Read persisted backtest trade logs, newest first."""
+    """Read persisted backtest trade log summaries, newest first."""
     target_dir = log_dir or DEFAULT_LOG_DIR
     if not target_dir.exists():
         return []
@@ -60,39 +115,30 @@ def list_backtest_trade_logs(log_dir: Path | None = None, limit: int = 100) -> l
     for path in sorted(target_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
         if len(records) >= limit:
             break
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        payload = _read_log_payload(path)
+        if payload is None:
             continue
-        if not isinstance(payload, dict):
-            continue
-
-        first_timestamp, last_timestamp = _first_last_timestamp(payload)
-        records.append(
-            {
-                "id": path.stem,
-                "filename": path.name,
-                "created_at": _log_timestamp(path),
-                "modified_at": datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
-                "path": str(path),
-                "market_events_processed": payload.get("market_events_processed", 0),
-                "initial_cash": payload.get("initial_cash", 0.0),
-                "final_cash": payload.get("final_cash", 0.0),
-                "final_market_value": payload.get("final_market_value", 0.0),
-                "final_equity": payload.get("final_equity", 0.0),
-                "realized_pnl": payload.get("realized_pnl", 0.0),
-                "unrealized_pnl": payload.get("unrealized_pnl", 0.0),
-                "signal_count": len(payload.get("signals", [])) if isinstance(payload.get("signals"), list) else 0,
-                "order_count": len(payload.get("orders", [])) if isinstance(payload.get("orders"), list) else 0,
-                "trade_count": len(payload.get("trades", [])) if isinstance(payload.get("trades"), list) else 0,
-                "position_count": len(payload.get("positions", [])) if isinstance(payload.get("positions"), list) else 0,
-                "symbols": _summarize_symbols(payload),
-                "first_timestamp": first_timestamp,
-                "last_timestamp": last_timestamp,
-                "data": payload,
-            }
-        )
+        records.append(_summarize_log_payload(path, payload))
     return records
+
+
+def read_backtest_trade_log(
+    log_id: str,
+    log_dir: Path | None = None,
+    equity_points: int | None = 48,
+) -> dict[str, Any] | None:
+    """Read one persisted backtest trade log with full payload."""
+    target_dir = log_dir or DEFAULT_LOG_DIR
+    path = _resolve_log_path(log_id, target_dir)
+    if not path.exists() or not path.is_file():
+        return None
+    payload = _read_log_payload(path)
+    if payload is None:
+        return None
+    summary = _summarize_log_payload(path, payload)
+    payload["equity_curve"] = _sample_sequence(payload.get("equity_curve", []), equity_points)
+    summary["data"] = payload
+    return summary
 
 
 def write_backtest_trade_log(

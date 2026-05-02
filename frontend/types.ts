@@ -127,8 +127,12 @@ export interface BacktestHistoryItem {
   trade_count: number;
   position_count: number;
   symbols: string[];
+  equity_curve_count?: number;
   first_timestamp?: string | null;
   last_timestamp?: string | null;
+}
+
+export interface BacktestHistoryDetail extends BacktestHistoryItem {
   data: BacktestResult & {
     orders?: Record<string, unknown>[];
     positions?: BacktestPosition[];
@@ -307,6 +311,7 @@ export interface CepApiClient {
   deleteWeight(recordId: number): Promise<ApiResponse>;
   fetchBacktestPresets(): Promise<ApiResponse<BacktestPreset[]>>;
   fetchBacktestHistory(limit?: number): Promise<ApiResponse<BacktestHistoryItem[]>>;
+  fetchBacktestHistoryDetail(id: string, equityPoints?: number): Promise<ApiResponse<BacktestHistoryDetail>>;
   searchStocks(keyword: string, limit?: number): Promise<ApiResponse<StockSearchResult[]>>;
   runBacktest(payload: BacktestRequest): Promise<ApiResponse<BacktestResult>>;
   fetchUserSignals(): Promise<ApiResponse<UserSignalDefinition[]>>;

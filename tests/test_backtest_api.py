@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from adapters.flask_app import create_app
 from backtest.preset_strategies import PBX_MA_PRESET_CLOSES
-from backtest.trade_log import list_backtest_trade_logs
+from backtest.trade_log import list_backtest_trade_logs, read_backtest_trade_log
 from cep.core.events import BarEvent
 
 
@@ -320,7 +320,10 @@ def test_backtest_history_api_returns_json_logs(monkeypatch, tmp_path) -> None:
                 "signals": [{"timestamp": "2026-05-02T01:00:00", "symbol": "AU9999.XSGE"}],
                 "orders": [],
                 "trades": [{"timestamp": "2026-05-02T01:01:00", "symbol": "AU9999.XSGE"}],
-                "equity_curve": [{"timestamp": "2026-05-02T01:01:00", "equity": 1_000_500.0}],
+                "equity_curve": [
+                    {"timestamp": f"2026-05-02T01:{index:02d}:00", "equity": 1_000_000.0 + index}
+                    for index in range(60)
+                ],
             }
         ),
         encoding="utf-8",
@@ -330,6 +333,10 @@ def test_backtest_history_api_returns_json_logs(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         "adapters.flask_app.list_backtest_trade_logs",
         lambda limit=100: list_backtest_trade_logs(tmp_path, limit),
+    )
+    monkeypatch.setattr(
+        "adapters.flask_app.read_backtest_trade_log",
+        lambda log_id, equity_points=48: read_backtest_trade_log(log_id, tmp_path, equity_points),
     )
 
     app = create_app()
@@ -345,6 +352,23 @@ def test_backtest_history_api_returns_json_logs(monkeypatch, tmp_path) -> None:
     assert item["final_equity"] == 1_000_500.0
     assert item["symbols"] == ["AU9999.XSGE"]
     assert item["trade_count"] == 1
+    assert item["equity_curve_count"] == 60
+    assert "data" not in item
+
+    detail_response = client.get(f"/api/backtests/history/{log_path.stem}")
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.get_json()
+    assert detail_payload["success"] is True
+    assert len(detail_payload["data"]["data"]["equity_curve"]) == 48
+    assert detail_payload["data"]["data"]["trades"][0]["symbol"] == "AU9999.XSGE"
+
+    small_detail_response = client.get(
+        f"/api/backtests/history/{log_path.stem}",
+        query_string={"equity_points": "5"},
+    )
+    assert small_detail_response.status_code == 200
+    small_detail_payload = small_detail_response.get_json()
+    assert len(small_detail_payload["data"]["data"]["equity_curve"]) == 5
 
 
 def test_stock_search_api_returns_indexed_matches(monkeypatch) -> None:

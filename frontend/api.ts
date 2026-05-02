@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   Asset,
   AllocationRow,
+  BacktestHistoryDetail,
   BacktestRequest,
   BacktestHistoryItem,
   BacktestResult,
@@ -70,6 +71,11 @@ export const CepApi: CepApiClient = {
   fetchBacktestHistory(limit = 100): Promise<ApiResponse<BacktestHistoryItem[]>> {
     const params = new URLSearchParams({ limit: String(limit) });
     return this.requestJson(`/api/backtests/history?${params.toString()}`);
+  },
+
+  fetchBacktestHistoryDetail(id: string, equityPoints = 48): Promise<ApiResponse<BacktestHistoryDetail>> {
+    const params = new URLSearchParams({ equity_points: String(equityPoints) });
+    return this.requestJson(`/api/backtests/history/${encodeURIComponent(id)}?${params.toString()}`);
   },
 
   searchStocks(keyword: string, limit = 20): Promise<ApiResponse<StockSearchResult[]>> {

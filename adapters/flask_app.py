@@ -44,7 +44,7 @@ from backtest.preset_strategies import (
     run_preset_backtest,
     serialize_backtest_result,
 )
-from backtest.trade_log import list_backtest_trade_logs
+from backtest.trade_log import list_backtest_trade_logs, read_backtest_trade_log
 from data_provider import search_stocks
 
 from database.config import (
@@ -1700,6 +1700,25 @@ def create_app() -> Flask:
             logger.exception("Backtest history failed: %s", e)
             return jsonify({"success": False, "message": f"加载回测历史失败: {e}", "data": []}), 500
         return jsonify({"success": True, "data": records, "total": len(records)})
+
+    @app.route("/api/backtests/history/<log_id>", methods=["GET"])
+    def get_backtest_history_detail(log_id: str):
+        raw_equity_points = request.args.get("equity_points", "48")
+        try:
+            equity_points = max(1, min(int(raw_equity_points), 2000))
+        except ValueError:
+            return jsonify({"success": False, "message": "equity_points 必须是整数"}), 400
+
+        try:
+            record = read_backtest_trade_log(log_id, equity_points=equity_points)
+        except ValueError:
+            return jsonify({"success": False, "message": "回测日志 ID 无效"}), 400
+        except Exception as e:
+            logger.exception("Backtest history detail failed: %s", e)
+            return jsonify({"success": False, "message": f"加载回测详情失败: {e}"}), 500
+        if record is None:
+            return jsonify({"success": False, "message": "回测日志不存在"}), 404
+        return jsonify({"success": True, "data": record})
 
     # -----------------------------------------------------------------------
     # GET /api/stocks/search — 搜索本地 A 股股票索引

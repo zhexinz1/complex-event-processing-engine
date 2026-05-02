@@ -1,5 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type {
+  BacktestHistoryDetail,
   BacktestPreset,
   BacktestHistoryItem,
   BacktestRequest,
@@ -31,14 +32,17 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
   const backtestResult = ref<BacktestResult | null>(null);
   const backtestHistory = ref<BacktestHistoryItem[]>([]);
   const selectedHistoryId = ref('');
+  const selectedHistoryDetail = ref<BacktestHistoryDetail | null>(null);
   const stockSearchResults = ref<StockSearchResult[]>([]);
   const stockSearchOpen = ref(false);
   const backtestLoading = ref(false);
   const backtestHistoryLoading = ref(false);
+  const backtestHistoryDetailLoading = ref(false);
   const stockSearchLoading = ref(false);
 
   let stockSearchTimer: ReturnType<typeof setTimeout> | undefined;
   let stockSearchRequestId = 0;
+  let historyDetailRequestId = 0;
   let selectedStockCode = backtestTsCode.value;
 
   const selectedPreset = computed(() => {
@@ -61,7 +65,8 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
   });
 
   const selectedHistory = computed(() => {
-    return backtestHistory.value.find((item) => item.id === selectedHistoryId.value) || backtestHistory.value[0] || null;
+    if (!selectedHistoryId.value) return null;
+    return backtestHistory.value.find((item) => item.id === selectedHistoryId.value) || null;
   });
 
   function equityBarHeight(equity: number) {
@@ -98,11 +103,9 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       const json = await api.fetchBacktestHistory(100);
       if (json.success) {
         backtestHistory.value = json.data || [];
-        if (!selectedHistoryId.value && backtestHistory.value.length) {
-          selectedHistoryId.value = backtestHistory.value[0].id;
-        }
         if (selectedHistoryId.value && !backtestHistory.value.some((item) => item.id === selectedHistoryId.value)) {
-          selectedHistoryId.value = backtestHistory.value[0]?.id || '';
+          selectedHistoryId.value = '';
+          selectedHistoryDetail.value = null;
         }
       } else {
         showToast(json.message || '加载回测历史失败', 'error');
@@ -112,6 +115,44 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
     } finally {
       backtestHistoryLoading.value = false;
     }
+  }
+
+  async function fetchBacktestHistoryDetail(id: string) {
+    if (!enabled || !id) {
+      selectedHistoryDetail.value = null;
+      return;
+    }
+    backtestHistoryDetailLoading.value = true;
+    if (selectedHistoryDetail.value?.id !== id) {
+      selectedHistoryDetail.value = null;
+    }
+    const requestId = ++historyDetailRequestId;
+    try {
+      const json = await api.fetchBacktestHistoryDetail(id, 48);
+      if (requestId !== historyDetailRequestId) return;
+      if (json.success) {
+        selectedHistoryDetail.value = json.data || null;
+      } else {
+        selectedHistoryDetail.value = null;
+        showToast(json.message || '加载回测详情失败', 'error');
+      }
+    } catch (error: unknown) {
+      if (requestId !== historyDetailRequestId) return;
+      selectedHistoryDetail.value = null;
+      showToast(`加载回测详情失败: ${errorMessage(error)}`, 'error');
+    } finally {
+      if (requestId === historyDetailRequestId) {
+        backtestHistoryDetailLoading.value = false;
+      }
+    }
+  }
+
+  function selectBacktestHistory(id: string) {
+    if (selectedHistoryId.value === id) {
+      fetchBacktestHistoryDetail(id);
+      return;
+    }
+    selectedHistoryId.value = id;
   }
 
   async function runBacktest() {
@@ -244,6 +285,10 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       }
     });
 
+    watch(selectedHistoryId, (id) => {
+      fetchBacktestHistoryDetail(id);
+    });
+
     onMounted(() => {
       fetchBacktestPresets();
       fetchBacktestHistory();
@@ -264,10 +309,12 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
     backtestResult,
     backtestHistory,
     selectedHistoryId,
+    selectedHistoryDetail,
     stockSearchResults,
     stockSearchOpen,
     backtestLoading,
     backtestHistoryLoading,
+    backtestHistoryDetailLoading,
     stockSearchLoading,
     selectedPreset,
     selectedPresetParameters,
@@ -275,6 +322,8 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
     sampledEquityCurve,
     fetchBacktestPresets,
     fetchBacktestHistory,
+    fetchBacktestHistoryDetail,
+    selectBacktestHistory,
     runBacktest,
     searchStocks,
     selectStock,
