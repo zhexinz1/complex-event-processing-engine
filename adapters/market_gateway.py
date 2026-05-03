@@ -26,13 +26,15 @@ from typing import Any, Callable, Optional, cast
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent, BarEvent
 
+logger = logging.getLogger(__name__)
+
 # ---- 终极环境保护垫片 ----
 # 防御从外部终端或守护进程错误继承了含毒的 LD_LIBRARY_PATH (尤其是 xt_sdk)
 _inherited_ld = os.environ.get("LD_LIBRARY_PATH", "")
 if "xt_sdk" in _inherited_ld:
     _clean_paths = [p for p in _inherited_ld.split(":") if "xt_sdk" not in p]
     os.environ["LD_LIBRARY_PATH"] = ":".join(_clean_paths)
-    logging.getLogger(__name__).info("CTP 网关启动探测到全局 C++ 环境污染，已主动完成局部净化。")
+    logger.info("CTP 网关启动探测到全局 C++ 环境污染，已主动完成局部净化。")
 
 try:
     from openctp_ctp import thostmduserapi as _mdapi  # pyright: ignore[reportMissingImports]
@@ -40,12 +42,13 @@ try:
     mdapi: Any = _mdapi
     _CTP_AVAILABLE = True
     _CTP_MD_SPI_BASE = cast(type[object], _mdapi.CThostFtdcMdSpi)
-except ImportError:
+    _CTP_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - depends on local native SDK state
     mdapi = None
     _CTP_AVAILABLE = False
     _CTP_MD_SPI_BASE = object
-
-logger = logging.getLogger(__name__)
+    _CTP_IMPORT_ERROR = exc
+    logger.info("CTP native SDK unavailable; CTP gateway disabled for this process: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -146,16 +149,19 @@ def _get_mdapi() -> Any:
     if mdapi is not None:
         return mdapi
 
-    try:
-        imported = importlib.import_module("openctp_ctp.mdapi")
-    except Exception as exc:  # pragma: no cover - depends on local native SDK state
-        _CTP_AVAILABLE = False
-        raise RuntimeError("openctp-ctp is not installed or failed to load") from exc
+    last_error: Exception | None = None
+    for module_name in ("openctp_ctp.thostmduserapi", "openctp_ctp.mdapi"):
+        try:
+            imported = importlib.import_module(module_name)
+            mdapi = imported
+            _CTP_AVAILABLE = True
+            _CTP_MD_SPI_BASE = getattr(imported, "CThostFtdcMdSpi", object)
+            return mdapi
+        except Exception as exc:  # pragma: no cover - depends on local native SDK state
+            last_error = exc
 
-    mdapi = imported
-    _CTP_AVAILABLE = True
-    _CTP_MD_SPI_BASE = getattr(imported, "CThostFtdcMdSpi", object)
-    return mdapi
+    _CTP_AVAILABLE = False
+    raise RuntimeError("openctp-ctp is not installed or failed to load") from last_error
 
 
 class CTPMdSpi(_CTP_MD_SPI_BASE):
@@ -296,7 +302,10 @@ class CTPMarketGateway(MarketGateway):
             True 表示连接并登录成功，False 表示失败或超时。
         """
         if not _CTP_AVAILABLE:
-            logger.error("openctp-ctp 未安装，无法连接")
+            if _CTP_IMPORT_ERROR is not None:
+                logger.error("openctp-ctp 不可用，无法连接: %s", _CTP_IMPORT_ERROR)
+            else:
+                logger.error("openctp-ctp 未安装，无法连接")
             return False
 
         import uuid

@@ -3,6 +3,7 @@
 提供对产品、留白数据、待确认订单、净入金记录的 CRUD 操作
 """
 import pymysql
+import json
 from decimal import Decimal
 from typing import List, Optional
 from datetime import datetime
@@ -10,23 +11,31 @@ import uuid
 
 from database.models import (
     Product, ProductStatus,
-    FractionalShare,
     PendingOrder, OrderStatus,
-    FundInflow, FundInflowStatus
+    FundInflow, FundInflowStatus,
+    UserSignalDefinition, UserSignalStatus,
 )
+from database.config import DB_CONFIG
 
 
 class DatabaseDAO:
     """数据库访问对象"""
 
-    def __init__(self, host: str, port: int, user: str, password: str, database: str):
+    def __init__(
+        self,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        database: str | None = None,
+    ):
         self.connection_params = {
-            'host': host,
-            'port': port,
-            'user': user,
-            'password': password,
-            'database': database,
-            'charset': 'utf8mb4',
+            'host': host or DB_CONFIG.host,
+            'port': port or DB_CONFIG.port,
+            'user': user or DB_CONFIG.user,
+            'password': password if password is not None else DB_CONFIG.password,
+            'database': database or DB_CONFIG.database,
+            'charset': DB_CONFIG.charset,
             'cursorclass': pymysql.cursors.DictCursor
         }
 
@@ -86,6 +95,129 @@ class DatabaseDAO:
                 ]
         finally:
             conn.close()
+
+    # ==================== 用户信号管理 ====================
+
+    def list_user_signals(self, status: Optional[UserSignalStatus] = None) -> List[UserSignalDefinition]:
+        """查询研究员信号定义"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                if status:
+                    sql = "SELECT * FROM user_signal_definitions WHERE status = %s ORDER BY updated_at DESC, id DESC"
+                    cursor.execute(sql, (status.value,))
+                else:
+                    sql = "SELECT * FROM user_signal_definitions ORDER BY updated_at DESC, id DESC"
+                    cursor.execute(sql)
+                rows = cursor.fetchall()
+                return [self._row_to_user_signal(row) for row in rows]
+        finally:
+            conn.close()
+
+    def get_user_signal(self, signal_id: int) -> Optional[UserSignalDefinition]:
+        """根据 ID 查询研究员信号定义"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT * FROM user_signal_definitions WHERE id = %s", (signal_id,))
+                row = cursor.fetchone()
+                return self._row_to_user_signal(row) if row else None
+        finally:
+            conn.close()
+
+    def create_user_signal(self, signal: UserSignalDefinition) -> int:
+        """创建研究员信号定义"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """
+                INSERT INTO user_signal_definitions
+                    (name, symbols, bar_freq, source_code, status, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(
+                    sql,
+                    (
+                        signal.name,
+                        json.dumps(signal.symbols, ensure_ascii=False),
+                        signal.bar_freq,
+                        signal.source_code,
+                        signal.status.value,
+                        signal.created_by,
+                    ),
+                )
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def update_user_signal(self, signal_id: int, signal: UserSignalDefinition) -> bool:
+        """更新研究员信号定义"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """
+                UPDATE user_signal_definitions
+                SET name = %s,
+                    symbols = %s,
+                    bar_freq = %s,
+                    source_code = %s,
+                    status = %s,
+                    created_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """
+                cursor.execute(
+                    sql,
+                    (
+                        signal.name,
+                        json.dumps(signal.symbols, ensure_ascii=False),
+                        signal.bar_freq,
+                        signal.source_code,
+                        signal.status.value,
+                        signal.created_by,
+                        signal_id,
+                    ),
+                )
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            conn.close()
+
+    def update_user_signal_status(self, signal_id: int, status: UserSignalStatus) -> bool:
+        """启用或停用研究员信号"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """
+                UPDATE user_signal_definitions
+                SET status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """
+                cursor.execute(sql, (status.value, signal_id))
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            conn.close()
+
+    def _row_to_user_signal(self, row: dict) -> UserSignalDefinition:
+        """将数据库行转换为 UserSignalDefinition 对象"""
+        symbols_raw = row.get("symbols") or "[]"
+        try:
+            symbols = json.loads(symbols_raw) if isinstance(symbols_raw, str) else symbols_raw
+        except json.JSONDecodeError:
+            symbols = []
+        return UserSignalDefinition(
+            id=row["id"],
+            name=row["name"],
+            symbols=list(symbols),
+            bar_freq=row["bar_freq"],
+            source_code=row["source_code"],
+            status=UserSignalStatus(row["status"]),
+            created_by=row.get("created_by") or "system",
+            created_at=row.get("created_at"),
+            updated_at=row.get("updated_at"),
+        )
 
     # ==================== 留白数据管理 ====================
 

@@ -1,6 +1,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type {
+  BacktestHistoryDetail,
   BacktestPreset,
+  BacktestHistoryItem,
   BacktestRequest,
   BacktestResult,
   CepApiClient,
@@ -28,13 +30,19 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
   const backtestStartDate = ref('2024-01-01');
   const backtestEndDate = ref(new Date().toISOString().slice(0, 10));
   const backtestResult = ref<BacktestResult | null>(null);
+  const backtestHistory = ref<BacktestHistoryItem[]>([]);
+  const selectedHistoryId = ref('');
+  const selectedHistoryDetail = ref<BacktestHistoryDetail | null>(null);
   const stockSearchResults = ref<StockSearchResult[]>([]);
   const stockSearchOpen = ref(false);
   const backtestLoading = ref(false);
+  const backtestHistoryLoading = ref(false);
+  const backtestHistoryDetailLoading = ref(false);
   const stockSearchLoading = ref(false);
 
   let stockSearchTimer: ReturnType<typeof setTimeout> | undefined;
   let stockSearchRequestId = 0;
+  let historyDetailRequestId = 0;
   let selectedStockCode = backtestTsCode.value;
 
   const selectedPreset = computed(() => {
@@ -54,6 +62,11 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
     if (points.length <= 48) return points;
     const step = Math.ceil(points.length / 48);
     return points.filter((_, index) => index % step === 0 || index === points.length - 1);
+  });
+
+  const selectedHistory = computed(() => {
+    if (!selectedHistoryId.value) return null;
+    return backtestHistory.value.find((item) => item.id === selectedHistoryId.value) || null;
   });
 
   function equityBarHeight(equity: number) {
@@ -83,14 +96,76 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
     }
   }
 
+  async function fetchBacktestHistory() {
+    if (!enabled) return;
+    backtestHistoryLoading.value = true;
+    try {
+      const json = await api.fetchBacktestHistory(100);
+      if (json.success) {
+        backtestHistory.value = json.data || [];
+        if (selectedHistoryId.value && !backtestHistory.value.some((item) => item.id === selectedHistoryId.value)) {
+          selectedHistoryId.value = '';
+          selectedHistoryDetail.value = null;
+        }
+      } else {
+        showToast(json.message || '加载回测历史失败', 'error');
+      }
+    } catch (error: unknown) {
+      showToast(`加载回测历史失败: ${errorMessage(error)}`, 'error');
+    } finally {
+      backtestHistoryLoading.value = false;
+    }
+  }
+
+  async function fetchBacktestHistoryDetail(id: string) {
+    if (!enabled || !id) {
+      selectedHistoryDetail.value = null;
+      return;
+    }
+    backtestHistoryDetailLoading.value = true;
+    if (selectedHistoryDetail.value?.id !== id) {
+      selectedHistoryDetail.value = null;
+    }
+    const requestId = ++historyDetailRequestId;
+    try {
+      const json = await api.fetchBacktestHistoryDetail(id, 48);
+      if (requestId !== historyDetailRequestId) return;
+      if (json.success) {
+        selectedHistoryDetail.value = json.data || null;
+      } else {
+        selectedHistoryDetail.value = null;
+        showToast(json.message || '加载回测详情失败', 'error');
+      }
+    } catch (error: unknown) {
+      if (requestId !== historyDetailRequestId) return;
+      selectedHistoryDetail.value = null;
+      showToast(`加载回测详情失败: ${errorMessage(error)}`, 'error');
+    } finally {
+      if (requestId === historyDetailRequestId) {
+        backtestHistoryDetailLoading.value = false;
+      }
+    }
+  }
+
+  function selectBacktestHistory(id: string) {
+    if (selectedHistoryId.value === id) {
+      fetchBacktestHistoryDetail(id);
+      return;
+    }
+    selectedHistoryId.value = id;
+  }
+
   async function runBacktest() {
     if (!enabled) return;
     if (!selectedStrategyId.value) {
       showToast('请选择预设策略', 'error');
       return;
     }
-    if (backtestDataSource.value === 'tushare' && (!backtestTsCode.value || !backtestStartDate.value || !backtestEndDate.value)) {
-      showToast('请填写股票代码和日期范围', 'error');
+    if (
+      (backtestDataSource.value === 'tushare' || backtestDataSource.value === 'adjusted_main_contract')
+      && (!backtestTsCode.value || !backtestStartDate.value || !backtestEndDate.value)
+    ) {
+      showToast('请填写标的代码和日期范围', 'error');
       return;
     }
     if (backtestDataSource.value === 'tushare' && !isTushareCode(backtestTsCode.value)) {
@@ -104,7 +179,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
         strategy_id: selectedStrategyId.value,
         data_source: backtestDataSource.value,
       };
-      if (backtestDataSource.value === 'tushare') {
+      if (backtestDataSource.value === 'tushare' || backtestDataSource.value === 'adjusted_main_contract') {
         payload.ts_code = backtestTsCode.value.trim().toUpperCase();
         payload.start_date = toTushareDate(backtestStartDate.value);
         payload.end_date = toTushareDate(backtestEndDate.value);
@@ -112,6 +187,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       const json = await api.runBacktest(payload);
       if (json.success) {
         backtestResult.value = json.data ?? null;
+        fetchBacktestHistory();
         showToast('回测完成');
       } else {
         showToast(json.message || '回测失败', 'error');
@@ -209,8 +285,13 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       }
     });
 
+    watch(selectedHistoryId, (id) => {
+      fetchBacktestHistoryDetail(id);
+    });
+
     onMounted(() => {
       fetchBacktestPresets();
+      fetchBacktestHistory();
     });
   }
 
@@ -226,14 +307,23 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
     backtestStartDate,
     backtestEndDate,
     backtestResult,
+    backtestHistory,
+    selectedHistoryId,
+    selectedHistoryDetail,
     stockSearchResults,
     stockSearchOpen,
     backtestLoading,
+    backtestHistoryLoading,
+    backtestHistoryDetailLoading,
     stockSearchLoading,
     selectedPreset,
     selectedPresetParameters,
+    selectedHistory,
     sampledEquityCurve,
     fetchBacktestPresets,
+    fetchBacktestHistory,
+    fetchBacktestHistoryDetail,
+    selectBacktestHistory,
     runBacktest,
     searchStocks,
     selectStock,

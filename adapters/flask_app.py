@@ -20,6 +20,7 @@ Endpoints:
 
     # 回测
     GET  /api/backtests/presets 获取可回测预设策略列表
+    GET  /api/backtests/history 获取历史回测日志
     POST /api/backtests/run     运行预设策略回测
     GET  /api/stocks/search     搜索本地 A 股股票索引
     GET  /                     前端大屏页面
@@ -31,29 +32,49 @@ import logging
 import os
 from pathlib import Path
 from decimal import Decimal
-from datetime import datetime
 import uuid
 from typing import Any, cast
 
 import pymysql
 import pymysql.cursors
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
 from backtest.preset_strategies import (
     PRESET_STRATEGIES,
     run_preset_backtest,
     serialize_backtest_result,
 )
+from backtest.trade_log import list_backtest_trade_logs, read_backtest_trade_log
 from data_provider import search_stocks
 
+from database.config import (
+    CONNECT_TIMEOUT_SECONDS,
+    DB_CONFIG as DATABASE_CONFIG,
+    READ_TIMEOUT_SECONDS,
+    WRITE_TIMEOUT_SECONDS,
+)
 from database.dao import DatabaseDAO
-from database.models import PendingOrder, OrderStatus, FundInflow, FundInflowStatus
-from rebalance.rebalance_engine import RebalanceEngine, IncrementalOrder
+from database.models import (
+    PendingOrder,
+    OrderStatus,
+    FundInflow,
+    FundInflowStatus,
+    UserSignalDefinition,
+    UserSignalStatus,
+)
 from adapters.xuntou import XtOrderService, OrderRequest, OrderDirection, OrderPriceType
 from adapters.xuntou import XtQueryService
 from adapters.xuntou import get_xt_connection_manager
-from adapters.price_service import get_latest_price, init_redis_market_subscriber, get_tick_cache_detail
+from adapters.price_service import get_latest_price, get_tick_cache_detail
 from adapters.contract_config import get_contract_multiplier, normalize_asset_code
+from cep.core.context import get_local_context_reference
+from signals import (
+    LiveSignalMonitor,
+    SignalContractValidator,
+    load_signal_class,
+    run_user_signal_backtest,
+)
+from backtest.broker import ExecutionTiming
 
 logger = logging.getLogger(__name__)
 
@@ -61,19 +82,19 @@ logger = logging.getLogger(__name__)
 # 数据库连接配置
 # ---------------------------------------------------------------------------
 
-DB_CONFIG: dict[str, Any] = dict(
-    host=os.environ.get("DB_HOST", "127.0.0.1"),
-    port=int(os.environ.get("DB_PORT", "3306")),
-    database=os.environ.get("DB_NAME", "fof"),
-    user=os.environ.get("DB_USER", "root"),
-    password=os.environ.get("DB_PASS", ""),
-    charset="utf8mb4",
-    cursorclass=pymysql.cursors.DictCursor,
-    autocommit=False,
-    connect_timeout=10,  # 连接超时10秒
-    read_timeout=10,     # 读取超时10秒
-    write_timeout=10,    # 写入超时10秒
-)
+DB_CONFIG: dict[str, Any] = {
+    "host": DATABASE_CONFIG.host,
+    "port": DATABASE_CONFIG.port,
+    "database": DATABASE_CONFIG.database,
+    "user": DATABASE_CONFIG.user,
+    "password": DATABASE_CONFIG.password,
+    "charset": DATABASE_CONFIG.charset,
+    "cursorclass": pymysql.cursors.DictCursor,
+    "autocommit": False,
+    "connect_timeout": CONNECT_TIMEOUT_SECONDS,
+    "read_timeout": READ_TIMEOUT_SECONDS,
+    "write_timeout": WRITE_TIMEOUT_SECONDS,
+}
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS target_allocations (
@@ -98,19 +119,46 @@ CREATE TABLE IF NOT EXISTS allowed_assets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
+CREATE_USER_SIGNALS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS user_signal_definitions (
+    id           INT PRIMARY KEY AUTO_INCREMENT,
+    name         VARCHAR(120) NOT NULL,
+    symbols      JSON         NOT NULL,
+    bar_freq     VARCHAR(20)  NOT NULL DEFAULT '1m',
+    source_code  MEDIUMTEXT   NOT NULL,
+    status       VARCHAR(20)  NOT NULL DEFAULT 'disabled',
+    created_by   VARCHAR(100) NOT NULL DEFAULT 'system',
+    created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
 FRONTEND_DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
-FRONTEND_SRC_DIR = Path(__file__).parent.parent / "frontend"
 
 # 全局 DAO 实例（在 create_app 中初始化）
-dao: DatabaseDAO = None
+dao: DatabaseDAO = cast(DatabaseDAO, None)
+live_signal_monitor = LiveSignalMonitor()
+
+
+def is_frontend_built() -> bool:
+    return (FRONTEND_DIST_DIR / "index.html").exists()
 
 
 def get_frontend_dir() -> Path:
-    """Return the compiled Vite app directory if built, else fall back to raw frontend/."""
-    if (FRONTEND_DIST_DIR / "index.html").exists():
-        return FRONTEND_DIST_DIR
-    # 未构建 Vue 前端时，直接服务 frontend/ 下的原始 HTML 文件
-    return FRONTEND_SRC_DIR
+    """Return the compiled Vite app directory."""
+    return FRONTEND_DIST_DIR
+
+
+def frontend_setup_response() -> Any:
+    message = {
+        "success": False,
+        "message": (
+            "Frontend bundle not found. Run `npm install` and `npm run frontend:build` "
+            "from the project root, then reload this page."
+        ),
+    }
+    return jsonify(message), 503
 
 
 def get_conn() -> Any:
@@ -123,19 +171,79 @@ def init_db() -> None:
         with conn.cursor() as cur:
             cur.execute(CREATE_TABLE_SQL)
             cur.execute(CREATE_ASSETS_TABLE_SQL)
+            cur.execute(CREATE_USER_SIGNALS_TABLE_SQL)
         conn.commit()
-    logger.info("DB tables target_allocations and allowed_assets ready.")
+    logger.info("DB tables target_allocations, allowed_assets and user_signal_definitions ready.")
 
     # 初始化 DAO
     global dao
-    dao = DatabaseDAO(
-        host=DB_CONFIG['host'],
-        port=DB_CONFIG['port'],
-        user=DB_CONFIG['user'],
-        password=DB_CONFIG['password'],
-        database=DB_CONFIG['database']
-    )
+    dao = DatabaseDAO()
     logger.info("DatabaseDAO initialized.")
+
+
+def _serialize_user_signal(signal: UserSignalDefinition) -> dict[str, Any]:
+    return {
+        "id": signal.id,
+        "name": signal.name,
+        "symbols": signal.symbols,
+        "bar_freq": signal.bar_freq,
+        "source_code": signal.source_code,
+        "status": signal.status.value,
+        "created_by": signal.created_by,
+        "created_at": signal.created_at.isoformat() if signal.created_at else None,
+        "updated_at": signal.updated_at.isoformat() if signal.updated_at else None,
+    }
+
+
+def _parse_signal_payload(body: dict[str, Any], existing: UserSignalDefinition | None = None) -> UserSignalDefinition:
+    raw_symbols = body.get("symbols", existing.symbols if existing else [])
+    if isinstance(raw_symbols, str):
+        symbols = [part.strip() for part in raw_symbols.split(",") if part.strip()]
+    else:
+        symbols = [str(part).strip() for part in raw_symbols or [] if str(part).strip()]
+    status_text = str(body.get("status", existing.status.value if existing else UserSignalStatus.DISABLED.value))
+    return UserSignalDefinition(
+        id=existing.id if existing else None,
+        name=str(body.get("name", existing.name if existing else "")).strip(),
+        symbols=symbols,
+        bar_freq=str(body.get("bar_freq", existing.bar_freq if existing else "1m")).strip(),
+        source_code=str(body.get("source_code", existing.source_code if existing else "")),
+        status=UserSignalStatus(status_text),
+        created_by=str(body.get("created_by", existing.created_by if existing else "system")).strip() or "system",
+        created_at=existing.created_at if existing else None,
+        updated_at=existing.updated_at if existing else None,
+    )
+
+
+def _reload_live_signal_monitor() -> None:
+    if dao is None:
+        return
+    enabled = dao.list_user_signals(UserSignalStatus.ENABLED)
+    live_signal_monitor.load_definitions(enabled)
+
+
+def _parse_bool_arg(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"无法解析布尔值: {value}")
+
+
+def _parse_execution_timing(value: Any, default: ExecutionTiming = "next_bar") -> ExecutionTiming:
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"current_bar", "next_bar"}:
+        return cast(ExecutionTiming, text)
+    raise ValueError(
+        f"无法解析 execution_timing: {value}，可选值为 current_bar / next_bar"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +255,11 @@ def create_app() -> Flask:
 
     # 初始化数据库和 DAO
     init_db()
+    _reload_live_signal_monitor()
+    live_signal_monitor.start_redis_subscriber(
+        redis_url=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+        channel=os.environ.get("CEP_REDIS_CHANNEL", "cep_events"),
+    )
 
     # -----------------------------------------------------------------------
     # 前端静态文件
@@ -154,10 +267,14 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
+        if not is_frontend_built():
+            return frontend_setup_response()
         return send_from_directory(str(get_frontend_dir()), "index.html")
 
     @app.route("/<path:filename>")
     def static_files(filename: str):
+        if not is_frontend_built():
+            return frontend_setup_response()
         # 尝试直接提供静态文件（JS/CSS/图片等）
         frontend_dir = get_frontend_dir()
         file_path = frontend_dir / filename
@@ -1389,7 +1506,7 @@ def create_app() -> Flask:
                             try:
                                 val = getattr(orders[0], attr)
                                 result["method1_first_order_attrs"][attr] = str(val)
-                            except:
+                            except Exception:
                                 pass
             except Exception as e:
                 result["method1_error"] = str(e)
@@ -1414,7 +1531,7 @@ def create_app() -> Flask:
                                 try:
                                     val = getattr(orders2[0], attr)
                                     result["method2_first_attrs"][attr] = str(val)
-                                except:
+                                except Exception:
                                     pass
                 except Exception as e:
                     result["method2_error"] = str(e)
@@ -1435,7 +1552,7 @@ def create_app() -> Flask:
                             try:
                                 val = getattr(deals[0], attr)
                                 result["method3_first_deal_attrs"][attr] = str(val)
-                            except:
+                            except Exception:
                                 pass
             except Exception as e:
                 result["method3_error"] = str(e)
@@ -1459,7 +1576,7 @@ def create_app() -> Flask:
                                 try:
                                     val = getattr(cmd, attr)
                                     cmd_info[attr] = str(val)
-                                except:
+                                except Exception:
                                     pass
                         cmd_list.append(cmd_info)
                     result["method4_recent_commands"] = cmd_list
@@ -1553,16 +1670,8 @@ def create_app() -> Flask:
     @app.route("/api/debug/market_cache", methods=["GET"])
     def debug_market_cache():
         """查看当前行情缓存（调试用）"""
-        with _tick_cache_lock:
-            cache_data = {
-                symbol: {
-                    "last_price": float(tick.last_price),
-                    "ask1": float(tick.ask_prices[0]) if tick.ask_prices[0] > 0 else None,
-                    "bid1": float(tick.bid_prices[0]) if tick.bid_prices[0] > 0 else None,
-                    "timestamp": tick.timestamp.isoformat() if tick.timestamp else None
-                }
-                for symbol, tick in _tick_cache.items()
-            }
+        detail = get_tick_cache_detail()
+        cache_data = detail.get("symbols", {})
         return jsonify({
             "success": True,
             "cache_size": len(cache_data),
@@ -1576,6 +1685,40 @@ def create_app() -> Flask:
     @app.route("/api/backtests/presets", methods=["GET"])
     def get_backtest_presets():
         return jsonify({"success": True, "data": list(PRESET_STRATEGIES.values())})
+
+    @app.route("/api/backtests/history", methods=["GET"])
+    def get_backtest_history():
+        raw_limit = request.args.get("limit", "100")
+        try:
+            limit = max(1, min(int(raw_limit), 500))
+        except ValueError:
+            return jsonify({"success": False, "message": "limit 必须是整数", "data": []}), 400
+
+        try:
+            records = list_backtest_trade_logs(limit=limit)
+        except Exception as e:
+            logger.exception("Backtest history failed: %s", e)
+            return jsonify({"success": False, "message": f"加载回测历史失败: {e}", "data": []}), 500
+        return jsonify({"success": True, "data": records, "total": len(records)})
+
+    @app.route("/api/backtests/history/<log_id>", methods=["GET"])
+    def get_backtest_history_detail(log_id: str):
+        raw_equity_points = request.args.get("equity_points", "48")
+        try:
+            equity_points = max(1, min(int(raw_equity_points), 2000))
+        except ValueError:
+            return jsonify({"success": False, "message": "equity_points 必须是整数"}), 400
+
+        try:
+            record = read_backtest_trade_log(log_id, equity_points=equity_points)
+        except ValueError:
+            return jsonify({"success": False, "message": "回测日志 ID 无效"}), 400
+        except Exception as e:
+            logger.exception("Backtest history detail failed: %s", e)
+            return jsonify({"success": False, "message": f"加载回测详情失败: {e}"}), 500
+        if record is None:
+            return jsonify({"success": False, "message": "回测日志不存在"}), 404
+        return jsonify({"success": True, "data": record})
 
     # -----------------------------------------------------------------------
     # GET /api/stocks/search — 搜索本地 A 股股票索引
@@ -1612,15 +1755,17 @@ def create_app() -> Flask:
         symbols = body.get("symbols", body.get("ts_codes"))
         start_date = body.get("start_date")
         end_date = body.get("end_date")
+        write_trade_log = _parse_bool_arg(body.get("write_trade_log"), True)
         logger.info(
             "Backtest API request: strategy_id=%s, data_source=%s, ts_code=%s, symbols=%s, "
-            "start_date=%s, end_date=%s, raw_body=%s",
+            "start_date=%s, end_date=%s, write_trade_log=%s, raw_body=%s",
             strategy_id,
             data_source,
             ts_code,
             symbols,
             start_date,
             end_date,
+            write_trade_log,
             body,
         )
         try:
@@ -1631,6 +1776,7 @@ def create_app() -> Flask:
                 symbols=symbols,
                 start_date=start_date,
                 end_date=end_date,
+                write_trade_log=write_trade_log,
             )
         except ValueError as e:
             return jsonify({"success": False, "message": str(e)}), 400
@@ -1654,6 +1800,166 @@ def create_app() -> Flask:
                 "message": "回测完成",
                 "data": serialize_backtest_result(result),
             }
+        )
+
+    # -----------------------------------------------------------------------
+    # 用户 Python 信号
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/signals", methods=["GET"])
+    def list_user_signals():
+        try:
+            status_arg = request.args.get("status")
+            status = UserSignalStatus(status_arg) if status_arg else None
+            signals = dao.list_user_signals(status)
+            return jsonify({"success": True, "data": [_serialize_user_signal(item) for item in signals]})
+        except Exception as e:
+            logger.exception("查询用户信号失败")
+            return jsonify({"success": False, "message": f"查询用户信号失败: {e}", "data": []}), 500
+
+    @app.route("/api/signals", methods=["POST"])
+    def create_user_signal():
+        body = request.get_json(force=True, silent=True) or {}
+        try:
+            signal = _parse_signal_payload(body)
+            if not signal.name or not signal.symbols or not signal.source_code:
+                return jsonify({"success": False, "message": "name、symbols、source_code 不能为空"}), 400
+            try:
+                load_signal_class(signal.source_code)
+            except ValueError as e:
+                return jsonify({
+                    "success": False,
+                    "message": "信号代码未通过校验",
+                    "diagnostics": str(e),
+                }), 400
+            new_id = dao.create_user_signal(signal)
+            _reload_live_signal_monitor()
+            saved = dao.get_user_signal(new_id)
+            return jsonify({
+                "success": True,
+                "message": "信号已保存",
+                "data": _serialize_user_signal(saved) if saved else {"id": new_id},
+            })
+        except ValueError as e:
+            return jsonify({"success": False, "message": str(e)}), 400
+        except Exception as e:
+            logger.exception("创建用户信号失败")
+            return jsonify({"success": False, "message": f"创建用户信号失败: {e}"}), 500
+
+    @app.route("/api/signals/<int:signal_id>", methods=["PUT"])
+    def update_user_signal(signal_id: int):
+        body = request.get_json(force=True, silent=True) or {}
+        existing = dao.get_user_signal(signal_id)
+        if not existing:
+            return jsonify({"success": False, "message": "信号不存在"}), 404
+        try:
+            signal = _parse_signal_payload(body, existing)
+            if not signal.name or not signal.symbols or not signal.source_code:
+                return jsonify({"success": False, "message": "name、symbols、source_code 不能为空"}), 400
+            try:
+                load_signal_class(signal.source_code)
+            except ValueError as e:
+                return jsonify({
+                    "success": False,
+                    "message": "信号代码未通过校验",
+                    "diagnostics": str(e),
+                }), 400
+            dao.update_user_signal(signal_id, signal)
+            _reload_live_signal_monitor()
+            saved = dao.get_user_signal(signal_id)
+            return jsonify({
+                "success": True,
+                "message": "信号已更新",
+                "data": _serialize_user_signal(saved) if saved else None,
+            })
+        except ValueError as e:
+            return jsonify({"success": False, "message": str(e)}), 400
+        except Exception as e:
+            logger.exception("更新用户信号失败")
+            return jsonify({"success": False, "message": f"更新用户信号失败: {e}"}), 500
+
+    @app.route("/api/signals/<int:signal_id>/status", methods=["POST"])
+    def update_user_signal_status(signal_id: int):
+        body = request.get_json(force=True, silent=True) or {}
+        try:
+            status = UserSignalStatus(str(body.get("status", UserSignalStatus.DISABLED.value)))
+            updated = dao.update_user_signal_status(signal_id, status)
+            if not updated:
+                return jsonify({"success": False, "message": "信号不存在"}), 404
+            _reload_live_signal_monitor()
+            return jsonify({"success": True, "message": "状态已更新"})
+        except ValueError:
+            return jsonify({"success": False, "message": "status 必须是 enabled 或 disabled"}), 400
+        except Exception as e:
+            logger.exception("更新用户信号状态失败")
+            return jsonify({"success": False, "message": f"更新用户信号状态失败: {e}"}), 500
+
+    @app.route("/api/signals/validate", methods=["POST"])
+    def validate_user_signal():
+        body = request.get_json(force=True, silent=True) or {}
+        source_code = str(body.get("source_code", ""))
+        is_valid, diagnostics = SignalContractValidator().validate(source_code)
+        return jsonify({
+            "success": is_valid,
+            "message": "校验通过" if is_valid else "校验失败",
+            "diagnostics": [item.to_dict() for item in diagnostics],
+        }), 200 if is_valid else 400
+
+    @app.route("/api/signals/ctx-schema", methods=["GET"])
+    def get_signal_ctx_schema():
+        return jsonify({"success": True, "data": get_local_context_reference()})
+
+    @app.route("/api/backtests/run-user-signal", methods=["POST"])
+    def run_user_signal_backtest_api():
+        body = request.get_json(force=True, silent=True) or {}
+        source_code = str(body.get("source_code", ""))
+        signal_id = body.get("signal_id")
+        if signal_id and not source_code:
+            signal = dao.get_user_signal(int(signal_id))
+            if not signal:
+                return jsonify({"success": False, "message": "信号不存在"}), 404
+            source_code = signal.source_code
+
+        if not source_code:
+            return jsonify({"success": False, "message": "source_code 或 signal_id 必填"}), 400
+
+        try:
+            data = run_user_signal_backtest(
+                source_code=source_code,
+                data_source=str(body.get("data_source", "mock")).strip().lower(),
+                ts_code=body.get("ts_code"),
+                symbols=body.get("symbols", body.get("ts_codes")),
+                start_date=body.get("start_date"),
+                end_date=body.get("end_date"),
+                initial_cash=float(body.get("initial_cash", 1_000_000.0)),
+                write_trade_log=_parse_bool_arg(body.get("write_trade_log"), True),
+                execution_timing=_parse_execution_timing(body.get("execution_timing"), "next_bar"),
+            )
+            return jsonify({"success": True, "message": "回测完成", "data": data})
+        except ValueError as e:
+            return jsonify({"success": False, "message": str(e)}), 400
+        except Exception as e:
+            logger.exception("用户信号回测失败")
+            return jsonify({"success": False, "message": f"回测失败: {e}"}), 500
+
+    @app.route("/api/signals/live/recent", methods=["GET"])
+    def get_recent_live_signals():
+        return jsonify({"success": True, "data": live_signal_monitor.get_recent()})
+
+    @app.route("/api/signals/live/stream", methods=["GET"])
+    def stream_live_signals():
+        listener = live_signal_monitor.add_listener()
+
+        def generate():
+            try:
+                yield from live_signal_monitor.stream(listener)
+            finally:
+                live_signal_monitor.remove_listener(listener)
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
     return app

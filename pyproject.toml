@@ -3,10 +3,10 @@ name = "complex-event-processing-engine"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "==3.12.*"
 dependencies = [
     "anthropic>=0.50.0",
-    "openctp-ctp==6.7.10.0",
+    "openctp-ctp==6.7.10.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "pytest>=8.4.2",
     "pyright>=1.1.408",
     "ruff>=0.15.9",
@@ -15,6 +15,7 @@ dependencies = [
     "requests>=2.33.1",
     "redis>=7.4.0",
     "tushare>=1.4.29",
+    "python-dotenv>=1.2.2",
 ]
 
 [dependency-groups]

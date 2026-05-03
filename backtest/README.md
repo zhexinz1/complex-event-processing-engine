@@ -94,8 +94,11 @@ result = engine.run()
 The current module supports:
 
 - event-driven bar replay
+- local `adjusted_main_contract` CSV history as a reusable 1-minute data source
 - AST-triggered signal generation
 - simulated market-order execution
+- next-bar-open execution by default to avoid same-bar look-ahead bias
+- invalid-order rejection for malformed, over-budget, and over-positioned trades
 - portfolio cash/position updates
 - equity snapshots and event capture
 
@@ -110,6 +113,39 @@ The current module does not yet fully model:
 Those can be added incrementally without changing the central design: everything should continue to flow through `EventBus`.
 
 ## Next step
-- integrate real historical data for backtesting
 - support adding new strategies on the fly
 - support data selection (stock, commodity, data interval)
+
+## Local Historical CSV
+
+The repository supports direct backtest loading from `adjusted_main_contract/*.csv`.
+There is no intermediate SQLite build step: backtests read the requested symbol CSVs directly.
+
+Runtime entry points that understand this data source:
+
+- `backtest.preset_strategies.run_preset_backtest(..., data_source="adjusted_main_contract")`
+- `signals.runtime.run_user_signal_backtest(..., data_source="adjusted_main_contract")`
+
+User-signal backtests also accept `execution_timing="current_bar"` to reproduce the legacy same-bar-close fill behavior when comparing old research runs.
+
+Direct engine and helper calls do not persist JSON logs unless `write_trade_log=True` is passed.
+The Flask backtest APIs opt in by default, and still accept `write_trade_log=False` to skip JSON log persistence under `backtest/logs/`.
+
+## Trade Logs
+
+Each persisted API backtest writes a JSON trade log into `backtest/logs/`.
+That folder is gitignored so runs stay local to the workspace.
+The frontend history tab reads these local JSON files through `GET /api/backtests/history`.
+
+The log includes:
+
+- summary metrics
+- initial cash, final cash, market value, final equity, realized PnL, and unrealized PnL
+- positions
+- signals
+- orders, including rejected orders
+- trades
+- equity curve
+
+`realized_pnl` only changes when a position is closed or reduced by an opposite-side trade.
+Open-position mark-to-market gains and losses are reported as `unrealized_pnl` and are included in `final_equity`.

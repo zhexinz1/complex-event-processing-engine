@@ -89,12 +89,54 @@ export interface BacktestTrade {
   [key: string]: unknown;
 }
 
+export interface BacktestPosition {
+  symbol: string;
+  quantity: number;
+  avg_price: number;
+  realized_pnl: number;
+}
+
 export interface BacktestResult {
+  initial_cash?: number;
+  final_cash?: number;
+  final_market_value?: number;
   final_equity: number;
   realized_pnl: number;
+  unrealized_pnl?: number;
   equity_curve: EquityPoint[];
   signals: BacktestSignal[];
   trades: BacktestTrade[];
+  positions?: BacktestPosition[];
+}
+
+export interface BacktestHistoryItem {
+  id: string;
+  filename: string;
+  created_at: string;
+  modified_at: string;
+  path: string;
+  market_events_processed: number;
+  initial_cash: number;
+  final_cash: number;
+  final_market_value: number;
+  final_equity: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  signal_count: number;
+  order_count: number;
+  trade_count: number;
+  position_count: number;
+  symbols: string[];
+  equity_curve_count?: number;
+  first_timestamp?: string | null;
+  last_timestamp?: string | null;
+}
+
+export interface BacktestHistoryDetail extends BacktestHistoryItem {
+  data: BacktestResult & {
+    orders?: Record<string, unknown>[];
+    positions?: BacktestPosition[];
+  };
 }
 
 export interface StockSearchResult {
@@ -113,6 +155,66 @@ export interface BacktestRequest {
   ts_code?: string;
   start_date?: string;
   end_date?: string;
+  write_trade_log?: boolean;
+}
+
+export interface SignalDiagnostic {
+  level: string;
+  message: string;
+  line?: number;
+  symbol?: string;
+  timestamp?: string;
+}
+
+export interface UserSignalDefinition {
+  id?: number;
+  name: string;
+  symbols: string[];
+  bar_freq: string;
+  source_code: string;
+  status: 'enabled' | 'disabled';
+  created_by: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserSignalBacktestRequest {
+  signal_id?: number;
+  source_code?: string;
+  data_source: string;
+  ts_code?: string;
+  symbols?: string[];
+  start_date?: string;
+  end_date?: string;
+  initial_cash?: number;
+  write_trade_log?: boolean;
+  execution_timing?: 'current_bar' | 'next_bar';
+}
+
+export interface LiveSignal {
+  event_id: string;
+  timestamp: string;
+  symbol: string;
+  source: string;
+  rule_id: string;
+  signal_type: string;
+  payload: BacktestSignalPayload;
+}
+
+export interface SignalCtxFieldDoc {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface SignalCtxSchema {
+  summary: string;
+  core_fields: SignalCtxFieldDoc[];
+  indicator_fields: SignalCtxFieldDoc[];
+  bar_fields: SignalCtxFieldDoc[];
+  tick_fields: SignalCtxFieldDoc[];
+  notes: string[];
+  example_code: string;
 }
 
 // ---- Fund Inflow ----
@@ -208,8 +310,18 @@ export interface CepApiClient {
   saveWeight(payload: SaveWeightPayload): Promise<ApiResponse>;
   deleteWeight(recordId: number): Promise<ApiResponse>;
   fetchBacktestPresets(): Promise<ApiResponse<BacktestPreset[]>>;
+  fetchBacktestHistory(limit?: number): Promise<ApiResponse<BacktestHistoryItem[]>>;
+  fetchBacktestHistoryDetail(id: string, equityPoints?: number): Promise<ApiResponse<BacktestHistoryDetail>>;
   searchStocks(keyword: string, limit?: number): Promise<ApiResponse<StockSearchResult[]>>;
   runBacktest(payload: BacktestRequest): Promise<ApiResponse<BacktestResult>>;
+  fetchUserSignals(): Promise<ApiResponse<UserSignalDefinition[]>>;
+  createUserSignal(payload: UserSignalDefinition): Promise<ApiResponse<UserSignalDefinition>>;
+  updateUserSignal(signalId: number, payload: UserSignalDefinition): Promise<ApiResponse<UserSignalDefinition>>;
+  updateUserSignalStatus(signalId: number, status: 'enabled' | 'disabled'): Promise<ApiResponse>;
+  validateUserSignal(sourceCode: string): Promise<ApiResponse & { diagnostics: SignalDiagnostic[] }>;
+  runUserSignalBacktest(payload: UserSignalBacktestRequest): Promise<ApiResponse<BacktestResult & { diagnostics?: SignalDiagnostic[] }>>;
+  fetchRecentLiveSignals(): Promise<ApiResponse<LiveSignal[]>>;
+  fetchSignalCtxSchema(): Promise<ApiResponse<SignalCtxSchema>>;
   // Fund Inflow
   fetchProductList(): Promise<ApiResponse & { products: ProductInfo[] }>;
   submitFundInflow(payload: { product_name: string; net_inflow: number; input_by: string }): Promise<ApiResponse & { batch_id: string }>;

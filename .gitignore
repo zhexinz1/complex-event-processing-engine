@@ -40,6 +40,7 @@ htmlcov/
 
 # Logs
 *.log
+backtest/logs/
 
 # OS
 .DS_Store
@@ -57,9 +58,13 @@ ctp_flow_thread/
 .codex
 AGENTS.md
 
+# Tracked native CTP bundle
+!ctp_package/*.so
+
 # Legacy
 run_server.py
 
 # Frontend build
 node_modules/
 frontend/dist/
+*.csv

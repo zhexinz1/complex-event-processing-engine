@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
+
+from database.config import DB_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -373,11 +374,11 @@ class MySQLConfigSource(ConfigSource):
     供 RebalanceEngine 直接使用。
     """
 
-    DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
-    DB_PORT = int(os.environ.get("DB_PORT", "3306"))
-    DB_NAME = os.environ.get("DB_NAME", "fof")
-    DB_USER = os.environ.get("DB_USER", "root")
-    DB_PASS = os.environ.get("DB_PASS", "")
+    DB_HOST = DB_CONFIG.host
+    DB_PORT = DB_CONFIG.port
+    DB_NAME = DB_CONFIG.database
+    DB_USER = DB_CONFIG.user
+    DB_PASS = DB_CONFIG.password
 
     CREATE_TABLE_SQL = """
     CREATE TABLE IF NOT EXISTS target_allocations (
@@ -401,12 +402,12 @@ class MySQLConfigSource(ConfigSource):
 
     def _connect(self):
         return self._pymysql.connect(
-            host=self.DB_HOST,
-            port=self.DB_PORT,
-            database=self.DB_NAME,
-            user=self.DB_USER,
-            password=self.DB_PASS,
-            charset="utf8mb4",
+            host=DB_CONFIG.host,
+            port=DB_CONFIG.port,
+            database=DB_CONFIG.database,
+            user=DB_CONFIG.user,
+            password=DB_CONFIG.password,
+            charset=DB_CONFIG.charset,
             cursorclass=self._pymysql.cursors.DictCursor,
             autocommit=False,
         )

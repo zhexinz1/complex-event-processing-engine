@@ -33,6 +33,16 @@ const router = createRouter({
       name: 'backtest',
       component: () => import('./views/BacktestView.vue'),
     },
+    {
+      path: '/signals',
+      name: 'signals',
+      component: () => import('./views/SignalsView.vue'),
+    },
+    {
+      path: '/signals/ctx-guide',
+      name: 'signal-ctx-guide',
+      component: () => import('./views/SignalCtxGuideView.vue'),
+    },
   ],
 });
 

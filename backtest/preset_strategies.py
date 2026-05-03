@@ -8,7 +8,12 @@ from typing import Any
 
 from cep.core.events import BarEvent, BaseEvent, OrderSide, SignalEvent, SignalType
 from cep.triggers import BaseTrigger
-from data_provider import fetch_tushare_daily_bars, normalize_ts_code
+from data_provider import (
+    fetch_adjusted_main_contract_bars,
+    fetch_adjusted_main_contract_bars_multi,
+    fetch_tushare_daily_bars,
+    normalize_ts_code,
+)
 
 from .engine import BacktestEngine
 from .models import BacktestResult
@@ -41,8 +46,8 @@ PRESET_STRATEGIES = {
         "id": "pbx_ma",
         "name": "PBX1 + MA$1 情绪周期",
         "description": "PBX1 瀑布线短线情绪轨配合 MA$1 参照线，使用预设 mock 数据回测启动与退潮信号。",
-        "dataset": "emotion_cycle_mock / tushare_daily",
-        "data_sources": ["mock", "tushare"],
+        "dataset": "emotion_cycle_mock / tushare_daily / adjusted_main_contract_1m",
+        "data_sources": ["mock", "tushare", "adjusted_main_contract"],
         "symbol": "600519.SH",
         "parameter_summary": [
             {"label": "PBX 参数", "value": "M1=4"},
@@ -60,7 +65,7 @@ PRESET_STRATEGIES = {
         "name": "横截面动量轮动",
         "description": "在多只股票之间比较最近 N 根收益率，持有横截面表现最强的一只；冠军变化时卖出旧标的并买入新标的。",
         "dataset": "cross_section_momentum_mock",
-        "data_sources": ["mock"],
+        "data_sources": ["mock", "adjusted_main_contract"],
         "symbol": "multi-stock universe",
         "symbols": list(CROSS_SECTION_MOMENTUM_CLOSES),
         "parameter_summary": [
@@ -136,8 +141,8 @@ def symbol_order(symbol_closes: dict[str, list[float]], symbol: str) -> int:
     return list(symbol_closes).index(symbol)
 
 
-def normalize_symbol_group(raw_symbols: Any) -> list[str]:
-    """Normalize a dynamic stock universe for cross-sectional backtests."""
+def normalize_symbol_group(raw_symbols: Any, *, use_tushare_format: bool = True) -> list[str]:
+    """Normalize a dynamic symbol universe for cross-sectional backtests."""
     if raw_symbols is None:
         raise ValueError("横截面动量策略需要 symbols / ts_codes 股票池")
 
@@ -153,7 +158,7 @@ def normalize_symbol_group(raw_symbols: Any) -> list[str]:
     for candidate in candidates:
         if not candidate:
             continue
-        symbol = normalize_ts_code(candidate)
+        symbol = normalize_ts_code(candidate) if use_tushare_format else candidate.upper()
         if symbol in seen:
             continue
         seen.add(symbol)
@@ -399,12 +404,14 @@ def run_pbx_ma_backtest(
     pbx_period: int = 4,
     ma_period: int = 10,
     bar_freq: str = "1m",
+    write_trade_log: bool = False,
 ) -> BacktestResult:
     """Run PBX/MA strategy on caller-provided bars."""
     engine = BacktestEngine(
         initial_cash=initial_cash,
         default_order_quantity=quantity,
         commission_rate=0.0003,
+        write_trade_log=write_trade_log,
     )
     trigger = PbxMaEmotionTrigger(
         engine=engine,
@@ -416,7 +423,7 @@ def run_pbx_ma_backtest(
     )
     trigger.register()
 
-    engine.ingest_bars(bars)
+    engine.ingest_bars(bars, assume_sorted=True)
     return engine.run()
 
 
@@ -427,12 +434,14 @@ def run_cross_section_momentum_backtest(
     quantity: float = 100.0,
     lookback: int = 5,
     bar_freq: str = "1m",
+    write_trade_log: bool = False,
 ) -> BacktestResult:
     """Run a cross-sectional momentum rotation strategy."""
     engine = BacktestEngine(
         initial_cash=initial_cash,
         default_order_quantity=quantity,
         commission_rate=0.0003,
+        write_trade_log=write_trade_log,
     )
     trigger = CrossSectionMomentumTrigger(
         engine=engine,
@@ -443,7 +452,7 @@ def run_cross_section_momentum_backtest(
     )
     trigger.register()
 
-    engine.ingest_bars(bars)
+    engine.ingest_bars(bars, assume_sorted=True)
     return engine.run()
 
 
@@ -454,6 +463,7 @@ def run_preset_backtest(
     symbols: Any = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    write_trade_log: bool = False,
 ) -> BacktestResult:
     """Run a supported preset strategy against its preset dataset."""
     if strategy_id not in PRESET_STRATEGIES:
@@ -466,6 +476,12 @@ def run_preset_backtest(
         if data_source == "mock":
             selected_symbols = list(preset["symbols"])
             bars = make_cross_section_mock_bars(CROSS_SECTION_MOMENTUM_CLOSES)
+            bar_freq = "1m"
+        elif data_source == "adjusted_main_contract":
+            if not start_date or not end_date:
+                raise ValueError("adjusted_main_contract 横截面回测需要 start_date、end_date")
+            selected_symbols = normalize_symbol_group(symbols, use_tushare_format=False)
+            bars = fetch_adjusted_main_contract_bars_multi(selected_symbols, start_date, end_date)
             bar_freq = "1m"
         elif data_source == "tushare":
             if not start_date or not end_date:
@@ -483,12 +499,21 @@ def run_preset_backtest(
             quantity=float(parameters["quantity"]),
             lookback=int(parameters["lookback"]),
             bar_freq=bar_freq,
+            write_trade_log=write_trade_log,
         )
 
     if data_source == "mock":
         symbol = str(preset["symbol"])
         bar_freq = "1m"
         bars = make_mock_bars(symbol, PBX_MA_PRESET_CLOSES)
+    elif data_source == "adjusted_main_contract":
+        if not start_date or not end_date:
+            raise ValueError("adjusted_main_contract 回测需要 symbol/ts_code、start_date、end_date")
+        symbol = str(ts_code or (symbols[0] if isinstance(symbols, list) and symbols else symbols or "")).strip().upper()
+        if not symbol:
+            raise ValueError("adjusted_main_contract 回测需要 symbol/ts_code")
+        bars = fetch_adjusted_main_contract_bars(symbol, start_date, end_date)
+        bar_freq = "1m"
     elif data_source == "tushare":
         if not ts_code or not start_date or not end_date:
             raise ValueError("Tushare 回测需要 ts_code、start_date、end_date")
@@ -506,17 +531,29 @@ def run_preset_backtest(
         pbx_period=int(parameters["pbx_period"]),
         ma_period=int(parameters["ma_period"]),
         bar_freq=bar_freq,
+        write_trade_log=write_trade_log,
     )
 
 
 def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
     """Convert BacktestResult into a JSON-ready response payload."""
+    initial_cash = float(getattr(result, "initial_cash", 1_000_000.0))
+    unrealized_pnl = float(
+        getattr(
+            result,
+            "unrealized_pnl",
+            result.final_equity - initial_cash - result.realized_pnl,
+        )
+    )
     return {
         "market_events_processed": result.market_events_processed,
+        "initial_cash": round(initial_cash, 2),
         "final_cash": round(result.final_cash, 2),
         "final_market_value": round(result.final_market_value, 2),
         "final_equity": round(result.final_equity, 2),
         "realized_pnl": round(result.realized_pnl, 2),
+        "unrealized_pnl": round(unrealized_pnl, 2),
+        "trade_log_path": result.trade_log_path,
         "signals": [
             {
                 "timestamp": signal.timestamp.isoformat(),

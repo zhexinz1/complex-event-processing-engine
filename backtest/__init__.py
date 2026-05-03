@@ -8,6 +8,7 @@ from .parser import HistoricalDataParser
 from .portfolio import PortfolioLedger
 from .queue import Dispatcher, EventQueue
 from .recorder import PerformanceRecorder
+from .trade_log import list_backtest_trade_logs, read_backtest_trade_log, write_backtest_trade_log
 
 __all__ = [
     "BacktestEngine",
@@ -21,4 +22,7 @@ __all__ = [
     "PerformanceRecorder",
     "PortfolioLedger",
     "SimulatedBroker",
+    "write_backtest_trade_log",
+    "list_backtest_trade_logs",
+    "read_backtest_trade_log",
 ]

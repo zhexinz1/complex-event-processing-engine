@@ -1,6 +1,7 @@
 """
 启动 Flask Web 微服务 (独立 Web 控制台)
 """
+
 import logging
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from pathlib import Path
 _env_file = Path(__file__).resolve().parent.parent / ".env"
 if _env_file.exists():
     import os
+
     for line in _env_file.read_text().splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
@@ -18,10 +20,10 @@ from adapters.flask_app import create_app, init_db
 from adapters.price_service import init_redis_market_subscriber
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 def main():
     logger.info("=" * 60)
@@ -45,5 +47,5 @@ def main():
     # 绑定 0.0.0.0 以便外网或物理机能够访问，5000 端口
     app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

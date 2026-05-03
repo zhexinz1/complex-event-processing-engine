@@ -15,10 +15,13 @@ class EventQueue:
 
     def __init__(self) -> None:
         self._heap: list[tuple[datetime, int, BaseEvent]] = []
+        self._ordered: list[BaseEvent] = []
+        self._ordered_index = 0
         self._sequence = 0
 
     def push(self, event: BaseEvent) -> None:
         """按时间顺序压入事件。"""
+        self._materialize_ordered_into_heap()
         heapq.heappush(self._heap, (event.timestamp, self._sequence, event))
         self._sequence += 1
 
@@ -27,14 +30,40 @@ class EventQueue:
         for event in events:
             self.push(event)
 
+    def extend_sorted(self, events: Iterable[BaseEvent]) -> None:
+        """批量导入已按时间排序的事件，跳过 heap 开销。"""
+        if self._heap:
+            self.extend(events)
+            return
+        self._ordered.extend(events)
+
     def pop(self) -> BaseEvent:
         """弹出下一个事件。"""
+        if self._ordered_index < len(self._ordered):
+            event = self._ordered[self._ordered_index]
+            self._ordered_index += 1
+            if self._ordered_index >= len(self._ordered):
+                self._ordered.clear()
+                self._ordered_index = 0
+            return event
         _, _, event = heapq.heappop(self._heap)
         return event
 
     def empty(self) -> bool:
         """是否为空。"""
-        return not self._heap
+        return self._ordered_index >= len(self._ordered) and not self._heap
+
+    def _materialize_ordered_into_heap(self) -> None:
+        """当顺序流和 heap 混用时，将剩余顺序事件转入 heap。"""
+        if self._ordered_index >= len(self._ordered):
+            self._ordered.clear()
+            self._ordered_index = 0
+            return
+        for event in self._ordered[self._ordered_index:]:
+            heapq.heappush(self._heap, (event.timestamp, self._sequence, event))
+            self._sequence += 1
+        self._ordered.clear()
+        self._ordered_index = 0
 
 
 class Dispatcher:

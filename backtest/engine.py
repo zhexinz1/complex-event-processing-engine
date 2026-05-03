@@ -11,12 +11,13 @@ from cep.engine.ast_engine import Node
 from cep.triggers.triggers import AstRuleTrigger
 
 from .aggregation import MultiTimeframeBarAggregator
-from .broker import SimulatedBroker
+from .broker import ExecutionTiming, SimulatedBroker, _validate_execution_timing
 from .models import BacktestResult
 from .parser import HistoricalDataParser
 from .portfolio import PortfolioLedger
 from .queue import Dispatcher, EventQueue
 from .recorder import PerformanceRecorder
+from .trade_log import write_backtest_trade_log
 
 
 class BacktestEngine:
@@ -30,7 +31,11 @@ class BacktestEngine:
         contract_multipliers: Optional[dict[str, float]] = None,
         default_order_quantity: float = 1.0,
         commission_rate: float = 0.0,
+        write_trade_log: bool = False,
+        execution_timing: ExecutionTiming = "next_bar",
     ) -> None:
+        execution_timing = _validate_execution_timing(execution_timing)
+        self.initial_cash = initial_cash
         self.event_bus = EventBus()
         self.event_queue = EventQueue()
         self.parser = HistoricalDataParser()
@@ -43,14 +48,19 @@ class BacktestEngine:
         self.recorder = PerformanceRecorder(self.event_bus, self.portfolio)
         self.broker = SimulatedBroker(
             event_bus=self.event_bus,
+            portfolio=self.portfolio,
             default_quantity=default_order_quantity,
             commission_rate=commission_rate,
+            contract_multipliers=contract_multipliers,
+            execution_timing=execution_timing,
         )
         self.aggregator = MultiTimeframeBarAggregator(
             event_bus=self.event_bus,
             base_freq=base_bar_freq,
             target_freqs=aggregate_freqs,
         )
+        self.write_trade_log = write_trade_log
+        self.execution_timing = execution_timing
 
         # EventBus 保存弱引用，必须显式持有这些对象。
         self._components = [self.portfolio, self.recorder, self.broker, self.aggregator]
@@ -86,9 +96,18 @@ class BacktestEngine:
         self._triggers.append(trigger)
         return trigger
 
-    def ingest_bars(self, raw_bars: Iterable[BarEvent | dict[str, Any]]) -> None:
+    def ingest_bars(
+        self,
+        raw_bars: Iterable[BarEvent | dict[str, Any]],
+        *,
+        assume_sorted: bool = False,
+    ) -> None:
         """导入历史 Bar 到事件队列。"""
-        self.event_queue.extend(self.parser.parse_bars(raw_bars))
+        parsed = self.parser.parse_bars(raw_bars, assume_sorted=assume_sorted)
+        if assume_sorted:
+            self.event_queue.extend_sorted(parsed)
+            return
+        self.event_queue.extend(parsed)
 
     def get_context(self, symbol: str) -> Optional[LocalContext]:
         """返回指定标的对应的 LocalContext。"""
@@ -105,15 +124,22 @@ class BacktestEngine:
                 market_events_processed += 1
                 self.recorder.capture_snapshot(event.timestamp)
 
-        return BacktestResult(
+        self.broker.finalize()
+        result = BacktestResult(
             market_events_processed=market_events_processed,
             signals=list(self.recorder.signals),
             orders=list(self.recorder.orders),
             trades=list(self.recorder.trades),
             snapshots=list(self.recorder.snapshots),
+            initial_cash=self.initial_cash,
             final_cash=self.portfolio.cash,
             final_market_value=self.portfolio.market_value,
             final_equity=self.portfolio.equity,
             realized_pnl=self.portfolio.realized_pnl,
+            unrealized_pnl=self.portfolio.equity - self.initial_cash - self.portfolio.realized_pnl,
             positions=self.portfolio.snapshot_positions(),
         )
+        if self.write_trade_log:
+            log_path = write_backtest_trade_log(result)
+            result.trade_log_path = str(log_path)
+        return result

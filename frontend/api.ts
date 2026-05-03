@@ -2,12 +2,19 @@ import type {
   ApiResponse,
   Asset,
   AllocationRow,
+  BacktestHistoryDetail,
   BacktestRequest,
+  BacktestHistoryItem,
   BacktestResult,
   CepApiClient,
   SaveWeightPayload,
   StockSearchResult,
   BacktestPreset,
+  UserSignalBacktestRequest,
+  UserSignalDefinition,
+  SignalDiagnostic,
+  LiveSignal,
+  SignalCtxSchema,
   ProductInfo,
   FundInflow,
   PendingOrdersResponse,
@@ -61,6 +68,16 @@ export const CepApi: CepApiClient = {
     return this.requestJson('/api/backtests/presets');
   },
 
+  fetchBacktestHistory(limit = 100): Promise<ApiResponse<BacktestHistoryItem[]>> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return this.requestJson(`/api/backtests/history?${params.toString()}`);
+  },
+
+  fetchBacktestHistoryDetail(id: string, equityPoints = 48): Promise<ApiResponse<BacktestHistoryDetail>> {
+    const params = new URLSearchParams({ equity_points: String(equityPoints) });
+    return this.requestJson(`/api/backtests/history/${encodeURIComponent(id)}?${params.toString()}`);
+  },
+
   searchStocks(keyword: string, limit = 20): Promise<ApiResponse<StockSearchResult[]>> {
     const params = new URLSearchParams({ q: keyword, limit: String(limit) });
     return this.requestJson(`/api/stocks/search?${params.toString()}`);
@@ -72,6 +89,58 @@ export const CepApi: CepApiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+  },
+
+  fetchUserSignals(): Promise<ApiResponse<UserSignalDefinition[]>> {
+    return this.requestJson('/api/signals');
+  },
+
+  createUserSignal(payload: UserSignalDefinition): Promise<ApiResponse<UserSignalDefinition>> {
+    return this.requestJson('/api/signals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateUserSignal(signalId: number, payload: UserSignalDefinition): Promise<ApiResponse<UserSignalDefinition>> {
+    return this.requestJson(`/api/signals/${signalId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateUserSignalStatus(signalId: number, status: 'enabled' | 'disabled'): Promise<ApiResponse> {
+    return this.requestJson(`/api/signals/${signalId}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  validateUserSignal(sourceCode: string): Promise<ApiResponse & { diagnostics: SignalDiagnostic[] }> {
+    return this.requestJson('/api/signals/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_code: sourceCode }),
+    });
+  },
+
+  runUserSignalBacktest(payload: UserSignalBacktestRequest): Promise<ApiResponse<BacktestResult & { diagnostics?: SignalDiagnostic[] }>> {
+    return this.requestJson('/api/backtests/run-user-signal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  fetchRecentLiveSignals(): Promise<ApiResponse<LiveSignal[]>> {
+    return this.requestJson('/api/signals/live/recent');
+  },
+
+  fetchSignalCtxSchema(): Promise<ApiResponse<SignalCtxSchema>> {
+    return this.requestJson('/api/signals/ctx-schema');
   },
 
   // ---- Fund Inflow ----
@@ -117,6 +186,14 @@ export const CepApi: CepApiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ batch_id: batchId, confirmed_by: confirmedBy, price_type: priceType }),
     });
+  },
+
+  reconcileOrders(): Promise<ApiResponse> {
+    return this.requestJson('/api/xt/orders?reconcile=true');
+  },
+
+  fetchXtCache(): Promise<ApiResponse> {
+    return this.requestJson('/api/xt/products');
   },
 
   // ---- Prices ----

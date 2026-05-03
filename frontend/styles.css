@@ -414,6 +414,12 @@
       margin-top: 24px;
     }
 
+    .backtest-history-grid {
+      display: grid;
+      gap: 24px;
+      grid-template-columns: minmax(320px, 480px) 1fr;
+    }
+
     .metric-grid {
       display: grid;
       gap: 16px;
@@ -422,6 +428,10 @@
 
     @media (max-width: 900px) {
       .backtest-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .backtest-history-grid {
         grid-template-columns: 1fr;
       }
 

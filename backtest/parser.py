@@ -10,7 +10,12 @@ from cep.core.events import BarEvent
 class HistoricalDataParser:
     """将原始历史数据统一解析为标准事件。"""
 
-    def parse_bars(self, raw_bars: Iterable[BarEvent | dict[str, Any]]) -> list[BarEvent]:
+    def parse_bars(
+        self,
+        raw_bars: Iterable[BarEvent | dict[str, Any]],
+        *,
+        assume_sorted: bool = False,
+    ) -> list[BarEvent]:
         """将历史 bar 数据统一转换为 BarEvent 列表。"""
         parsed: list[BarEvent] = []
 
@@ -20,5 +25,6 @@ class HistoricalDataParser:
             else:
                 parsed.append(BarEvent(**item))
 
-        parsed.sort(key=lambda bar: (bar.timestamp, bar.bar_time))
+        if not assume_sorted:
+            parsed.sort(key=lambda bar: (bar.timestamp, bar.bar_time))
         return parsed

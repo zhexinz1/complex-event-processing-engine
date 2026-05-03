@@ -39,8 +39,11 @@ class BacktestResult:
     orders: list[OrderEvent] = field(default_factory=list)
     trades: list[TradeEvent] = field(default_factory=list)
     snapshots: list[EquitySnapshot] = field(default_factory=list)
+    initial_cash: float = 0.0
     final_cash: float = 0.0
     final_market_value: float = 0.0
     final_equity: float = 0.0
     realized_pnl: float = 0.0
+    unrealized_pnl: float = 0.0
     positions: dict[str, BacktestPosition] = field(default_factory=dict)
+    trade_log_path: str = ""
