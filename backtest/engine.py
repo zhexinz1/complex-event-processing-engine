@@ -136,10 +136,6 @@ class BacktestEngine:
                 market_events_processed += 1
                 last_timestamp = event.timestamp
 
-        # 尾部快照：记录最后一个事件处理完毕后的最终状态
-        if last_timestamp is not None:
-            self.recorder.capture_snapshot(last_timestamp)
-
         self.broker.finalize()
         result = BacktestResult(
             market_events_processed=market_events_processed,
