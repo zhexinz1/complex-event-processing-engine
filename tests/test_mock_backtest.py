@@ -1,4 +1,6 @@
+import gc
 import json
+import weakref
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -35,6 +37,21 @@ def _make_bars(symbol: str, closes: list[float]) -> list[BarEvent]:
         prev_close = close
 
     return bars
+
+
+def test_backtest_engine_register_component_keeps_strong_reference() -> None:
+    class ExternalComponent:
+        pass
+
+    engine = BacktestEngine()
+    component = ExternalComponent()
+    component_ref = weakref.ref(component)
+
+    assert engine.register_component(component) is component
+    del component
+    gc.collect()
+
+    assert component_ref() is not None
 
 
 def test_backtest_engine_processes_market_signal_order_and_trade_flow(monkeypatch, tmp_path) -> None:

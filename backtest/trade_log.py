@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -12,6 +13,7 @@ from .models import BacktestResult
 
 BACKTEST_DIR = Path(__file__).parent
 DEFAULT_LOG_DIR = BACKTEST_DIR / "logs"
+LOG_ID_PATTERN = re.compile(r"[a-zA-Z0-9._-]+")
 
 
 def _log_timestamp(path: Path) -> str:
@@ -97,7 +99,7 @@ def _summarize_log_payload(path: Path, payload: dict[str, Any]) -> dict[str, Any
 
 
 def _resolve_log_path(log_id: str, log_dir: Path) -> Path:
-    if "/" in log_id or "\\" in log_id or log_id in {"", ".", ".."}:
+    if log_id in {".", ".."} or not LOG_ID_PATTERN.fullmatch(log_id):
         raise ValueError("Invalid backtest log id")
     path = log_dir / f"{log_id}.json"
     if path.parent != log_dir:

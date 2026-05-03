@@ -67,6 +67,11 @@ class BacktestEngine:
         self._triggers: list[AstRuleTrigger] = []
         self._contexts: dict[str, LocalContext] = {}
 
+    def register_component(self, component: object) -> object:
+        """Keep an event-bus component strongly referenced for the engine lifetime."""
+        self._components.append(component)
+        return component
+
     def register_ast_rule(
         self,
         symbol: str,

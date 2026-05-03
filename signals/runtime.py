@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import json
 import logging
-import pickle
 import queue
 import threading
 import time
@@ -13,6 +12,7 @@ from collections import deque
 from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Iterable
+from uuid import uuid4
 
 from backtest.engine import BacktestEngine
 from backtest.preset_strategies import (
@@ -130,6 +130,14 @@ class SignalContractValidator:
                     SignalDiagnostic(
                         level="error",
                         message=f"{type(node).__name__} is not allowed in user signals",
+                        line=getattr(node, "lineno", None),
+                    )
+                )
+            if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__"):
+                diagnostics.append(
+                    SignalDiagnostic(
+                        level="error",
+                        message="dunder attribute access is not allowed in user signals",
                         line=getattr(node, "lineno", None),
                     )
                 )
@@ -478,7 +486,7 @@ def run_user_signal_backtest(
         bar_freq=effective_freq if data_source != "mock" else bar_freq,
     )
     trigger.register()
-    engine._components.append(trigger)
+    engine.register_component(trigger)
     engine.ingest_bars(bars, assume_sorted=True)
     result = engine.run()
     payload = serialize_backtest_result(result)
@@ -506,6 +514,52 @@ def serialize_signal_event(signal: SignalEvent) -> dict[str, Any]:
         "signal_type": signal.signal_type.value,
         "payload": signal.payload,
     }
+
+
+def serialize_bar_event(bar: BarEvent) -> dict[str, Any]:
+    """Convert a BarEvent to a JSON-ready payload for live signal monitoring."""
+
+    return {
+        "event_id": bar.event_id,
+        "timestamp": bar.timestamp.isoformat(),
+        "symbol": bar.symbol,
+        "freq": bar.freq,
+        "open": bar.open,
+        "high": bar.high,
+        "low": bar.low,
+        "close": bar.close,
+        "volume": bar.volume,
+        "turnover": bar.turnover,
+        "bar_time": bar.bar_time.isoformat(),
+    }
+
+
+def deserialize_bar_event_payload(raw_payload: bytes | str) -> BarEvent:
+    """Decode a JSON Redis payload into a BarEvent."""
+
+    if isinstance(raw_payload, bytes):
+        raw_payload = raw_payload.decode("utf-8")
+    payload = json.loads(raw_payload)
+    if not isinstance(payload, dict):
+        raise ValueError("Redis bar payload must be a JSON object")
+    required = {"symbol", "freq", "open", "high", "low", "close", "volume", "turnover", "bar_time"}
+    missing = sorted(required - payload.keys())
+    if missing:
+        raise ValueError(f"Redis bar payload missing fields: {', '.join(missing)}")
+    timestamp = payload.get("timestamp")
+    return BarEvent(
+        event_id=str(payload.get("event_id", "")) or str(uuid4()),
+        timestamp=datetime.fromisoformat(timestamp) if isinstance(timestamp, str) else datetime.utcnow(),
+        symbol=str(payload["symbol"]),
+        freq=str(payload["freq"]),
+        open=float(payload["open"]),
+        high=float(payload["high"]),
+        low=float(payload["low"]),
+        close=float(payload["close"]),
+        volume=int(payload["volume"]),
+        turnover=float(payload["turnover"]),
+        bar_time=datetime.fromisoformat(str(payload["bar_time"])),
+    )
 
 
 class LiveSignalMonitor:
@@ -577,12 +631,11 @@ class LiveSignalMonitor:
                 if message.get("type") != "message":
                     continue
                 try:
-                    event = pickle.loads(message["data"])
+                    event = deserialize_bar_event_payload(message["data"])
                 except Exception as exc:
                     logger.warning("[LiveSignalMonitor] failed to decode Redis event: %s", exc)
                     continue
-                if isinstance(event, BarEvent):
-                    self.publish_bar(event)
+                self.publish_bar(event)
         except Exception as exc:
             logger.error("[LiveSignalMonitor] Redis subscriber exited: %s", exc)
 

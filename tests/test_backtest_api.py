@@ -1,6 +1,8 @@
 import json
 from datetime import datetime, timedelta
 
+import pytest
+
 from adapters.flask_app import create_app
 from backtest.preset_strategies import PBX_MA_PRESET_CLOSES
 from backtest.trade_log import list_backtest_trade_logs, read_backtest_trade_log
@@ -369,6 +371,32 @@ def test_backtest_history_api_returns_json_logs(monkeypatch, tmp_path) -> None:
     assert small_detail_response.status_code == 200
     small_detail_payload = small_detail_response.get_json()
     assert len(small_detail_payload["data"]["data"]["equity_curve"]) == 5
+
+
+@pytest.mark.parametrize(
+    "log_id",
+    [
+        "../backtest-20260502T010203-deadbeef",
+        "nested/backtest-20260502T010203-deadbeef",
+        "",
+        ".",
+        "..",
+        "backtest-\x00",
+    ],
+)
+def test_backtest_trade_log_rejects_invalid_log_ids(tmp_path, log_id: str) -> None:
+    with pytest.raises(ValueError, match="Invalid backtest log id"):
+        read_backtest_trade_log(log_id, tmp_path)
+
+
+def test_backtest_trade_log_accepts_whitelisted_log_id(tmp_path) -> None:
+    log_id = "backtest-20260502T010203-deadbeef.v1"
+    (tmp_path / f"{log_id}.json").write_text(json.dumps({"equity_curve": []}), encoding="utf-8")
+
+    payload = read_backtest_trade_log(log_id, tmp_path)
+
+    assert payload is not None
+    assert payload["id"] == log_id
 
 
 def test_stock_search_api_returns_indexed_matches(monkeypatch) -> None:

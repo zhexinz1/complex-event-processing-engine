@@ -1,6 +1,6 @@
 ## Copper/Silver Ratio -> Oil Strategy Progress
 
-Last updated: 2026-05-01
+Last updated: 2026-05-02
 
 ### Research Goal
 
@@ -47,6 +47,11 @@ The script intentionally keeps only runnable active experiments to preserve futu
 | Soft CU/AG breakout + correlation reversion exit | `next_bar` | 951,200 | -4.88% | -12.40% | -0.221 | 461 | Discard |
 | Soft CU/AG breakout + positive correlation gate | `next_bar` | 998,400 | -0.16% | -9.84% | 0.031 | 268 | Revise |
 | Mid CU/AG breakout + positive correlation gate | `next_bar` | 1,036,760 | 3.68% | -9.57% | 0.254 | 206 | Revise |
+| Mid breakout + corr entry `0.05` | `next_bar` | 942,880 | -5.71% | -12.43% | -0.384 | 118 | Discard |
+| Mid breakout + corr entry `0.10` | `next_bar` | 912,640 | -8.74% | -13.51% | -0.804 | 50 | Discard |
+| Mid breakout + corr entry `0.05`, exit below `0.0` | `next_bar` | 888,990 | -11.10% | -18.51% | -0.634 | 114 | Discard |
+| Mid breakout + corr entry `0.05`, 240-bar hold | `next_bar` | 929,600 | -7.04% | -16.40% | -0.351 | 114 | Discard |
+| Mid breakout + corr entry `0.05`, 480-bar corr window | `next_bar` | 812,610 | -18.74% | -24.53% | -1.115 | 83 | Discard |
 
 ### Timing Validation
 
@@ -67,7 +72,7 @@ The 120-bar minimum-hold variant is the best candidate so far, but it is not pro
 - It still underperforms buy-and-hold SC on total return.
 - It reduces drawdown versus buy-and-hold, but only modestly.
 - The 120-bar minimum hold reduced turnover from roughly `562x` to `472x` notional over the test window, but turnover remains very high.
-- The best breakout/correlation variant so far is the 720-bar breakout with a positive-correlation entry gate: it has lower drawdown and turnover than the min-hold baseline, but still weaker return and Sharpe.
+- The best breakout/correlation variant so far is still the 720-bar breakout with a positive-correlation entry gate. Stricter correlation entry, slower exits, longer holds, and longer correlation windows all failed.
 - Results still assume zero commission and no slippage.
 
 ## Iteration 7
@@ -154,6 +159,38 @@ Current read: the breakout/correlation family is useful as a drawdown and turnov
 
 Next step:
 
-- Raise `corr_entry_threshold` from `0.0` to `0.05` or `0.10`.
-- Keep `breakout_lookback = 720` so only the correlation filter changes.
-- Compare against both `ratio_breakout_mid_corr_gate` and `lagged_ratio_min_hold`.
+- Pause further breakout/correlation tuning after five consecutive failed follow-ups.
+- If revisiting the PMI-lead hypothesis, test a direct ratio acceleration or percentile-thrust feature rather than a higher correlation threshold.
+
+### Follow-Up Sweep: Correlation Quality
+
+Question: can the 720-bar breakout improve if entry correlation is stronger or the correlation-reversion exit is less noisy?
+
+| Variant | Return | Max DD | Sharpe | Trades | Decision |
+|---|---:|---:|---:|---:|---|
+| Entry corr `0.05` | -5.71% | -12.43% | -0.384 | 118 | Discard |
+| Entry corr `0.10` | -8.74% | -13.51% | -0.804 | 50 | Discard |
+| Entry corr `0.05`, exit corr `<0.0` | -11.10% | -18.51% | -0.634 | 114 | Discard |
+| Entry corr `0.05`, 240-bar min hold | -7.04% | -16.40% | -0.351 | 114 | Discard |
+| Entry corr `0.05`, 480-bar corr window | -18.74% | -24.53% | -1.115 | 83 | Discard |
+
+Diagnostics:
+
+- Lookahead/data leakage: all variants used the existing lagged CU/AG ratio update and `next_bar` fills.
+- Trade count: all variants had enough fills to evaluate directionally, except the `0.10` threshold became sparse at 50 fills.
+- Runtime issues: API diagnostics returned `[]` for all five runs.
+- Suspicious behavior: tightening correlation made the system select worse trades. The relation is probably not well represented by contemporaneous rolling correlation.
+
+Decision: DISCARD the stricter-correlation branch.
+
+Online research note:
+
+- S&P Global described copper-user PMI measures as forward-looking for copper demand and prices, including a copper-intensive new-orders/stocks ratio with a reported three-month lead to copper prices.
+- Long-run commodity research by Martin Stuermer finds mineral commodity prices are primarily demand-shock driven, which supports the broader PMI/copper demand premise but not necessarily a minute-level rolling-correlation entry rule.
+
+Sources: [S&P Global copper PMI commentary](https://prod.azure.ihsmarkit.com/marketintelligence/en/mi/research-analysis/pmi-data-indicate-headwinds-to-copper-prices.html), [Cambridge Core commodity price drivers](https://www.cambridge.org/core/journals/macroeconomic-dynamics/article/150-years-of-boom-and-bust-what-drives-mineral-commodity-prices/B037B3EE44D3110E6D67BD4572CE774D).
+
+Next step:
+
+- Keep `ratio_breakout_mid_corr_gate` only as a low-turnover control.
+- For a new PMI-lead experiment, replace correlation gating with CU/AG ratio acceleration or a rolling percentile thrust, then exit on ratio momentum decay.

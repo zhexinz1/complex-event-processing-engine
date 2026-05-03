@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -10,6 +11,7 @@ from signals import (
     load_signal_class,
     run_user_signal_backtest,
 )
+from signals.runtime import deserialize_bar_event_payload, serialize_bar_event
 
 
 VALID_SIGNAL = '''
@@ -64,6 +66,23 @@ def test_loader_blocks_imports():
 
     with pytest.raises(ValueError):
         load_signal_class(source)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "return ().__class__",
+        "return type.__subclasses__()",
+        "return self.__dict__",
+    ],
+)
+def test_validator_blocks_dunder_attribute_access(payload: str) -> None:
+    source = VALID_SIGNAL.replace('return {"side": "BUY", "reason": "oversold", "price": bar.close}', payload)
+
+    is_valid, diagnostics = SignalContractValidator().validate(source)
+
+    assert not is_valid
+    assert any("dunder attribute access" in item.message for item in diagnostics)
 
 
 def test_user_signal_trigger_emits_signal_event():
@@ -253,3 +272,16 @@ class Signal:
 
     assert len(trigger.diagnostics) == 2
     assert all("on_bar failed" in item.message for item in trigger.diagnostics)
+
+
+def test_bar_event_json_payload_round_trips_for_live_monitor() -> None:
+    bar = make_bar(3, 12.5, symbol="AU9999.XSGE")
+
+    decoded = deserialize_bar_event_payload(json.dumps(serialize_bar_event(bar)).encode("utf-8"))
+
+    assert decoded == bar
+
+
+def test_bar_event_json_payload_rejects_missing_required_fields() -> None:
+    with pytest.raises(ValueError, match="missing fields"):
+        deserialize_bar_event_payload(json.dumps({"symbol": "AU9999.XSGE"}))
