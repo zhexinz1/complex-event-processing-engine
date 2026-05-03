@@ -121,13 +121,24 @@ class BacktestEngine:
     def run(self) -> BacktestResult:
         """运行回测。"""
         market_events_processed = 0
+        last_timestamp = None
 
         while not self.event_queue.empty():
+            next_event = self.event_queue.peek()
+
+            # 在分发前捕获快照，记录"成交前"的账户状态
+            if isinstance(next_event, (BarEvent, TickEvent)):
+                self.recorder.capture_snapshot(next_event.timestamp)
+
             event = self.dispatcher.dispatch_next(self.event_queue)
 
             if isinstance(event, (BarEvent, TickEvent)):
                 market_events_processed += 1
-                self.recorder.capture_snapshot(event.timestamp)
+                last_timestamp = event.timestamp
+
+        # 尾部快照：记录最后一个事件处理完毕后的最终状态
+        if last_timestamp is not None:
+            self.recorder.capture_snapshot(last_timestamp)
 
         self.broker.finalize()
         result = BacktestResult(

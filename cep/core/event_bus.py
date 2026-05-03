@@ -49,11 +49,12 @@ class EventBus:
         """
         初始化事件总线。
 
-        _subscribers: 二维字典结构为 {EventType: {symbol: set[ref]}}
+        _subscribers: 二维字典结构为 {EventType: {symbol: list[ref]}}
                       使用 Multi-level dict 避免 O(N) 的全量遍历漏洞。
-                      弱引用集合避免忘记取消订阅导致的内存泄漏。
+                      弱引用列表避免忘记取消订阅导致的内存泄漏。
+                      使用 list 而非 set 保证 handler 按注册顺序调用。
         """
-        self._subscribers: dict[Type[BaseEvent], dict[str, set[Any]]] = defaultdict(lambda: defaultdict(set))
+        self._subscribers: dict[Type[BaseEvent], dict[str, list[Any]]] = defaultdict(lambda: defaultdict(list))
         logger.info("EventBus initialized with Topic(Symbol) routing and WeakRefs.")
 
     # -----------------------------------------------------------------------
@@ -85,7 +86,7 @@ class EventBus:
         subs = self._subscribers[event_type][symbol]
         # 防止重复订阅
         if not any(r() == handler for r in subs if r() is not None):
-            subs.add(ref)
+            subs.append(ref)
             handler_name = getattr(handler, '__name__', str(handler))
             logger.debug(
                 f"Subscribed {handler_name} to {event_type.__name__} (symbol='{symbol}')"
@@ -143,11 +144,14 @@ class EventBus:
         symbol = getattr(event, "symbol", "")
         
         # 匹配精准 symbol 级别，以及全局订阅级别 (symbol="")
-        target_refs = set()
+        # 使用 list 保留注册顺序：先 symbol 级别，再全局级别
+        target_refs: list[Any] = []
         if symbol in self._subscribers[event_type]:
-            target_refs.update(self._subscribers[event_type][symbol])
+            target_refs.extend(self._subscribers[event_type][symbol])
         if "" in self._subscribers[event_type]:
-            target_refs.update(self._subscribers[event_type][""])
+            for ref in self._subscribers[event_type][""]:
+                if ref not in target_refs:
+                    target_refs.append(ref)
 
         if not target_refs:
             logger.debug(
