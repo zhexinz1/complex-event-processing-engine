@@ -25,6 +25,7 @@ class Signal:
 
 - Code is executed in-process after AST contract checks.
 - Imports and several dynamic Python constructs are blocked.
+- Double-underscore attribute access such as `().__class__` is blocked before execution.
 - The loader exposes only a small builtin allowlist and `OrderSide`.
 - Runtime errors are captured as diagnostics and do not crash the event bus.
 
@@ -39,7 +40,7 @@ class Signal:
 - `GET /api/signals/live/recent`
 - `GET /api/signals/live/stream`
 
-Live monitoring subscribes to Redis-published `BarEvent` objects on `CEP_REDIS_CHANNEL` (`cep_events` by default). Tick-to-bar aggregation is expected to happen upstream.
+Live monitoring subscribes to JSON-encoded `BarEvent` payloads on `CEP_REDIS_CHANNEL` (`cep_events` by default). Tick-to-bar aggregation is expected to happen upstream. Payloads must include `symbol`, `freq`, OHLCV fields, `turnover`, and ISO-8601 `bar_time`; `event_id` and `timestamp` are optional.
 
 `POST /api/backtests/run-user-signal` also accepts:
 
