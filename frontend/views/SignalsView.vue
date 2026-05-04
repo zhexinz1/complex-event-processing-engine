@@ -217,7 +217,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, markRaw } from 'vue';
 import { CepApi } from '../api';
 import type {
   BacktestResult,
@@ -505,7 +505,7 @@ async function runBacktest() {
       end_date: toTushareDate(backtestEndDate.value),
     });
     if (json.success) {
-      tab.backtestResult = json.data || null;
+      tab.backtestResult = json.data ? markRaw(json.data) : null;
       tab.diagnostics = json.data?.diagnostics || [];
       tab.backtestStatus = 'success';
       tab.backtestMessage = json.data

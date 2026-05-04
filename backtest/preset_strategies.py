@@ -535,8 +535,19 @@ def run_preset_backtest(
     )
 
 
-def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
-    """Convert BacktestResult into a JSON-ready response payload."""
+def serialize_backtest_result(
+    result: BacktestResult, *, max_equity_points: int = 200
+) -> dict[str, Any]:
+    """Convert BacktestResult into a JSON-ready response payload.
+
+    Parameters
+    ----------
+    max_equity_points:
+        Maximum number of equity-curve snapshots to include.  The front-end
+        only renders ~48 bars, so sending tens of thousands of points wastes
+        bandwidth and blocks the browser during JSON parsing.  Defaults to
+        200, which gives smooth charts while keeping the payload small.
+    """
     initial_cash = float(getattr(result, "initial_cash", 1_000_000.0))
     unrealized_pnl = float(
         getattr(
@@ -545,6 +556,16 @@ def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
             result.final_equity - initial_cash - result.realized_pnl,
         )
     )
+
+    # Downsample equity curve to keep response compact.
+    snapshots = result.snapshots
+    total_snapshots = len(snapshots)
+    if total_snapshots > max_equity_points:
+        step = total_snapshots / max_equity_points
+        indices = {0, total_snapshots - 1}
+        indices.update(int(i * step) for i in range(max_equity_points))
+        snapshots = [snapshots[i] for i in sorted(indices)]
+
     return {
         "market_events_processed": result.market_events_processed,
         "initial_cash": round(initial_cash, 2),
@@ -554,6 +575,7 @@ def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
         "realized_pnl": round(result.realized_pnl, 2),
         "unrealized_pnl": round(unrealized_pnl, 2),
         "trade_log_path": result.trade_log_path,
+        "equity_curve_count": total_snapshots,
         "signals": [
             {
                 "timestamp": signal.timestamp.isoformat(),
@@ -593,6 +615,7 @@ def serialize_backtest_result(result: BacktestResult) -> dict[str, Any]:
                 "market_value": round(snapshot.market_value, 2),
                 "realized_pnl": round(snapshot.realized_pnl, 2),
             }
-            for snapshot in result.snapshots
+            for snapshot in snapshots
         ],
     }
+
