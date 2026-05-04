@@ -135,7 +135,7 @@
             </div>
             <div class="stat-block">
               <span class="stat-label">总盈亏</span>
-              <span class="stat-value">{{ totalPnl(activeTab.backtestResult).toFixed(2) }}</span>
+              <span class="stat-value" :class="pnlColor(totalPnl(activeTab.backtestResult))">{{ totalPnl(activeTab.backtestResult).toFixed(2) }}</span>
             </div>
             <div class="stat-block">
               <span class="stat-label">已实现盈亏（平仓）</span>
@@ -167,13 +167,51 @@
             </div>
           </div>
 
-          <div v-if="sampledEquity.length" class="mini-chart">
-            <div
-              v-for="point in sampledEquity"
-              :key="point.timestamp || String(point.equity)"
-              class="chart-bar"
-              :style="{ height: `${equityBarHeight(point.equity)}%` }"
-            />
+          <div v-if="activeTab?.backtestResult?.performance" class="metric-grid perf-metrics">
+            <div class="stat-block">
+              <span class="stat-label">总收益率</span>
+              <span class="stat-value" :class="pnlColor(activeTab.backtestResult.performance.total_return_pct)">{{ activeTab.backtestResult.performance.total_return_pct }}%</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">年化收益</span>
+              <span class="stat-value" :class="pnlColor(activeTab.backtestResult.performance.annualized_return_pct)">{{ activeTab.backtestResult.performance.annualized_return_pct }}%</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">夏普比率</span>
+              <span class="stat-value" :class="pnlColor(activeTab.backtestResult.performance.sharpe_ratio)">{{ activeTab.backtestResult.performance.sharpe_ratio }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">最大回撤</span>
+              <span class="stat-value stat-negative">{{ activeTab.backtestResult.performance.max_drawdown_pct }}%</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">胜率</span>
+              <span class="stat-value">{{ activeTab.backtestResult.performance.win_rate_pct !== null ? activeTab.backtestResult.performance.win_rate_pct + '%' : '—' }}</span>
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">回测天数</span>
+              <span class="stat-value">{{ activeTab.backtestResult.performance.trading_days }}</span>
+            </div>
+          </div>
+
+          <div v-if="sampledEquity.length" class="mini-chart-wrapper">
+            <div class="mini-chart-header">
+              <span class="mini-chart-title">权益曲线（Equity Curve）</span>
+              <span class="mini-chart-range">{{ equityRangeLabel }}</span>
+            </div>
+            <div class="mini-chart">
+              <div
+                v-for="point in sampledEquity"
+                :key="point.timestamp || String(point.equity)"
+                class="chart-bar"
+                :style="{ height: `${equityBarHeight(point.equity)}%` }"
+                :title="`${point.timestamp?.slice(0, 10) || ''}\n权益: ${point.equity.toLocaleString()}`"
+              />
+            </div>
+            <div class="mini-chart-axis">
+              <span>{{ sampledEquity[0]?.timestamp?.slice(0, 10) || '' }}</span>
+              <span>{{ sampledEquity[sampledEquity.length - 1]?.timestamp?.slice(0, 10) || '' }}</span>
+            </div>
           </div>
         </div>
 
@@ -324,6 +362,15 @@ function equityBarHeight(equity: number) {
   return 12 + ((equity - min) / (max - min)) * 88;
 }
 
+const equityRangeLabel = computed(() => {
+  const points = sampledEquity.value;
+  if (!points.length) return '';
+  const values = points.map((p) => p.equity);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return `${min.toLocaleString(undefined, { maximumFractionDigits: 0 })} ~ ${max.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+});
+
 function metricValue(value: number | null | undefined) {
   return Number(value || 0);
 }
@@ -339,6 +386,12 @@ function unrealizedPnl(result: BacktestResult) {
 
 function openPositionCount(result: BacktestResult) {
   return (result.positions || []).filter((position) => position.quantity !== 0).length;
+}
+
+function pnlColor(value: number) {
+  if (value > 0) return 'stat-positive';
+  if (value < 0) return 'stat-negative';
+  return '';
 }
 
 function deriveSignalConfig(draft: UserSignalDefinition) {
@@ -724,6 +777,20 @@ label span {
 
 .signal-metrics {
   margin: 16px 0;
+}
+
+.perf-metrics {
+  margin: 0 0 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color, #e5e7eb);
+}
+
+.stat-positive {
+  color: #16a34a !important;
+}
+
+.stat-negative {
+  color: #dc2626 !important;
 }
 
 .backtest-message {
