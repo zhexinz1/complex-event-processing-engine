@@ -9,7 +9,6 @@ import logging
 import pickle
 import threading
 from decimal import Decimal
-from typing import Optional
 
 import redis
 from cep.core.events import TickEvent
@@ -132,7 +131,6 @@ def get_tick_cache_detail() -> dict:
         }
     }
     """
-    import time as _time
 
     with _tick_cache_lock:
         symbols = {}

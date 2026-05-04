@@ -3,7 +3,6 @@
 """
 
 import requests
-import json
 
 API_BASE = "http://localhost:5000/api"
 

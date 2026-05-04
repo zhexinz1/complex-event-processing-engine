@@ -1,6 +1,5 @@
 from XtTraderPyApi import *
 import time
-import math
 
 '''
 本demo用于展示python traderapi的工作机制，该demo提供普通委托和各种算法委托下单以及撤单接口，分别展示了同步和异步接口的使用方式，供您选择

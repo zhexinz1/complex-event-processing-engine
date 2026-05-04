@@ -4,6 +4,7 @@ xt_query_service.py — 迅投查询服务
 封装 XtTraderApi 的所有查询功能，提供同步查询接口。
 继承 XtBaseService 获得连接管理能力。
 """
+# pyright: reportAssignmentType=false
 
 import sys
 import logging
@@ -13,11 +14,23 @@ from dataclasses import dataclass
 sys.path.insert(0, '/home/ubuntu/xt_sdk')
 
 try:
-    from XtTraderPyApi import XtError
+    from XtTraderPyApi import XtError as _XtError
     _XT_AVAILABLE = True
+    XtError: Any = _XtError
 except ImportError:
     _XT_AVAILABLE = False
-    class XtError: pass
+
+    class _XtError:
+        def __init__(self, *args: Any) -> None:
+            pass
+
+        def isSuccess(self) -> bool:
+            return False
+
+        def errorMsg(self) -> str:
+            return ""
+
+    XtError = _XtError
 
 from adapters.xuntou.base_service import XtBaseService
 
@@ -116,7 +129,7 @@ class XtQueryService(XtBaseService):
                         getattr(order, 'm_dPrice',
                                 getattr(order, 'm_dAveragePrice', 0.0)))
 
-        direction = getattr(order, 'm_nDirection', 0)
+        direction: Any = getattr(order, 'm_nDirection', 0)
         if hasattr(direction, 'value'):
             direction = direction.value
         elif not isinstance(direction, int):
@@ -125,7 +138,7 @@ class XtQueryService(XtBaseService):
             except (ValueError, TypeError):
                 direction = 0
 
-        status = order.m_eOrderStatus
+        status: Any = order.m_eOrderStatus
         if hasattr(status, 'value'):
             status = status.value
         elif not isinstance(status, int):

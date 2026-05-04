@@ -47,7 +47,7 @@ def test_account_ready():
         print("✗ 连接失败")
         return
 
-    print(f"✓ 连接成功")
+    print("✓ 连接成功")
     print(f"登录状态: {xt_service._logined}\n")
 
     # 等待账号就绪
@@ -56,14 +56,14 @@ def test_account_ready():
         time.sleep(1)
         account_key = xt_service._account_ready.get(product.account_id)
         if account_key:
-            print(f"✓ 账号就绪")
+            print("✓ 账号就绪")
             print(f"  账号ID: {product.account_id}")
             print(f"  account_key: {account_key}")
             break
         else:
             print(f"  等待中... ({i+1}/10)")
     else:
-        print(f"✗ 账号未就绪")
+        print("✗ 账号未就绪")
         print(f"  当前就绪账号: {list(xt_service._account_ready.keys())}")
 
     print("\n=== 测试完成 ===")

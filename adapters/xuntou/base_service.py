@@ -4,6 +4,7 @@ xt_base_service.py — 迅投基础服务
 提供 XtTraderApi 的连接管理、登录认证和账号就绪等共享逻辑。
 XtOrderService 和 XtQueryService 均继承此基类。
 """
+# pyright: reportAssignmentType=false
 
 import sys
 import threading
@@ -14,20 +15,30 @@ sys.path.insert(0, '/home/ubuntu/xt_sdk')
 
 try:
     from XtTraderPyApi import (
-        XtTraderApi,
-        XtTraderApiCallback,
-        XtError,
-        EBrokerLoginStatus,
+        XtTraderApi as _XtTraderApi,
+        XtTraderApiCallback as _XtTraderApiCallback,
+        XtError as _XtError,
+        EBrokerLoginStatus as _EBrokerLoginStatus,
     )
     _XT_AVAILABLE = True
+    XtTraderApi: Any = _XtTraderApi
+    XtTraderApiCallback: Any = _XtTraderApiCallback
+    XtError: Any = _XtError
+    EBrokerLoginStatus: Any = _EBrokerLoginStatus
 except ImportError:
     _XT_AVAILABLE = False
-    XtTraderApi = object
-    XtTraderApiCallback = object
-    class XtError: pass
-    class EBrokerLoginStatus:
+    XtTraderApi: Any = object
+    XtTraderApiCallback: Any = object
+
+    class _XtError:
+        pass
+
+    class _EBrokerLoginStatus:
         BROKER_LOGIN_STATUS_OK = 1
         BROKER_LOGIN_STATUS_CLOSED = 2
+
+    XtError = _XtError
+    EBrokerLoginStatus = _EBrokerLoginStatus
 
 logger = logging.getLogger(__name__)
 

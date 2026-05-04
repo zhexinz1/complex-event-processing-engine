@@ -1,6 +1,5 @@
 from XtTraderPyApi import *
 import time
-import math
 
 '''
 本demo用于展示python traderapi的工作机制，该demo提供普通委托和各种算法委托下单以及撤单接口，分别展示了同步和异步接口的使用方式，供您选择
@@ -234,9 +233,9 @@ class xtTraderApiClient:
         orderInfo.m_ePriceType = EPriceType.PRTP_FIX	  # 枚举类型，报单价格类型，必填字段
         orderInfo.m_eOperationType = EOperationType.OPT_BUY  # 报单委托类型。必填字段
         orderInfo.m_strRemark = "alpha"
-        orderInfo.m_strStrategyID = "8184499999898044228";
+        orderInfo.m_strStrategyID = "8184499999898044228"
         self.m_nRequestId += 1
-        orderInfo.m_strStrategyID = "-72692859861132081";
+        orderInfo.m_strStrategyID = "-72692859861132081"
         self.m_nRequestId += 1
         self.m_api.order(orderInfo, self.m_nRequestId, account_key)
         print(u'[stockOrdinaryOrder]股票普通单, accountId:', account_id)

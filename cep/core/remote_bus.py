@@ -76,5 +76,5 @@ class RedisEventBridge:
         try:
             self.pubsub.close()
             self.redis_client.close()
-        except:
+        except Exception:
             pass

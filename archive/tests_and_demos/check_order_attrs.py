@@ -25,13 +25,13 @@ try:
         print("\n找到 COrderDetail 类")
         order_class = xttype.COrderDetail
         print(f"类型: {order_class}")
-        print(f"\n所有属性:")
+        print("\n所有属性:")
         for attr in dir(order_class):
             if not attr.startswith('_'):
                 print(f"  - {attr}")
     else:
         print("未找到 COrderDetail 类")
-        print(f"xttype 模块的所有内容:")
+        print("xttype 模块的所有内容:")
         for name in dir(xttype):
             if 'Order' in name or 'order' in name:
                 print(f"  - {name}")

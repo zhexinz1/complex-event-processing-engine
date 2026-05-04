@@ -37,7 +37,7 @@ jobs:
         run: uv run pyright
 
       - name: Run Pytest
-        run: uv run pytest
+        run: uv run -m pytest
 
   frontend:
     name: Frontend

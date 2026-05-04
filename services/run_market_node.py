@@ -19,7 +19,6 @@ if "xt_sdk" in _inherited_ld:
     os.execlp(sys.executable, sys.executable, "-m", "services.run_market_node")
 
 import time
-from datetime import datetime
 from pathlib import Path
 import logging
 

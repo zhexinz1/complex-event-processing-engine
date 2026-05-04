@@ -7,7 +7,6 @@ contract_config.py — 合约配置与标准化工具
 
 import re
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

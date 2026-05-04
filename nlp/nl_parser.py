@@ -168,7 +168,13 @@ def parse_natural_language(
         )
 
         # 提取响应内容
-        response_text = message.content[0].text.strip()
+        response_text = ""
+        for block in message.content:
+            if getattr(block, "type", None) == "text":
+                response_text = str(getattr(block, "text")).strip()
+                break
+        if not response_text:
+            raise ValueError("Anthropic response did not include a text block")
         logger.debug(f"LLM response: {response_text}")
 
         # 解析 JSON

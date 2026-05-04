@@ -29,7 +29,6 @@ from rebalance import (
     PortfolioDeviationTrigger,
     MonthlyRebalanceTrigger,
     MockPositionSource,
-    XunTouPositionSource,
     InMemoryConfigLoader,
     ProductConfig,
     TargetWeightConfig,
@@ -190,10 +189,10 @@ def main():
         timestamp=datetime.now(),
         last_price=580.0,
         volume=1000,
-        bid_prices=[579.0] * 5,
-        bid_volumes=[100] * 5,
-        ask_prices=[581.0] * 5,
-        ask_volumes=[100] * 5
+        bid_prices=tuple([579.0] * 5),
+        bid_volumes=tuple([100] * 5),
+        ask_prices=tuple([581.0] * 5),
+        ask_volumes=tuple([100] * 5),
     )
     bus.publish(tick1)
 
@@ -202,10 +201,10 @@ def main():
         timestamp=datetime.now(),
         last_price=6500.0,
         volume=1000,
-        bid_prices=[6499.0] * 5,
-        bid_volumes=[100] * 5,
-        ask_prices=[6501.0] * 5,
-        ask_volumes=[100] * 5
+        bid_prices=tuple([6499.0] * 5),
+        bid_volumes=tuple([100] * 5),
+        ask_prices=tuple([6501.0] * 5),
+        ask_volumes=tuple([100] * 5),
     )
     bus.publish(tick2)
 
@@ -233,10 +232,10 @@ def main():
         timestamp=datetime.now(),
         last_price=609.0,  # 上涨 5%
         volume=1000,
-        bid_prices=[608.0] * 5,
-        bid_volumes=[100] * 5,
-        ask_prices=[610.0] * 5,
-        ask_volumes=[100] * 5
+        bid_prices=tuple([608.0] * 5),
+        bid_volumes=tuple([100] * 5),
+        ask_prices=tuple([610.0] * 5),
+        ask_volumes=tuple([100] * 5),
     )
     bus.publish(tick3)
 

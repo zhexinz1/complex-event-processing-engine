@@ -10,13 +10,12 @@ import os
 # 所以如果要单独跑迅投的测试脚本，我们必须在这个脚本启动的第一秒，原生注入变量并重启自己。
 _ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
 if "/home/ubuntu/xt_sdk" not in _ld_lib_path:
-    print(f"⚠️ 探测到缺少迅投 C++ 动态链接库环境保护，正强制注入并重启进程...")
+    print("⚠️ 探测到缺少迅投 C++ 动态链接库环境保护，正强制注入并重启进程...")
     os.environ["LD_LIBRARY_PATH"] = "/home/ubuntu/xt_sdk:" + _ld_lib_path
     os.execlp(sys.executable, sys.executable, "-m", "archive.tests.query_cash")
 
 import threading
 import logging
-import time
 
 sys.path.insert(0, '/home/ubuntu/xt_sdk')
 from XtTraderPyApi import (

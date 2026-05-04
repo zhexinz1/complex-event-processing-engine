@@ -2,7 +2,6 @@
 """查询数据库中的订单记录"""
 
 import pymysql
-from datetime import datetime
 
 # 数据库连接配置
 DB_CONFIG = {

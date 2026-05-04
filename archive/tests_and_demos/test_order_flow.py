@@ -9,7 +9,7 @@ os.environ['LD_LIBRARY_PATH'] = '/home/ubuntu/xt_sdk:' + os.environ.get('LD_LIBR
 
 from decimal import Decimal
 from database.dao import DatabaseDAO
-from database.models import Product, ProductStatus, PendingOrder, OrderStatus
+from database.models import PendingOrder, OrderStatus
 from adapters.xuntou import get_xt_connection_manager
 from adapters.xuntou import OrderRequest, OrderDirection, OrderPriceType
 import uuid
@@ -35,10 +35,10 @@ def test_order_flow():
     product = dao.get_product_by_name(product_name)
 
     if not product:
-        print(f"   产品不存在，创建测试产品...")
+        print("   产品不存在，创建测试产品...")
         # 这里需要手动在数据库中创建产品，或者添加 create_product 方法
         print(f"   ✗ 请先在数据库中创建产品: {product_name}")
-        print(f"   需要字段: product_name, leverage_ratio, account_id, xt_username, xt_password")
+        print("   需要字段: product_name, leverage_ratio, account_id, xt_username, xt_password")
         return
 
     print(f"   产品名称: {product.product_name}")
@@ -47,11 +47,11 @@ def test_order_flow():
     print(f"   密码配置: {'已配置' if product.xt_password else '未配置'}")
 
     if not product.xt_username or not product.xt_password:
-        print(f"   ✗ 产品未配置迅投账号凭证")
+        print("   ✗ 产品未配置迅投账号凭证")
         return
 
     # 2. 创建模拟订单
-    print(f"\n2. 创建模拟待确认订单")
+    print("\n2. 创建模拟待确认订单")
     batch_id = str(uuid.uuid4())
 
     test_order = PendingOrder(
@@ -76,7 +76,7 @@ def test_order_flow():
     print(f"   数量: {test_order.final_quantity}")
 
     # 3. 测试连接管理器
-    print(f"\n3. 测试迅投连接")
+    print("\n3. 测试迅投连接")
     manager = get_xt_connection_manager()
 
     xt_service = manager.get_connection(
@@ -87,14 +87,14 @@ def test_order_flow():
     )
 
     if not xt_service:
-        print(f"   ✗ 连接失败")
+        print("   ✗ 连接失败")
         return
 
-    print(f"   ✓ 连接成功")
+    print("   ✓ 连接成功")
     print(f"   登录状态: {xt_service._logined}")
 
     # 4. 模拟订单执行逻辑（不实际下单）
-    print(f"\n4. 模拟订单执行逻辑")
+    print("\n4. 模拟订单执行逻辑")
 
     orders = dao.get_pending_orders_by_batch(batch_id)
     print(f"   待执行订单数: {len(orders)}")
@@ -120,7 +120,7 @@ def test_order_flow():
             direction = OrderDirection.SELL
             quantity = abs(order.final_quantity)
 
-        print(f"\n   订单详情:")
+        print("\n   订单详情:")
         print(f"   - 合约: {order.asset_code}")
         print(f"   - 方向: {direction.value}")
         print(f"   - 数量: {quantity}")
@@ -141,13 +141,13 @@ def test_order_flow():
             instrument=instrument
         )
 
-        print(f"   ✓ 订单请求构造成功")
-        print(f"   （测试模式，不实际下单）")
+        print("   ✓ 订单请求构造成功")
+        print("   （测试模式，不实际下单）")
 
     # 5. 清理测试数据
-    print(f"\n5. 清理测试数据")
+    print("\n5. 清理测试数据")
     dao.update_order_status(order_id, OrderStatus.CANCELLED)
-    print(f"   ✓ 已取消测试订单")
+    print("   ✓ 已取消测试订单")
 
     print("\n=== 测试完成 ===")
     print("\n总结:")

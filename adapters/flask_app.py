@@ -1099,9 +1099,14 @@ def create_app() -> Flask:
             failed_orders = []
 
             for order in orders:
+                order_id = order.id
+                if order_id is None:
+                    failed_orders.append({"asset_code": order.asset_code, "error": "订单缺少数据库ID"})
+                    continue
+
                 if order.final_quantity == 0:
                     # 跳过数量为0的订单
-                    dao.update_order_status(order.id, OrderStatus.CANCELLED)
+                    dao.update_order_status(order_id, OrderStatus.CANCELLED)
                     continue
 
                 # 记录订单价格类型到 DB
@@ -1110,7 +1115,7 @@ def create_app() -> Flask:
                     with conn.cursor() as cursor:
                         cursor.execute(
                             "UPDATE pending_orders SET order_price_type = %s WHERE id = %s",
-                            (price_type_str, order.id)
+                            (price_type_str, order_id)
                         )
                     conn.commit()
                     conn.close()
@@ -1187,12 +1192,12 @@ def create_app() -> Flask:
                     if result.success:
                         # 仅标记为"已确认提交"，而非"已执行"
                         # 真正的终态（EXECUTED/FAILED/CANCELLED）由回调/对账更新
-                        dao.update_order_status(order.id, OrderStatus.CONFIRMED)
+                        dao.update_order_status(order_id, OrderStatus.CONFIRMED)
                         executed_orders.append(order.asset_code)
 
                         # 将迅投返回的指令ID写入数据库（同时标记 xt_status='sent'）
                         if result.order_id:
-                            dao.update_order_xt_id(order.id, result.order_id)
+                            dao.update_order_xt_id(order_id, result.order_id)
 
                         # 更新留白数据
                         dao.update_fractional_share(
@@ -1203,12 +1208,12 @@ def create_app() -> Flask:
                     else:
                         # SDK 调用返回失败 — 记录 xt_status='send_failed'
                         error_msg = result.error_msg or "下单失败"
-                        dao.update_order_xt_send_failed(order.id, error_msg)
+                        dao.update_order_xt_send_failed(order_id, error_msg)
                         raise RuntimeError(error_msg)
 
                 except Exception as e:
                     logger.exception(f"执行订单失败: {order.asset_code}")
-                    dao.update_order_status(order.id, OrderStatus.FAILED, str(e))
+                    dao.update_order_status(order_id, OrderStatus.FAILED, str(e))
                     failed_orders.append({"asset_code": order.asset_code, "error": str(e)})
 
             return jsonify({
@@ -1315,7 +1320,7 @@ def create_app() -> Flask:
                 }), 500
 
             # 查询产品列表
-            products = xt_query.query_products(timeout=10.0)
+            products = xt_query.query_products()
 
             # 不断开连接，保持复用
 
@@ -1467,6 +1472,8 @@ def create_app() -> Flask:
             product = dao.get_product_by_name(product_name)
             if not product:
                 return jsonify({"success": False, "message": f"产品 {product_name} 不存在"}), 404
+            if not product.xt_username or not product.xt_password:
+                return jsonify({"success": False, "message": f"产品 {product_name} 未配置迅投账号"}), 400
 
             xt_manager = get_xt_connection_manager()
             xt_service = xt_manager.get_connection(
@@ -1477,6 +1484,15 @@ def create_app() -> Flask:
             )
             if not xt_service:
                 return jsonify({"success": False, "message": "无法连接迅投"}), 500
+            if xt_service._api is None:
+                return jsonify({"success": False, "message": "迅投 API 未初始化"}), 500
+
+            try:
+                from XtTraderPyApi import XtError as _XtError
+            except ImportError as exc:
+                return jsonify({"success": False, "message": f"迅投 SDK 不可用: {exc}"}), 500
+
+            xt_api = xt_service._api
 
             actual_account_id = product.fund_account if product.fund_account else product.account_id
             account_key = xt_service._account_ready.get(actual_account_id)
@@ -1490,9 +1506,8 @@ def create_app() -> Flask:
 
             # 方法1: reqOrderDetailSync (当日委托)
             try:
-                from XtTraderPyApi import XtError as _XtError
                 error = _XtError(0, "")
-                orders = xt_service._api.reqOrderDetailSync(actual_account_id, error, account_key)
+                orders = xt_api.reqOrderDetailSync(actual_account_id, error, account_key)
                 result["method1_reqOrderDetailSync"] = {
                     "isSuccess": error.isSuccess(),
                     "errorMsg": error.errorMsg(),
@@ -1515,7 +1530,7 @@ def create_app() -> Flask:
             if target_order_id:
                 try:
                     error2 = _XtError(0, "")
-                    orders2 = xt_service._api.reqOrderDetailSyncByOrderID(
+                    orders2 = xt_api.reqOrderDetailSyncByOrderID(
                         actual_account_id, error2, target_order_id, account_key
                     )
                     result["method2_reqByOrderID"] = {
@@ -1539,7 +1554,7 @@ def create_app() -> Flask:
             # 方法3: reqDealDetailSync (成交明细)
             try:
                 error3 = _XtError(0, "")
-                deals = xt_service._api.reqDealDetailSync(actual_account_id, error3, account_key)
+                deals = xt_api.reqDealDetailSync(actual_account_id, error3, account_key)
                 result["method3_reqDealDetail"] = {
                     "isSuccess": error3.isSuccess(),
                     "errorMsg": error3.errorMsg(),
@@ -1560,7 +1575,7 @@ def create_app() -> Flask:
             # 方法4: reqCommandsInfoSync (指令查询 - 不需要account_id)
             try:
                 error4 = _XtError(0, "")
-                cmds = xt_service._api.reqCommandsInfoSync(error4)
+                cmds = xt_api.reqCommandsInfoSync(error4)
                 result["method4_reqCommandsInfo"] = {
                     "isSuccess": error4.isSuccess(),
                     "errorMsg": error4.errorMsg(),
