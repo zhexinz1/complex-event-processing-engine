@@ -10,13 +10,20 @@ from cep.core.event_bus import EventBus
 MODULE_PATH = Path(__file__).resolve().parent.parent / "adapters" / "market_gateway.py"
 
 
-def _load_market_gateway_with_import_error(exc: Exception):
+def _patch_openctp_import(exc: Exception):
     real_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
         if name == "openctp_ctp":
             raise exc
         return real_import(name, globals, locals, fromlist, level)
+
+    builtins.__import__ = fake_import
+    return real_import
+
+
+def _load_market_gateway_with_import_error(exc: Exception):
+    real_import = _patch_openctp_import(exc)
 
     module_name = f"test_market_gateway_{uuid.uuid4().hex}"
     spec = importlib.util.spec_from_file_location(module_name, MODULE_PATH)
@@ -25,7 +32,6 @@ def _load_market_gateway_with_import_error(exc: Exception):
 
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
-    builtins.__import__ = fake_import
     try:
         spec.loader.exec_module(module)
     finally:
@@ -35,16 +41,17 @@ def _load_market_gateway_with_import_error(exc: Exception):
     return module
 
 
-def test_market_gateway_module_loads_when_ctp_native_import_raises_oserror() -> None:
+def test_market_gateway_module_does_not_import_ctp_native_bindings_on_load() -> None:
     module = _load_market_gateway_with_import_error(OSError("wrong architecture"))
 
     assert module._CTP_AVAILABLE is False
-    assert isinstance(module._CTP_IMPORT_ERROR, OSError)
+    assert module._CTP_IMPORT_ERROR is None
     assert module.CTPMdSpi.__mro__[1] is object
 
 
 def test_ctp_market_gateway_connect_returns_false_when_ctp_unavailable() -> None:
-    module = _load_market_gateway_with_import_error(OSError("wrong architecture"))
+    exc = OSError("wrong architecture")
+    module = _load_market_gateway_with_import_error(exc)
 
     gateway = module.CTPMarketGateway(
         event_bus=EventBus(),
@@ -54,4 +61,10 @@ def test_ctp_market_gateway_connect_returns_false_when_ctp_unavailable() -> None
         password="secret",
     )
 
-    assert gateway.connect() is False
+    real_import = _patch_openctp_import(exc)
+    try:
+        assert gateway.connect() is False
+    finally:
+        builtins.__import__ = real_import
+
+    assert module._CTP_IMPORT_ERROR is exc
