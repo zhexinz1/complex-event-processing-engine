@@ -91,7 +91,7 @@ def main():
         print("\n第一笔订单的所有属性:")
         order = orders[0]
         print(f"订单对象类型: {type(order)}")
-        print(f"\n所有属性:")
+        print("\n所有属性:")
         for attr in dir(order):
             if not attr.startswith('_'):
                 try:

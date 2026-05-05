@@ -13,7 +13,6 @@ import logging
 import threading
 from typing import Dict, Optional
 
-from adapters.xuntou.base_service import XtBaseService
 from adapters.xuntou.order_service import XtOrderService
 from adapters.xuntou.query_service import XtQueryService
 
@@ -118,7 +117,7 @@ class XtConnectionManager:
             for username, service in list(self._connections.items()):
                 try:
                     service.disconnect()
-                except Exception as e:
+                except Exception:
                     logger.exception("断开连接失败: %s", username)
             self._connections.clear()
             logger.info("已断开所有连接")

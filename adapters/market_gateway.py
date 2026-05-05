@@ -15,13 +15,12 @@ market_gateway.py — 行情网关适配器
 from __future__ import annotations
 
 import logging
-import importlib
 import os
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass as _dataclass
 from datetime import datetime
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Optional
 
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent, BarEvent
@@ -36,19 +35,10 @@ if "xt_sdk" in _inherited_ld:
     os.environ["LD_LIBRARY_PATH"] = ":".join(_clean_paths)
     logger.info("CTP 网关启动探测到全局 C++ 环境污染，已主动完成局部净化。")
 
-try:
-    from openctp_ctp import thostmduserapi as _mdapi  # pyright: ignore[reportMissingImports]
-
-    mdapi: Any = _mdapi
-    _CTP_AVAILABLE = True
-    _CTP_MD_SPI_BASE = cast(type[object], _mdapi.CThostFtdcMdSpi)
-    _CTP_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - depends on local native SDK state
-    mdapi = None
-    _CTP_AVAILABLE = False
-    _CTP_MD_SPI_BASE = object
-    _CTP_IMPORT_ERROR = exc
-    logger.info("CTP native SDK unavailable; CTP gateway disabled for this process: %s", exc)
+mdapi: Any = None
+_CTP_AVAILABLE = False
+_CTP_MD_SPI_BASE = object
+_CTP_IMPORT_ERROR: Exception | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -144,24 +134,27 @@ class _BarAccumulator:
 
 def _get_mdapi() -> Any:
     """Lazily import the CTP mdapi module so mock-only runs avoid native imports."""
-    global mdapi, _CTP_AVAILABLE, _CTP_MD_SPI_BASE
+    global mdapi, _CTP_AVAILABLE, _CTP_MD_SPI_BASE, _CTP_IMPORT_ERROR
 
     if mdapi is not None:
         return mdapi
 
-    last_error: Exception | None = None
-    for module_name in ("openctp_ctp.thostmduserapi", "openctp_ctp.mdapi"):
+    first_error: Exception | None = None
+    for attr_name in ("thostmduserapi", "mdapi"):
         try:
-            imported = importlib.import_module(module_name)
+            package = __import__("openctp_ctp", fromlist=[attr_name])
+            imported = getattr(package, attr_name)
             mdapi = imported
             _CTP_AVAILABLE = True
             _CTP_MD_SPI_BASE = getattr(imported, "CThostFtdcMdSpi", object)
             return mdapi
         except Exception as exc:  # pragma: no cover - depends on local native SDK state
-            last_error = exc
+            if first_error is None:
+                first_error = exc
 
     _CTP_AVAILABLE = False
-    raise RuntimeError("openctp-ctp is not installed or failed to load") from last_error
+    _CTP_IMPORT_ERROR = first_error
+    raise RuntimeError("openctp-ctp is not installed or failed to load") from first_error
 
 
 class CTPMdSpi(_CTP_MD_SPI_BASE):
@@ -301,11 +294,10 @@ class CTPMarketGateway(MarketGateway):
         Returns:
             True 表示连接并登录成功，False 表示失败或超时。
         """
-        if not _CTP_AVAILABLE:
-            if _CTP_IMPORT_ERROR is not None:
-                logger.error("openctp-ctp 不可用，无法连接: %s", _CTP_IMPORT_ERROR)
-            else:
-                logger.error("openctp-ctp 未安装，无法连接")
+        try:
+            ctp_mdapi = _get_mdapi()
+        except RuntimeError as exc:
+            logger.error("openctp-ctp 不可用，无法连接: %s", exc)
             return False
 
         import uuid
@@ -316,7 +308,6 @@ class CTPMarketGateway(MarketGateway):
         os.makedirs(self.flow_path, exist_ok=True)
         self._login_event.clear()
 
-        ctp_mdapi = _get_mdapi()
         # openctp-ctp 在 Linux 下 CreateFtdcMdApi 必须传入 Python str
         self._api = ctp_mdapi.CThostFtdcMdApi.CreateFtdcMdApi(self.flow_path)
         

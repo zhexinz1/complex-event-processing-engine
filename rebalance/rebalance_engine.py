@@ -103,7 +103,7 @@ class RebalanceEngine:
       - calculate(): 执行完整的 5 步计算链路
     """
 
-    def __init__(self, portfolio_ctx: PortfolioContext = None) -> None:
+    def __init__(self, portfolio_ctx: PortfolioContext | None = None) -> None:
         """
         初始化再平衡引擎。
 
@@ -131,6 +131,9 @@ class RebalanceEngine:
         logger.info(f"Starting rebalance calculation: new_capital={new_capital:,.2f}, reason={reason}")
 
         # 步骤 1: 计算新目标总资产
+        if self.portfolio_ctx is None:
+            raise ValueError("portfolio_ctx is required for full rebalance calculation")
+
         current_nav = self.portfolio_ctx.get_total_nav()
         new_target_nav = current_nav + new_capital
         logger.info(f"Step 1: Current NAV={current_nav:,.2f}, New Capital={new_capital:,.2f}, "
@@ -242,6 +245,8 @@ class RebalanceEngine:
             所需总保证金
         """
         total_margin = 0.0
+        if self.portfolio_ctx is None:
+            raise ValueError("portfolio_ctx is required to calculate margin")
 
         for order in orders:
             contract_info = self.portfolio_ctx.get_contract_info(order.symbol)
@@ -269,6 +274,9 @@ class RebalanceEngine:
         Returns:
             (是否通过, 错误信息)
         """
+        if self.portfolio_ctx is None:
+            return False, "portfolio_ctx is required to validate orders"
+
         available_cash = self.portfolio_ctx.get_available_cash()
 
         if result.total_margin_needed > available_cash:

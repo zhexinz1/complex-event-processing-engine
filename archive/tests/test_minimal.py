@@ -3,12 +3,11 @@ import sys
 import os
 import threading
 import logging
-import time
 
 sys.path.insert(0, '/home/ubuntu/xt_sdk')
 os.environ['LD_LIBRARY_PATH'] = '/home/ubuntu/xt_sdk:' + os.environ.get('LD_LIBRARY_PATH', '')
 
-from XtTraderPyApi import XtTraderApi, XtTraderApiCallback, XtError, EBrokerLoginStatus
+from XtTraderPyApi import XtTraderApi, XtTraderApiCallback
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)

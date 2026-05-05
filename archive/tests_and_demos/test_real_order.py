@@ -12,7 +12,6 @@ from database.models import PendingOrder, OrderStatus
 from adapters.xuntou import get_xt_connection_manager
 from adapters.xuntou import OrderRequest, OrderDirection, OrderPriceType
 import uuid
-import time
 
 # 数据库配置
 DB_CONFIG = {
@@ -55,7 +54,7 @@ def test_real_order():
         print("✗ 连接失败")
         return
 
-    print(f"✓ 连接成功\n")
+    print("✓ 连接成功\n")
 
     # 3. 创建测试订单
     batch_id = str(uuid.uuid4())
@@ -115,7 +114,7 @@ def test_real_order():
                 instrument=instrument
             )
 
-            print(f"下单参数:")
+            print("下单参数:")
             print(f"  账号: {order_req.account_id}")
             print(f"  合约: {order_req.asset_code}")
             print(f"  方向: {order_req.direction.value}")
@@ -128,7 +127,7 @@ def test_real_order():
             result = xt_service.place_order(order_req)
 
             if result.success:
-                print(f"✓ 下单成功")
+                print("✓ 下单成功")
                 print(f"  订单ID: {result.order_id}")
                 dao.update_order_status(order.id, OrderStatus.EXECUTED)
                 executed_orders.append(order.asset_code)
@@ -143,7 +142,7 @@ def test_real_order():
             failed_orders.append({"asset_code": order.asset_code, "error": str(e)})
 
     # 5. 总结
-    print(f"\n=== 测试完成 ===")
+    print("\n=== 测试完成 ===")
     print(f"成功: {len(executed_orders)}")
     print(f"失败: {len(failed_orders)}")
 

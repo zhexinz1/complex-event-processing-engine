@@ -15,7 +15,7 @@ fund_flow_example.py — 资金流动管理完整示例
 """
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from cep.core.event_bus import EventBus
 from rebalance import (
@@ -30,7 +30,6 @@ from rebalance import (
     InMemoryConfigLoader,
     ProductConfig,
     TargetWeightConfig,
-    XunTouPositionSource,
     MockPositionSource,
 )
 

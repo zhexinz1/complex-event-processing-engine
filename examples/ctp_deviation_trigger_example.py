@@ -28,7 +28,6 @@ import sys
 import time
 
 from cep.core.event_bus import EventBus
-from cep.core.events import TickEvent
 from adapters.market_gateway import CTPMarketGateway
 from rebalance.portfolio_context import PortfolioContext, ContractInfo, Position
 from rebalance.rebalance_handler import RebalanceHandler

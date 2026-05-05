@@ -36,7 +36,7 @@ def update_product_credentials():
 
             print(f"  ✓ 迅投用户: {xt_username}")
             print(f"  ✓ 资金账号: {account_id}")
-            print(f"  ✓ 密码: 已设置")
+            print("  ✓ 密码: 已设置")
 
             conn.commit()
             print("\n=== 更新完成 ===")

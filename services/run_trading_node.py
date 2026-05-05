@@ -14,7 +14,7 @@ import os
 # --- 强制环境变量注入跳板 (XunTou C++ 防爆盾) ---
 _ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
 if "/home/ubuntu/xt_sdk" not in _ld_lib_path:
-    print(f"⚠️ [Trading Node] 探测到纯净环境，正在为您打入迅投依赖药剂兵无缝重启...")
+    print("⚠️ [Trading Node] 探测到纯净环境，正在为您打入迅投依赖药剂兵无缝重启...")
     os.environ["LD_LIBRARY_PATH"] = "/home/ubuntu/xt_sdk:" + _ld_lib_path
     os.execlp(sys.executable, sys.executable, "-m", "services.run_trading_node")
 
@@ -22,7 +22,6 @@ import time
 import logging
 
 from cep.core.event_bus import EventBus
-from cep.core.events import SignalEvent
 from cep.core.remote_bus import RedisEventBridge
 
 from adapters.xuntou import (

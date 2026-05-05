@@ -30,7 +30,7 @@ def test_fund_inflow_flow():
         print("❌ 产品A不存在")
         return
 
-    print(f"\n📦 产品信息:")
+    print("\n📦 产品信息:")
     print(f"  - 产品名称: {product.product_name}")
     print(f"  - 杠杆倍数: {product.leverage_ratio}")
     print(f"  - 关联账号: {product.account_id}")
@@ -58,7 +58,7 @@ def test_fund_inflow_flow():
         'AG2609': dao.get_fractional_share("产品A", "AG2609")
     }
 
-    print(f"\n💰 净入金: 1,000,000 元")
+    print("\n💰 净入金: 1,000,000 元")
     print(f"📊 杠杆倍数: {product.leverage_ratio}")
     print(f"💵 杠杆后金额: {1000000 * product.leverage_ratio:,.2f} 元")
 
@@ -73,7 +73,7 @@ def test_fund_inflow_flow():
         previous_fractionals=previous_fractionals
     )
 
-    print(f"\n📋 计算结果:")
+    print("\n📋 计算结果:")
     print("-" * 60)
     for order in orders:
         print(f"\n合约: {order.asset_code}")
@@ -87,7 +87,7 @@ def test_fund_inflow_flow():
         print(f"  最终手数: {order.final_quantity} 手")
 
     # 7. 更新留白数据（模拟）
-    print(f"\n💾 更新留白数据:")
+    print("\n💾 更新留白数据:")
     for order in orders:
         dao.update_fractional_share(
             product_name="产品A",

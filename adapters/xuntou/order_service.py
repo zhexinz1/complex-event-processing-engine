@@ -4,11 +4,12 @@ xt_order_service.py — 迅投下单服务
 封装 XtTraderApi 的下单功能，提供同步下单接口。
 继承 XtBaseService 获得连接管理能力。
 """
+# pyright: reportAssignmentType=false
 
 import sys
 import logging
 import time
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
@@ -16,23 +17,63 @@ sys.path.insert(0, '/home/ubuntu/xt_sdk')
 
 try:
     from XtTraderPyApi import (
-        XtError,
-        COrdinaryOrder,
-        CIntelligentAlgorithmOrder,
-        EPriceType,
-        EOperationType,
+        XtError as _XtError,
+        COrdinaryOrder as _COrdinaryOrder,
+        CIntelligentAlgorithmOrder as _CIntelligentAlgorithmOrder,
+        EPriceType as _EPriceType,
+        EOperationType as _EOperationType,
     )
     _XT_AVAILABLE = True
+    XtError: Any = _XtError
+    COrdinaryOrder: Any = _COrdinaryOrder
+    CIntelligentAlgorithmOrder: Any = _CIntelligentAlgorithmOrder
+    EPriceType: Any = _EPriceType
+    EOperationType: Any = _EOperationType
 except ImportError:
     _XT_AVAILABLE = False
-    class XtError: pass
-    class COrdinaryOrder: pass
-    class CIntelligentAlgorithmOrder: pass
-    class EPriceType:
+
+    class _XtError:
+        def __init__(self, *args: Any) -> None:
+            pass
+
+        def isSuccess(self) -> bool:
+            return False
+
+        def errorMsg(self) -> str:
+            return ""
+
+    class _COrdinaryOrder:
+        def __setattr__(self, name: str, value: Any) -> None:
+            super().__setattr__(name, value)
+
+        def __getattr__(self, name: str) -> Any:
+            raise AttributeError(name)
+
+    class _CIntelligentAlgorithmOrder:
+        def __setattr__(self, name: str, value: Any) -> None:
+            super().__setattr__(name, value)
+
+        def __getattr__(self, name: str) -> Any:
+            raise AttributeError(name)
+
+    class _EPriceType:
         PRTP_FIX = 0
         PRTP_MARKET = 1
         PRTP_MARKET_BEST = 2
-    class EOperationType: pass
+
+    class _EOperationType:
+        OPT_BUY = 0
+        OPT_SELL = 1
+        OPT_OPEN_LONG = 2
+        OPT_CLOSE_LONG_TODAY = 3
+        OPT_OPEN_SHORT = 4
+        OPT_CLOSE_SHORT_TODAY = 5
+
+    XtError = _XtError
+    COrdinaryOrder = _COrdinaryOrder
+    CIntelligentAlgorithmOrder = _CIntelligentAlgorithmOrder
+    EPriceType = _EPriceType
+    EOperationType = _EOperationType
 
 from adapters.xuntou.base_service import XtBaseService, _XtBaseCallback
 
@@ -278,6 +319,9 @@ class XtOrderService(XtBaseService):
         """
         使用 CIntelligentAlgorithmOrder 下达 TWAP/VWAP 智能算法单。
         """
+        if self._api is None:
+            return OrderResult(success=False, error_msg="XtTrader 未登录")
+
         algo_type = order_req.price_type.value.upper()
         logger.info(
             "准备下达 %s 算法单: account=%s, asset=%s, volume=%d",

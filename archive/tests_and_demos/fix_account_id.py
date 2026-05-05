@@ -32,7 +32,7 @@ def update_account_id():
             """, (correct_account_id, product_name))
 
             conn.commit()
-            print(f"✓ 更新成功\n")
+            print("✓ 更新成功\n")
 
             # 验证
             cursor.execute("""

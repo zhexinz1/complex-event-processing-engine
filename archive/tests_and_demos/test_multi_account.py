@@ -6,7 +6,6 @@ import sys
 sys.path.insert(0, '/home/ubuntu/xt_sdk')
 
 from adapters.xuntou import get_xt_connection_manager
-from adapters.xuntou import OrderRequest, OrderDirection, OrderPriceType
 
 def test_connection_manager():
     """测试连接管理器"""
@@ -25,17 +24,17 @@ def test_connection_manager():
     if service1:
         print(f"   ✓ 连接成功，登录状态: {service1._logined}")
     else:
-        print(f"   ✗ 连接失败")
+        print("   ✗ 连接失败")
         return
 
     # 测试连接复用
-    print(f"\n2. 再次获取相同账号连接（应复用）")
+    print("\n2. 再次获取相同账号连接（应复用）")
     service1_reuse = manager.get_connection(username1, password1, account_id1, timeout=30.0)
 
     if service1_reuse is service1:
-        print(f"   ✓ 成功复用连接")
+        print("   ✓ 成功复用连接")
     else:
-        print(f"   ✗ 未复用连接")
+        print("   ✗ 未复用连接")
 
     print("\n=== 测试完成 ===")
 

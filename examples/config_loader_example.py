@@ -10,7 +10,7 @@ config_loader_example.py — 配置加载器使用示例
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime
 
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent
@@ -23,7 +23,6 @@ from rebalance import (
     InMemoryConfigLoader,
     ProductConfig,
     TargetWeightConfig,
-    create_sample_config,
 )
 
 logging.basicConfig(
@@ -103,11 +102,11 @@ def main():
         logger.error("配置加载失败")
         return
 
-    logger.info(f"\n加载的配置:")
+    logger.info("\n加载的配置:")
     logger.info(f"  产品名称: {loaded_config.product_name}")
     logger.info(f"  配置日期: {loaded_config.date}")
     logger.info(f"  资产数量: {len(loaded_config.assets)}")
-    logger.info(f"\n资产明细:")
+    logger.info("\n资产明细:")
     for asset in loaded_config.assets:
         logger.info(
             f"    {asset.symbol:15s} 目标权重={asset.target_weight:7.2%}  "
@@ -171,9 +170,9 @@ def main():
     )
     deviation_trigger.register()
 
-    logger.info(f"\n偏离触发器配置:")
+    logger.info("\n偏离触发器配置:")
     logger.info(f"  全局阈值: {loaded_config.global_threshold:.2%}")
-    logger.info(f"  独立阈值:")
+    logger.info("  独立阈值:")
     for symbol, threshold in symbol_thresholds.items():
         logger.info(f"    {symbol:15s} {threshold:.2%}")
 
@@ -196,13 +195,13 @@ def main():
     for symbol, price in initial_prices.items():
         tick = TickEvent(
             symbol=symbol,
-            timestamp=date.today(),
+            timestamp=datetime.now(),
             last_price=price,
             volume=1000,
-            bid_prices=[price - 1] * 5,
-            bid_volumes=[100] * 5,
-            ask_prices=[price + 1] * 5,
-            ask_volumes=[100] * 5
+            bid_prices=tuple([price - 1] * 5),
+            bid_volumes=tuple([100] * 5),
+            ask_prices=tuple([price + 1] * 5),
+            ask_volumes=tuple([100] * 5),
         )
         bus.publish(tick)
 
@@ -216,13 +215,13 @@ def main():
     logger.info("\n黄金价格上涨 4% ...")
     tick = TickEvent(
         symbol="AU2606.SHF",
-        timestamp=date.today(),
+        timestamp=datetime.now(),
         last_price=580.0 * 1.04,  # 上涨 4%
         volume=1000,
-        bid_prices=[602.0] * 5,
-        bid_volumes=[100] * 5,
-        ask_prices=[604.0] * 5,
-        ask_volumes=[100] * 5
+        bid_prices=tuple([602.0] * 5),
+        bid_volumes=tuple([100] * 5),
+        ask_prices=tuple([604.0] * 5),
+        ask_volumes=tuple([100] * 5),
     )
     bus.publish(tick)
 
