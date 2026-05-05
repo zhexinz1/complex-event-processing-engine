@@ -96,6 +96,18 @@ export interface BacktestPosition {
   realized_pnl: number;
 }
 
+export interface PerformanceMetrics {
+  total_return_pct: number;
+  annualized_return_pct: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  max_drawdown_pct: number;
+  win_rate_pct: number | null;
+  round_trip_trades: number;
+  trade_count: number;
+  trading_days: number;
+}
+
 export interface BacktestResult {
   initial_cash?: number;
   final_cash?: number;
@@ -107,6 +119,7 @@ export interface BacktestResult {
   signals: BacktestSignal[];
   trades: BacktestTrade[];
   positions?: BacktestPosition[];
+  performance?: PerformanceMetrics;
 }
 
 export interface BacktestHistoryItem {

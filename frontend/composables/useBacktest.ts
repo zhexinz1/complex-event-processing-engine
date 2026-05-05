@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, markRaw } from 'vue';
 import type {
   BacktestHistoryDetail,
   BacktestPreset,
@@ -131,7 +131,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       const json = await api.fetchBacktestHistoryDetail(id, 48);
       if (requestId !== historyDetailRequestId) return;
       if (json.success) {
-        selectedHistoryDetail.value = json.data || null;
+        selectedHistoryDetail.value = json.data ? markRaw(json.data) : null;
       } else {
         selectedHistoryDetail.value = null;
         showToast(json.message || '加载回测详情失败', 'error');
@@ -186,7 +186,7 @@ export function useBacktest(api: CepApiClient, showToast: ShowToast, options: Us
       }
       const json = await api.runBacktest(payload);
       if (json.success) {
-        backtestResult.value = json.data ?? null;
+        backtestResult.value = json.data ? markRaw(json.data) : null;
         fetchBacktestHistory();
         showToast('回测完成');
       } else {

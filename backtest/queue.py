@@ -49,6 +49,12 @@ class EventQueue:
         _, _, event = heapq.heappop(self._heap)
         return event
 
+    def peek(self) -> BaseEvent:
+        """查看下一个事件但不弹出。"""
+        if self._ordered_index < len(self._ordered):
+            return self._ordered[self._ordered_index]
+        return self._heap[0][2]
+
     def empty(self) -> bool:
         """是否为空。"""
         return self._ordered_index >= len(self._ordered) and not self._heap
