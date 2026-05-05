@@ -30,7 +30,7 @@ venv = ".venv"
 include = ["adapters", "backtest", "cep", "data_provider", "examples", "nlp", "rebalance", "scripts", "tests"]
 extraPaths = ["."]
 stubPath = "typings"
-pythonVersion = "3.13"
+pythonVersion = "3.12"
 reportMissingModuleSource = "none"
 
 [tool.ruff]
