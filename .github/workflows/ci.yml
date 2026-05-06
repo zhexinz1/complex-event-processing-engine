@@ -54,7 +54,7 @@ jobs:
           cache: npm
 
       - name: Install Node dependencies
-        run: npm ci
+        run: npm install
 
       - name: Type-check frontend
         run: npm run frontend:check
