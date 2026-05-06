@@ -36,8 +36,10 @@ logger = logging.getLogger(__name__)
 # 运算符枚举
 # ---------------------------------------------------------------------------
 
+
 class Operator(str, Enum):
     """算术和比较运算符。"""
+
     # 算术运算
     ADD = "+"
     SUB = "-"
@@ -46,18 +48,19 @@ class Operator(str, Enum):
     MOD = "%"
 
     # 比较运算
-    GT  = ">"
-    GE  = ">="
-    LT  = "<"
-    LE  = "<="
-    EQ  = "=="
-    NE  = "!="
+    GT = ">"
+    GE = ">="
+    LT = "<"
+    LE = "<="
+    EQ = "=="
+    NE = "!="
 
 
 class LogicalOp(str, Enum):
     """逻辑运算符。"""
+
     AND = "AND"
-    OR  = "OR"
+    OR = "OR"
     NOT = "NOT"
 
 
@@ -71,18 +74,19 @@ OPERATOR_MAP: dict[Operator, Callable[[Any, Any], Any]] = {
     Operator.MUL: operator.mul,
     Operator.DIV: operator.truediv,
     Operator.MOD: operator.mod,
-    Operator.GT:  operator.gt,
-    Operator.GE:  operator.ge,
-    Operator.LT:  operator.lt,
-    Operator.LE:  operator.le,
-    Operator.EQ:  operator.eq,
-    Operator.NE:  operator.ne,
+    Operator.GT: operator.gt,
+    Operator.GE: operator.ge,
+    Operator.LT: operator.lt,
+    Operator.LE: operator.le,
+    Operator.EQ: operator.eq,
+    Operator.NE: operator.ne,
 }
 
 
 # ---------------------------------------------------------------------------
 # AST 节点基类
 # ---------------------------------------------------------------------------
+
 
 class Node(ABC):
     """
@@ -112,6 +116,7 @@ class Node(ABC):
 # ---------------------------------------------------------------------------
 # 叶子节点：常量和变量
 # ---------------------------------------------------------------------------
+
 
 class ConstantNode(Node):
     """
@@ -178,7 +183,7 @@ class IndicatorNode(Node):
         self,
         name: str,
         params: dict[str, Any] | None = None,
-        component: str | None = None
+        component: str | None = None,
     ) -> None:
         """
         初始化指标节点。
@@ -212,7 +217,9 @@ class IndicatorNode(Node):
 
         # 检查是否是 LocalContext
         if not isinstance(context, LocalContext):
-            raise ValueError(f"Indicator '{self.name}' can only be evaluated on LocalContext")
+            raise ValueError(
+                f"Indicator '{self.name}' can only be evaluated on LocalContext"
+            )
 
         # 合并参数（用户参数覆盖默认参数）
         final_params = {**meta.default_params, **self.params}
@@ -227,7 +234,9 @@ class IndicatorNode(Node):
         # 计算指标
         bars = list(context.bar_window)
         if meta.compute_func is None:
-            raise ValueError(f"Indicator '{self.name}' has no compute function registered")
+            raise ValueError(
+                f"Indicator '{self.name}' has no compute function registered"
+            )
         result = meta.compute_func(bars, **final_params)
 
         # 处理多值指标的组件提取
@@ -246,9 +255,15 @@ class IndicatorNode(Node):
             elif self.name.upper() == "BOLL":
                 component_map = {"upper": 0, "middle": 1, "lower": 2}
             else:
-                raise ValueError(f"Unknown component mapping for indicator '{self.name}'")
+                raise ValueError(
+                    f"Unknown component mapping for indicator '{self.name}'"
+                )
 
-            component_upper = self.component.upper() if self.name.upper() != "BOLL" else self.component.lower()
+            component_upper = (
+                self.component.upper()
+                if self.name.upper() != "BOLL"
+                else self.component.lower()
+            )
             if component_upper not in component_map:
                 raise ValueError(
                     f"Invalid component '{self.component}' for indicator '{self.name}'. "
@@ -268,6 +283,7 @@ class IndicatorNode(Node):
 # ---------------------------------------------------------------------------
 # 运算符节点
 # ---------------------------------------------------------------------------
+
 
 class OperatorNode(Node):
     """
@@ -301,9 +317,7 @@ class OperatorNode(Node):
         op_func = OPERATOR_MAP[self.op]
         result = op_func(left_val, right_val)
 
-        logger.debug(
-            f"OperatorNode: {left_val} {self.op.value} {right_val} = {result}"
-        )
+        logger.debug(f"OperatorNode: {left_val} {self.op.value} {right_val} = {result}")
         return result
 
     def __repr__(self) -> str:
@@ -313,6 +327,7 @@ class OperatorNode(Node):
 # ---------------------------------------------------------------------------
 # 逻辑运算符节点
 # ---------------------------------------------------------------------------
+
 
 class LogicalNode(Node):
     """
@@ -381,6 +396,7 @@ class LogicalNode(Node):
 # ---------------------------------------------------------------------------
 # AST 构建辅助函数（Builder Pattern）
 # ---------------------------------------------------------------------------
+
 
 def build_comparison(
     var_name: str,
@@ -462,6 +478,7 @@ def build_not(condition: Node) -> LogicalNode:
 # 示例：从 JSON 反序列化 AST（可选扩展）
 # ---------------------------------------------------------------------------
 
+
 def parse_ast_from_dict(spec: dict) -> Node:
     """
     从字典结构解析 AST（用于从配置文件加载规则）。
@@ -497,7 +514,7 @@ def parse_ast_from_dict(spec: dict) -> Node:
         return IndicatorNode(
             name=spec["name"],
             params=spec.get("params"),
-            component=spec.get("component")
+            component=spec.get("component"),
         )
 
     elif node_type == "operator":

@@ -9,8 +9,18 @@
 """
 
 from .market_gateway import MarketGateway, CTPMarketGateway, MockMarketGateway
-from .config_source import ConfigSource, DatabaseConfigSource, FileConfigSource, MySQLConfigSource
-from .xuntou import XtQueryService, XtOrderService, XtConnectionManager, get_xt_connection_manager
+from .config_source import (
+    ConfigSource,
+    DatabaseConfigSource,
+    FileConfigSource,
+    MySQLConfigSource,
+)
+from .xuntou import (
+    XtQueryService,
+    XtOrderService,
+    XtConnectionManager,
+    get_xt_connection_manager,
+)
 from .frontend_api import FrontendAPI
 
 __all__ = [

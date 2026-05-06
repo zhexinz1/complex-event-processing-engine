@@ -11,7 +11,7 @@ import threading
 import logging
 from typing import Optional, Dict, Any
 
-sys.path.insert(0, '/home/ubuntu/xt_sdk')
+sys.path.insert(0, "/home/ubuntu/xt_sdk")
 
 try:
     from XtTraderPyApi import (
@@ -20,6 +20,7 @@ try:
         XtError as _XtError,
         EBrokerLoginStatus as _EBrokerLoginStatus,
     )
+
     _XT_AVAILABLE = True
     XtTraderApi: Any = _XtTraderApi
     XtTraderApiCallback: Any = _XtTraderApiCallback
@@ -46,6 +47,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # 基础回调
 # ---------------------------------------------------------------------------
+
 
 class _XtBaseCallback(XtTraderApiCallback):
     """迅投基础回调处理器 — 处理连接、登录和账号就绪"""
@@ -102,11 +104,16 @@ class _XtBaseCallback(XtTraderApiCallback):
         """用户登录回调"""
         logger.info("onUserLogin: username=%s, success=%s", username, error.isSuccess())
 
-    def onRtnLoginStatusWithActKey(self, account_id, status, account_type, account_key, error_msg):
+    def onRtnLoginStatusWithActKey(
+        self, account_id, status, account_type, account_key, error_msg
+    ):
         """账号登录状态回调"""
         logger.info(
             "onRtnLoginStatusWithActKey: account_id=%s, account_type=%s, status=%s, error_msg=%s",
-            account_id, account_type, status, error_msg,
+            account_id,
+            account_type,
+            status,
+            error_msg,
         )
 
         if (
@@ -123,6 +130,7 @@ class _XtBaseCallback(XtTraderApiCallback):
 # 基础服务
 # ---------------------------------------------------------------------------
 
+
 class XtBaseService:
     """
     迅投基础服务
@@ -134,8 +142,12 @@ class XtBaseService:
     # 子类可覆盖此属性来使用自定义回调类
     _callback_class = _XtBaseCallback
 
-    def __init__(self, username: Optional[str] = None, password: Optional[str] = None,
-                 dao: Any = None):
+    def __init__(
+        self,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        dao: Any = None,
+    ):
         self._api: Optional[Any] = None
         self._callback: Optional[_XtBaseCallback] = None
         self._logined = False

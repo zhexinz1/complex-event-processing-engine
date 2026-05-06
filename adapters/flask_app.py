@@ -37,7 +37,14 @@ from typing import Any, cast
 
 import pymysql
 import pymysql.cursors
-from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    request,
+    send_from_directory,
+    stream_with_context,
+)
 
 from backtest.preset_strategies import (
     PRESET_STRATEGIES,
@@ -173,7 +180,9 @@ def init_db() -> None:
             cur.execute(CREATE_ASSETS_TABLE_SQL)
             cur.execute(CREATE_USER_SIGNALS_TABLE_SQL)
         conn.commit()
-    logger.info("DB tables target_allocations, allowed_assets and user_signal_definitions ready.")
+    logger.info(
+        "DB tables target_allocations, allowed_assets and user_signal_definitions ready."
+    )
 
     # 初始化 DAO
     global dao
@@ -195,21 +204,35 @@ def _serialize_user_signal(signal: UserSignalDefinition) -> dict[str, Any]:
     }
 
 
-def _parse_signal_payload(body: dict[str, Any], existing: UserSignalDefinition | None = None) -> UserSignalDefinition:
+def _parse_signal_payload(
+    body: dict[str, Any], existing: UserSignalDefinition | None = None
+) -> UserSignalDefinition:
     raw_symbols = body.get("symbols", existing.symbols if existing else [])
     if isinstance(raw_symbols, str):
         symbols = [part.strip() for part in raw_symbols.split(",") if part.strip()]
     else:
         symbols = [str(part).strip() for part in raw_symbols or [] if str(part).strip()]
-    status_text = str(body.get("status", existing.status.value if existing else UserSignalStatus.DISABLED.value))
+    status_text = str(
+        body.get(
+            "status",
+            existing.status.value if existing else UserSignalStatus.DISABLED.value,
+        )
+    )
     return UserSignalDefinition(
         id=existing.id if existing else None,
         name=str(body.get("name", existing.name if existing else "")).strip(),
         symbols=symbols,
-        bar_freq=str(body.get("bar_freq", existing.bar_freq if existing else "1m")).strip(),
-        source_code=str(body.get("source_code", existing.source_code if existing else "")),
+        bar_freq=str(
+            body.get("bar_freq", existing.bar_freq if existing else "1m")
+        ).strip(),
+        source_code=str(
+            body.get("source_code", existing.source_code if existing else "")
+        ),
         status=UserSignalStatus(status_text),
-        created_by=str(body.get("created_by", existing.created_by if existing else "system")).strip() or "system",
+        created_by=str(
+            body.get("created_by", existing.created_by if existing else "system")
+        ).strip()
+        or "system",
         created_at=existing.created_at if existing else None,
         updated_at=existing.updated_at if existing else None,
     )
@@ -235,7 +258,9 @@ def _parse_bool_arg(value: Any, default: bool = True) -> bool:
     raise ValueError(f"无法解析布尔值: {value}")
 
 
-def _parse_execution_timing(value: Any, default: ExecutionTiming = "next_bar") -> ExecutionTiming:
+def _parse_execution_timing(
+    value: Any, default: ExecutionTiming = "next_bar"
+) -> ExecutionTiming:
     if value is None:
         return default
     text = str(value).strip().lower()
@@ -249,6 +274,7 @@ def _parse_execution_timing(value: Any, default: ExecutionTiming = "next_bar") -
 # ---------------------------------------------------------------------------
 # Flask 应用工厂
 # ---------------------------------------------------------------------------
+
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
@@ -316,7 +342,9 @@ def create_app() -> Flask:
                     cur.execute(sql, params)
                     rows = cast(list[dict[str, Any]], cur.fetchall())
         except Exception as e:
-            return jsonify({"success": False, "message": f"数据库连接失败: {e}", "data": []}), 503
+            return jsonify(
+                {"success": False, "message": f"数据库连接失败: {e}", "data": []}
+            ), 503
 
         # Decimal → float for JSON serialisation
         for row in rows:
@@ -342,11 +370,13 @@ def create_app() -> Flask:
 
         # 校验合约代码格式：不允许带交易所后缀
         asset_code = (body["asset_code"] or "").strip()
-        if '.' in asset_code:
-            return jsonify({
-                "success": False,
-                "message": f"合约代码不应包含交易所后缀，请输入纯合约代码 (如 {asset_code.split('.')[0]})"
-            }), 400
+        if "." in asset_code:
+            return jsonify(
+                {
+                    "success": False,
+                    "message": f"合约代码不应包含交易所后缀，请输入纯合约代码 (如 {asset_code.split('.')[0]})",
+                }
+            ), 400
 
         sql = """
             INSERT INTO target_allocations
@@ -384,7 +414,9 @@ def create_app() -> Flask:
         try:
             with get_conn() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("DELETE FROM target_allocations WHERE id = %s", (record_id,))
+                    cur.execute(
+                        "DELETE FROM target_allocations WHERE id = %s", (record_id,)
+                    )
                     affected = cur.rowcount
                 conn.commit()
         except Exception as e:
@@ -420,19 +452,21 @@ def create_app() -> Flask:
         """获取产品详细列表（含杠杆倍数、账号等信息）"""
         try:
             products = dao.list_active_products()
-            return jsonify({
-                "success": True,
-                "products": [
-                    {
-                        "product_name": p.product_name,
-                        "leverage_ratio": float(p.leverage_ratio),
-                        "account_id": p.account_id,
-                        "fund_account": p.fund_account,
-                        "status": p.status.value
-                    }
-                    for p in products
-                ]
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "products": [
+                        {
+                            "product_name": p.product_name,
+                            "leverage_ratio": float(p.leverage_ratio),
+                            "account_id": p.account_id,
+                            "fund_account": p.fund_account,
+                            "status": p.status.value,
+                        }
+                        for p in products
+                    ],
+                }
+            )
         except Exception as e:
             logger.exception("查询产品列表失败")
             return jsonify({"success": False, "message": f"服务器错误: {str(e)}"}), 500
@@ -459,7 +493,9 @@ def create_app() -> Flask:
             # 检查产品是否已存在
             existing = dao.get_product_by_name(product_name)
             if existing:
-                return jsonify({"success": False, "message": f"产品 {product_name} 已存在"}), 409
+                return jsonify(
+                    {"success": False, "message": f"产品 {product_name} 已存在"}
+                ), 409
 
             # 插入数据库
             with get_conn() as conn:
@@ -469,7 +505,14 @@ def create_app() -> Flask:
                         INSERT INTO products (product_name, leverage_ratio, account_id, fund_account, xt_username, xt_password, status)
                         VALUES (%s, %s, %s, %s, %s, %s, 'active')
                         """,
-                        (product_name, leverage_ratio, account_id, fund_account, xt_username, xt_password)
+                        (
+                            product_name,
+                            leverage_ratio,
+                            account_id,
+                            fund_account,
+                            xt_username,
+                            xt_password,
+                        ),
                     )
                 conn.commit()
 
@@ -550,7 +593,9 @@ def create_app() -> Flask:
                     )
                     rows = cast(list[dict[str, Any]], cur.fetchall())
         except Exception as e:
-            return jsonify({"success": False, "message": f"数据库连接失败: {e}", "data": []}), 503
+            return jsonify(
+                {"success": False, "message": f"数据库连接失败: {e}", "data": []}
+            ), 503
         for row in rows:
             if row.get("created_at"):
                 row["created_at"] = str(row["created_at"])
@@ -570,19 +615,24 @@ def create_app() -> Flask:
         # 校验：合约代码不能带交易所后缀（如 ".SHFE"）
         # CTP InstrumentID 只接受纯合约代码（如 ag2606），带后缀会导致行情订阅静默失败
         # 交易所后缀由 normalize_asset_code() 在下单时动态计算
-        if '.' in asset_code:
-            return jsonify({
-                "success": False,
-                "message": f"合约代码不应包含交易所后缀 (如 .SHFE)，请输入纯合约代码 (如 {asset_code.split('.')[0]})"
-            }), 400
+        if "." in asset_code:
+            return jsonify(
+                {
+                    "success": False,
+                    "message": f"合约代码不应包含交易所后缀 (如 .SHFE)，请输入纯合约代码 (如 {asset_code.split('.')[0]})",
+                }
+            ), 400
 
         # 校验：合约代码应为字母+数字格式
         import re
-        if not re.match(r'^[a-zA-Z]+\d+$', asset_code):
-            return jsonify({
-                "success": False,
-                "message": f"合约代码格式不正确: {asset_code}，应为品种+月份格式（如 ag2606、rb2510）"
-            }), 400
+
+        if not re.match(r"^[a-zA-Z]+\d+$", asset_code):
+            return jsonify(
+                {
+                    "success": False,
+                    "message": f"合约代码格式不正确: {asset_code}，应为品种+月份格式（如 ag2606、rb2510）",
+                }
+            ), 400
 
         try:
             with get_conn() as conn:
@@ -593,11 +643,15 @@ def create_app() -> Flask:
                     )
                 conn.commit()
         except pymysql.err.IntegrityError:
-            return jsonify({"success": False, "message": f"资产代码 {asset_code} 已存在"}), 409
+            return jsonify(
+                {"success": False, "message": f"资产代码 {asset_code} 已存在"}
+            ), 409
         except Exception as e:
             return jsonify({"success": False, "message": f"数据库错误: {e}"}), 503
 
-        return jsonify({"success": True, "message": f"已添加资产代码 {asset_code}"}), 201
+        return jsonify(
+            {"success": True, "message": f"已添加资产代码 {asset_code}"}
+        ), 201
 
     # -----------------------------------------------------------------------
     # DELETE /api/assets/<asset_code>  — 删除资产代码
@@ -610,7 +664,8 @@ def create_app() -> Flask:
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "DELETE FROM allowed_assets WHERE asset_code = %s", (asset_code,)
+                        "DELETE FROM allowed_assets WHERE asset_code = %s",
+                        (asset_code,),
                     )
                     affected = cur.rowcount
                 conn.commit()
@@ -635,24 +690,30 @@ def create_app() -> Flask:
             limit = request.args.get("limit", 50, type=int)
             inflows = dao.list_fund_inflows(limit=limit)
 
-            return jsonify({
-                "success": True,
-                "inflows": [
-                    {
-                        "batch_id": inf.batch_id,
-                        "product_name": inf.product_name,
-                        "net_inflow": str(inf.net_inflow),
-                        "leverage_ratio": str(inf.leverage_ratio),
-                        "leveraged_amount": str(inf.leveraged_amount),
-                        "input_by": inf.input_by or "",
-                        "input_at": inf.input_at.isoformat() if inf.input_at else "",
-                        "confirmed_by": inf.confirmed_by or "",
-                        "confirmed_at": inf.confirmed_at.isoformat() if inf.confirmed_at else "",
-                        "status": inf.status.value,
-                    }
-                    for inf in inflows
-                ]
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "inflows": [
+                        {
+                            "batch_id": inf.batch_id,
+                            "product_name": inf.product_name,
+                            "net_inflow": str(inf.net_inflow),
+                            "leverage_ratio": str(inf.leverage_ratio),
+                            "leveraged_amount": str(inf.leveraged_amount),
+                            "input_by": inf.input_by or "",
+                            "input_at": inf.input_at.isoformat()
+                            if inf.input_at
+                            else "",
+                            "confirmed_by": inf.confirmed_by or "",
+                            "confirmed_at": inf.confirmed_at.isoformat()
+                            if inf.confirmed_at
+                            else "",
+                            "status": inf.status.value,
+                        }
+                        for inf in inflows
+                    ],
+                }
+            )
 
         except Exception as e:
             logger.exception("查询净入金列表失败")
@@ -739,7 +800,9 @@ def create_app() -> Flask:
             # 1. 查询产品配置（杠杆倍数）
             product = dao.get_product_by_name(product_name)
             if not product:
-                return jsonify({"success": False, "message": f"产品 {product_name} 不存在"}), 404
+                return jsonify(
+                    {"success": False, "message": f"产品 {product_name} 不存在"}
+                ), 404
 
             leverage_ratio = product.leverage_ratio
 
@@ -757,14 +820,21 @@ def create_app() -> Flask:
                               WHERE product_name = %s
                           )
                         """,
-                        (product_name, product_name)
+                        (product_name, product_name),
                     )
                     rows = cur.fetchall()
 
             if not rows:
-                return jsonify({"success": False, "message": f"产品 {product_name} 没有配置目标权重"}), 404
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": f"产品 {product_name} 没有配置目标权重",
+                    }
+                ), 404
 
-            target_weights = {row['asset_code']: Decimal(str(row['weight_ratio'])) for row in rows}
+            target_weights = {
+                row["asset_code"]: Decimal(str(row["weight_ratio"])) for row in rows
+            }
 
             # 3. 从行情缓存获取市场价格和合约乘数（无缓存时用模拟价格）
             market_prices = {}
@@ -778,11 +848,14 @@ def create_app() -> Flask:
             # 4. 获取留白数据
             previous_fractionals = {}
             for asset_code in target_weights.keys():
-                previous_fractionals[asset_code] = dao.get_fractional_share(product_name, asset_code)
+                previous_fractionals[asset_code] = dao.get_fractional_share(
+                    product_name, asset_code
+                )
 
             # 5. 调用 RebalanceEngine 计算增量订单
             # 注意：这里不需要 PortfolioContext，因为是纯增量计算
             from rebalance.rebalance_engine import RebalanceEngine
+
             engine = RebalanceEngine(portfolio_ctx=None)  # 增量计算不需要 portfolio_ctx
 
             orders = engine.calculate_incremental_orders(
@@ -791,7 +864,7 @@ def create_app() -> Flask:
                 target_weights=target_weights,
                 market_prices=market_prices,
                 contract_multipliers=contract_multipliers,
-                previous_fractionals=previous_fractionals
+                previous_fractionals=previous_fractionals,
             )
 
             # 6. 生成批次ID
@@ -806,7 +879,7 @@ def create_app() -> Flask:
                 leverage_ratio=leverage_ratio,
                 leveraged_amount=net_inflow * leverage_ratio,
                 input_by=input_by,
-                status=FundInflowStatus.PENDING
+                status=FundInflowStatus.PENDING,
             )
             dao.create_fund_inflow(fund_inflow)
 
@@ -824,33 +897,35 @@ def create_app() -> Flask:
                     rounded_quantity=order.rounded_quantity,
                     fractional_part=order.fractional_part,
                     final_quantity=order.final_quantity,
-                    status=OrderStatus.PENDING
+                    status=OrderStatus.PENDING,
                 )
                 dao.create_pending_order(pending_order)
 
             # 9. 返回结果
-            return jsonify({
-                "success": True,
-                "batch_id": batch_id,
-                "product_name": product_name,
-                "net_inflow": float(net_inflow),
-                "leverage_ratio": float(leverage_ratio),
-                "leveraged_amount": float(net_inflow * leverage_ratio),
-                "orders": [
-                    {
-                        "asset_code": o.asset_code,
-                        "target_market_value": float(o.target_market_value),
-                        "price": float(o.price),
-                        "contract_multiplier": o.contract_multiplier,
-                        "theoretical_quantity": float(o.theoretical_quantity),
-                        "rounded_quantity": o.rounded_quantity,
-                        "fractional_part": float(o.fractional_part),
-                        "previous_fractional": float(o.previous_fractional),
-                        "final_quantity": o.final_quantity
-                    }
-                    for o in orders
-                ]
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "batch_id": batch_id,
+                    "product_name": product_name,
+                    "net_inflow": float(net_inflow),
+                    "leverage_ratio": float(leverage_ratio),
+                    "leveraged_amount": float(net_inflow * leverage_ratio),
+                    "orders": [
+                        {
+                            "asset_code": o.asset_code,
+                            "target_market_value": float(o.target_market_value),
+                            "price": float(o.price),
+                            "contract_multiplier": o.contract_multiplier,
+                            "theoretical_quantity": float(o.theoretical_quantity),
+                            "rounded_quantity": o.rounded_quantity,
+                            "fractional_part": float(o.fractional_part),
+                            "previous_fractional": float(o.previous_fractional),
+                            "final_quantity": o.final_quantity,
+                        }
+                        for o in orders
+                    ],
+                }
+            )
 
         except Exception as e:
             logger.exception("提交净入金失败")
@@ -892,10 +967,14 @@ def create_app() -> Flask:
                         where_clauses.append("status = %s")
                         params.append(status)
 
-                    where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+                    where_sql = (
+                        " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+                    )
 
                     # 查询总数
-                    count_sql = f"SELECT COUNT(*) as total FROM pending_orders{where_sql}"
+                    count_sql = (
+                        f"SELECT COUNT(*) as total FROM pending_orders{where_sql}"
+                    )
                     cursor.execute(count_sql, params)
                     total = cursor.fetchone()["total"]
 
@@ -927,21 +1006,29 @@ def create_app() -> Flask:
                             "xt_status": row.get("xt_status", "not_sent"),
                             "xt_error_msg": row.get("xt_error_msg", ""),
                             "xt_traded_volume": row.get("xt_traded_volume", 0),
-                            "xt_traded_price": float(row.get("xt_traded_price", 0) or 0),
+                            "xt_traded_price": float(
+                                row.get("xt_traded_price", 0) or 0
+                            ),
                             "order_price_type": row.get("order_price_type", "limit"),
-                            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                            "confirmed_at": row.get("confirmed_at").isoformat() if row.get("confirmed_at") else None,
+                            "created_at": row["created_at"].isoformat()
+                            if row["created_at"]
+                            else None,
+                            "confirmed_at": row.get("confirmed_at").isoformat()
+                            if row.get("confirmed_at")
+                            else None,
                         }
                         for row in rows
                     ]
 
-                    return jsonify({
-                        "success": True,
-                        "orders": orders,
-                        "total": total,
-                        "limit": limit,
-                        "offset": offset
-                    })
+                    return jsonify(
+                        {
+                            "success": True,
+                            "orders": orders,
+                            "total": total,
+                            "limit": limit,
+                            "offset": offset,
+                        }
+                    )
 
             finally:
                 conn.close()
@@ -972,7 +1059,9 @@ def create_app() -> Flask:
             elif product_name:
                 orders = dao.get_pending_orders_by_product(product_name)
             else:
-                return jsonify({"success": False, "message": "请提供 batch_id 或 product_name"}), 400
+                return jsonify(
+                    {"success": False, "message": "请提供 batch_id 或 product_name"}
+                ), 400
 
             # 查询批次的净入金汇总信息
             inflow_info = dao.get_fund_inflow_by_batch(batch_id) if batch_id else None
@@ -994,10 +1083,12 @@ def create_app() -> Flask:
                         "previous_fractional": 0.0,
                         "final_quantity": o.final_quantity,
                         "status": o.status.value,
-                        "created_at": o.created_at.isoformat() if o.created_at else None
+                        "created_at": o.created_at.isoformat()
+                        if o.created_at
+                        else None,
                     }
                     for o in orders
-                ]
+                ],
             }
 
             if inflow_info:
@@ -1007,7 +1098,9 @@ def create_app() -> Flask:
                 resp["leverage_ratio"] = float(inflow_info.leverage_ratio)
                 resp["leveraged_amount"] = float(inflow_info.leveraged_amount)
                 resp["input_by"] = inflow_info.input_by or ""
-                resp["input_at"] = inflow_info.input_at.isoformat() if inflow_info.input_at else ""
+                resp["input_at"] = (
+                    inflow_info.input_at.isoformat() if inflow_info.input_at else ""
+                )
 
             return jsonify(resp)
 
@@ -1092,7 +1185,9 @@ def create_app() -> Flask:
                 return jsonify({"success": False, "message": "批次不存在或已处理"}), 404
 
             # 2. 更新净入金记录状态
-            dao.update_fund_inflow_status(batch_id, FundInflowStatus.CONFIRMED, confirmed_by)
+            dao.update_fund_inflow_status(
+                batch_id, FundInflowStatus.CONFIRMED, confirmed_by
+            )
 
             # 3. 执行订单（调用迅投API）
             executed_orders = []
@@ -1101,7 +1196,9 @@ def create_app() -> Flask:
             for order in orders:
                 order_id = order.id
                 if order_id is None:
-                    failed_orders.append({"asset_code": order.asset_code, "error": "订单缺少数据库ID"})
+                    failed_orders.append(
+                        {"asset_code": order.asset_code, "error": "订单缺少数据库ID"}
+                    )
                     continue
 
                 if order.final_quantity == 0:
@@ -1115,7 +1212,7 @@ def create_app() -> Flask:
                     with conn.cursor() as cursor:
                         cursor.execute(
                             "UPDATE pending_orders SET order_price_type = %s WHERE id = %s",
-                            (price_type_str, order_id)
+                            (price_type_str, order_id),
                         )
                     conn.commit()
                     conn.close()
@@ -1148,22 +1245,38 @@ def create_app() -> Flask:
                     normalized_code = normalize_asset_code(order.asset_code)
 
                     # 解析资产代码（如 "AG2606.SHFE" -> instrument="AG2606", market="SHFE"）
-                    parts = normalized_code.split('.')
+                    parts = normalized_code.split(".")
                     if len(parts) != 2:
-                        raise ValueError(f"资产代码格式错误: {order.asset_code} (标准化后: {normalized_code})")
+                        raise ValueError(
+                            f"资产代码格式错误: {order.asset_code} (标准化后: {normalized_code})"
+                        )
                     instrument, market = parts[0], parts[1]
 
                     # 判断资产类型和买卖方向
                     # 期货市场：CFFEX(中金所), DCE(大商所), CZCE(郑商所), SHFE(上期所), INE(能源中心)
-                    is_futures = market.upper() in ['CFFEX', 'DCE', 'CZCE', 'SHFE', 'INE']
+                    is_futures = market.upper() in [
+                        "CFFEX",
+                        "DCE",
+                        "CZCE",
+                        "SHFE",
+                        "INE",
+                    ]
 
                     if order.final_quantity > 0:
                         # 正数：买入/开多
-                        direction = OrderDirection.OPEN_LONG if is_futures else OrderDirection.BUY
+                        direction = (
+                            OrderDirection.OPEN_LONG
+                            if is_futures
+                            else OrderDirection.BUY
+                        )
                         quantity = order.final_quantity
                     else:
                         # 负数：卖出/平多
-                        direction = OrderDirection.CLOSE_LONG if is_futures else OrderDirection.SELL
+                        direction = (
+                            OrderDirection.CLOSE_LONG
+                            if is_futures
+                            else OrderDirection.SELL
+                        )
                         quantity = abs(order.final_quantity)
 
                     # 获取最新实时价格（而不是录入时的快照价格）
@@ -1174,7 +1287,11 @@ def create_app() -> Flask:
 
                     # 构造下单请求
                     # 注意：account_id 应该使用 fund_account（真实账号ID），而不是 product.account_id（可能是用户名）
-                    actual_account_id = product.fund_account if product.fund_account else product.account_id
+                    actual_account_id = (
+                        product.fund_account
+                        if product.fund_account
+                        else product.account_id
+                    )
                     order_req = OrderRequest(
                         account_id=actual_account_id,
                         asset_code=normalized_code,  # 使用标准化后的代码
@@ -1183,7 +1300,7 @@ def create_app() -> Flask:
                         price=live_price,
                         price_type=selected_price_type,
                         market=market,
-                        instrument=instrument
+                        instrument=instrument,
                     )
 
                     # 调用迅投API下单
@@ -1201,9 +1318,7 @@ def create_app() -> Flask:
 
                         # 更新留白数据
                         dao.update_fractional_share(
-                            order.product_name,
-                            order.asset_code,
-                            order.fractional_part
+                            order.product_name, order.asset_code, order.fractional_part
                         )
                     else:
                         # SDK 调用返回失败 — 记录 xt_status='send_failed'
@@ -1214,13 +1329,17 @@ def create_app() -> Flask:
                 except Exception as e:
                     logger.exception(f"执行订单失败: {order.asset_code}")
                     dao.update_order_status(order_id, OrderStatus.FAILED, str(e))
-                    failed_orders.append({"asset_code": order.asset_code, "error": str(e)})
+                    failed_orders.append(
+                        {"asset_code": order.asset_code, "error": str(e)}
+                    )
 
-            return jsonify({
-                "success": True,
-                "executed_orders": executed_orders,
-                "failed_orders": failed_orders
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "executed_orders": executed_orders,
+                    "failed_orders": failed_orders,
+                }
+            )
 
         except Exception as e:
             logger.exception("确认订单失败")
@@ -1245,20 +1364,18 @@ def create_app() -> Flask:
             try:
                 conn = get_conn()
                 with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT DISTINCT asset_code FROM target_allocations"
-                    )
+                    cursor.execute("SELECT DISTINCT asset_code FROM target_allocations")
                     rows = cursor.fetchall()
                     for row in rows:
                         # asset_code 可能带后缀，如 ag2606.SHFE，取前缀
-                        code = row['asset_code'].split('.')[0]
+                        code = row["asset_code"].split(".")[0]
                         expected_symbols.add(code)
                 conn.close()
             except Exception as e:
                 logger.error("查询目标合约失败: %s", e)
 
             # 缓存中的合约集合
-            cached_symbols = set(detail['symbols'].keys())
+            cached_symbols = set(detail["symbols"].keys())
 
             # 计算缺失的合约
             missing_symbols = []
@@ -1268,20 +1385,22 @@ def create_app() -> Flask:
 
             # 总体健康状态
             is_healthy = (
-                detail['subscriber_alive']
+                detail["subscriber_alive"]
                 and len(missing_symbols) == 0
-                and detail['cached_count'] > 0
+                and detail["cached_count"] > 0
             )
 
-            return jsonify({
-                "success": True,
-                "healthy": is_healthy,
-                "subscriber_alive": detail['subscriber_alive'],
-                "cached_count": detail['cached_count'],
-                "symbols": detail['symbols'],
-                "expected_symbols": sorted(expected_symbols),
-                "missing_symbols": missing_symbols,
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "healthy": is_healthy,
+                    "subscriber_alive": detail["subscriber_alive"],
+                    "cached_count": detail["cached_count"],
+                    "symbols": detail["symbols"],
+                    "expected_symbols": sorted(expected_symbols),
+                    "missing_symbols": missing_symbols,
+                }
+            )
 
         except Exception as e:
             logger.exception("行情健康检查异常")
@@ -1314,10 +1433,7 @@ def create_app() -> Flask:
 
             # 连接迅投服务器（单例模式，只连接一次）
             if not xt_query.connect(timeout=30.0):
-                return jsonify({
-                    "success": False,
-                    "message": "连接迅投服务器失败"
-                }), 500
+                return jsonify({"success": False, "message": "连接迅投服务器失败"}), 500
 
             # 查询产品列表
             products = xt_query.query_products()
@@ -1330,15 +1446,12 @@ def create_app() -> Flask:
                     "product_id": p.product_id,
                     "product_name": p.product_name,
                     "product_code": p.product_code,
-                    "total_net_value": p.total_net_value
+                    "total_net_value": p.total_net_value,
                 }
                 for p in products
             ]
 
-            return jsonify({
-                "success": True,
-                "products": product_list
-            })
+            return jsonify({"success": True, "products": product_list})
 
         except Exception as e:
             logger.exception("查询迅投产品异常")
@@ -1361,14 +1474,20 @@ def create_app() -> Flask:
         try:
             product_name = request.args.get("product_name")
             if not product_name:
-                return jsonify({"success": False, "message": "请指定产品名称 (product_name)"}), 400
+                return jsonify(
+                    {"success": False, "message": "请指定产品名称 (product_name)"}
+                ), 400
 
             product = dao.get_product_by_name(product_name)
             if not product:
-                return jsonify({"success": False, "message": f"产品 {product_name} 不存在"}), 404
+                return jsonify(
+                    {"success": False, "message": f"产品 {product_name} 不存在"}
+                ), 404
 
             if not product.xt_username or not product.xt_password:
-                return jsonify({"success": False, "message": f"产品 {product_name} 未配置迅投账号"}), 400
+                return jsonify(
+                    {"success": False, "message": f"产品 {product_name} 未配置迅投账号"}
+                ), 400
 
             # 获取迅投连接
             xt_manager = get_xt_connection_manager()
@@ -1380,13 +1499,24 @@ def create_app() -> Flask:
                 dao=dao,
             )
             if not xt_service:
-                return jsonify({"success": False, "message": f"无法连接迅投账号: {product.xt_username}"}), 500
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": f"无法连接迅投账号: {product.xt_username}",
+                    }
+                ), 500
 
-            actual_account_id = product.fund_account if product.fund_account else product.account_id
+            actual_account_id = (
+                product.fund_account if product.fund_account else product.account_id
+            )
 
             # 1. 拉取迅投当日全部指令
             instructions = xt_service.query_instructions(account_id=actual_account_id)
-            logger.info("对账: 迅投返回 %d 条指令 (account_id=%s)", len(instructions), actual_account_id)
+            logger.info(
+                "对账: 迅投返回 %d 条指令 (account_id=%s)",
+                len(instructions),
+                actual_account_id,
+            )
 
             # 构建 order_id → instruction 索引
             instr_map = {}
@@ -1422,7 +1552,9 @@ def create_app() -> Flask:
                     new_status = _INSTR_STATUS_MAP.get(matched["status"], "sent")
                     error_msg = matched.get("error_msg", "")
 
-                    if new_status != order.xt_status or error_msg != (order.xt_error_msg or ""):
+                    if new_status != order.xt_status or error_msg != (
+                        order.xt_error_msg or ""
+                    ):
                         dao.update_order_xt_status(
                             xt_order_id=order.xt_order_id,
                             xt_status=new_status,
@@ -1431,7 +1563,10 @@ def create_app() -> Flask:
                         updated += 1
                         logger.info(
                             "对账更新: xt_order_id=%s, %s → %s, error=%s",
-                            order.xt_order_id, order.xt_status, new_status, error_msg,
+                            order.xt_order_id,
+                            order.xt_status,
+                            new_status,
+                            error_msg,
                         )
                     else:
                         already_ok += 1
@@ -1439,19 +1574,21 @@ def create_app() -> Flask:
                     # 迅投没有这笔指令 — 保持不变
                     not_found += 1
 
-            return jsonify({
-                "success": True,
-                "message": f"对账完成: 更新 {updated} 笔, 一致 {already_ok} 笔, 未找到 {not_found} 笔",
-                "reconcile_summary": {
-                    "xt_instructions_count": len(instructions),
-                    "pending_orders_count": len(pending_orders),
-                    "updated": updated,
-                    "already_ok": already_ok,
-                    "not_found": not_found,
-                },
-                "account_id": actual_account_id,
-                "product_name": product_name,
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"对账完成: 更新 {updated} 笔, 一致 {already_ok} 笔, 未找到 {not_found} 笔",
+                    "reconcile_summary": {
+                        "xt_instructions_count": len(instructions),
+                        "pending_orders_count": len(pending_orders),
+                        "updated": updated,
+                        "already_ok": already_ok,
+                        "not_found": not_found,
+                    },
+                    "account_id": actual_account_id,
+                    "product_name": product_name,
+                }
+            )
 
         except Exception as e:
             logger.exception("对账异常")
@@ -1467,20 +1604,26 @@ def create_app() -> Flask:
             product_name = request.args.get("product_name")
             target_order_id = request.args.get("order_id", type=int)
             if not product_name:
-                return jsonify({"success": False, "message": "请指定 product_name"}), 400
+                return jsonify(
+                    {"success": False, "message": "请指定 product_name"}
+                ), 400
 
             product = dao.get_product_by_name(product_name)
             if not product:
-                return jsonify({"success": False, "message": f"产品 {product_name} 不存在"}), 404
+                return jsonify(
+                    {"success": False, "message": f"产品 {product_name} 不存在"}
+                ), 404
             if not product.xt_username or not product.xt_password:
-                return jsonify({"success": False, "message": f"产品 {product_name} 未配置迅投账号"}), 400
+                return jsonify(
+                    {"success": False, "message": f"产品 {product_name} 未配置迅投账号"}
+                ), 400
 
             xt_manager = get_xt_connection_manager()
             xt_service = xt_manager.get_connection(
                 username=product.xt_username,
                 password=product.xt_password,
                 account_id=product.account_id,
-                timeout=30.0
+                timeout=30.0,
             )
             if not xt_service:
                 return jsonify({"success": False, "message": "无法连接迅投"}), 500
@@ -1490,11 +1633,15 @@ def create_app() -> Flask:
             try:
                 from XtTraderPyApi import XtError as _XtError
             except ImportError as exc:
-                return jsonify({"success": False, "message": f"迅投 SDK 不可用: {exc}"}), 500
+                return jsonify(
+                    {"success": False, "message": f"迅投 SDK 不可用: {exc}"}
+                ), 500
 
             xt_api = xt_service._api
 
-            actual_account_id = product.fund_account if product.fund_account else product.account_id
+            actual_account_id = (
+                product.fund_account if product.fund_account else product.account_id
+            )
             account_key = xt_service._account_ready.get(actual_account_id)
 
             result = {
@@ -1507,7 +1654,9 @@ def create_app() -> Flask:
             # 方法1: reqOrderDetailSync (当日委托)
             try:
                 error = _XtError(0, "")
-                orders = xt_api.reqOrderDetailSync(actual_account_id, error, account_key)
+                orders = xt_api.reqOrderDetailSync(
+                    actual_account_id, error, account_key
+                )
                 result["method1_reqOrderDetailSync"] = {
                     "isSuccess": error.isSuccess(),
                     "errorMsg": error.errorMsg(),
@@ -1517,7 +1666,7 @@ def create_app() -> Flask:
                 if orders:
                     result["method1_first_order_attrs"] = {}
                     for attr in dir(orders[0]):
-                        if attr.startswith('m_'):
+                        if attr.startswith("m_"):
                             try:
                                 val = getattr(orders[0], attr)
                                 result["method1_first_order_attrs"][attr] = str(val)
@@ -1542,7 +1691,7 @@ def create_app() -> Flask:
                     if orders2:
                         result["method2_first_attrs"] = {}
                         for attr in dir(orders2[0]):
-                            if attr.startswith('m_'):
+                            if attr.startswith("m_"):
                                 try:
                                     val = getattr(orders2[0], attr)
                                     result["method2_first_attrs"][attr] = str(val)
@@ -1563,7 +1712,7 @@ def create_app() -> Flask:
                 if deals:
                     result["method3_first_deal_attrs"] = {}
                     for attr in dir(deals[0]):
-                        if attr.startswith('m_'):
+                        if attr.startswith("m_"):
                             try:
                                 val = getattr(deals[0], attr)
                                 result["method3_first_deal_attrs"][attr] = str(val)
@@ -1587,7 +1736,7 @@ def create_app() -> Flask:
                     for cmd in cmds[-10:]:
                         cmd_info = {}
                         for attr in dir(cmd):
-                            if attr.startswith('m_'):
+                            if attr.startswith("m_"):
                                 try:
                                     val = getattr(cmd, attr)
                                     cmd_info[attr] = str(val)
@@ -1631,10 +1780,16 @@ def create_app() -> Flask:
             required_fields = ["account_id", "asset_code", "direction", "quantity"]
             for field in required_fields:
                 if field not in data:
-                    return jsonify({"success": False, "message": f"缺少必填字段: {field}"}), 400
+                    return jsonify(
+                        {"success": False, "message": f"缺少必填字段: {field}"}
+                    ), 400
 
             # 构造下单请求
-            direction = OrderDirection.BUY if data["direction"].lower() == "buy" else OrderDirection.SELL
+            direction = (
+                OrderDirection.BUY
+                if data["direction"].lower() == "buy"
+                else OrderDirection.SELL
+            )
             price_type_str = data.get("price_type", "limit").lower()
             price_type_map = {
                 "limit": OrderPriceType.LIMIT,
@@ -1649,7 +1804,7 @@ def create_app() -> Flask:
                 direction=direction,
                 quantity=int(data["quantity"]),
                 price=float(data.get("price", 0.0)),
-                price_type=price_type
+                price_type=price_type,
             )
 
             # 获取服务实例并连接
@@ -1657,22 +1812,23 @@ def create_app() -> Flask:
             if not xt_service._logined:
                 logger.info("首次下单，连接迅投服务器...")
                 if not xt_service.connect(timeout=30.0):
-                    return jsonify({"success": False, "message": "连接迅投服务器失败"}), 500
+                    return jsonify(
+                        {"success": False, "message": "连接迅投服务器失败"}
+                    ), 500
 
             # 执行下单
             result = xt_service.place_order(order_req, timeout=10.0)
 
             if result.success:
-                return jsonify({
-                    "success": True,
-                    "order_id": result.order_id,
-                    "message": "下单成功"
-                })
+                return jsonify(
+                    {
+                        "success": True,
+                        "order_id": result.order_id,
+                        "message": "下单成功",
+                    }
+                )
             else:
-                return jsonify({
-                    "success": False,
-                    "message": result.error_msg
-                }), 400
+                return jsonify({"success": False, "message": result.error_msg}), 400
 
         except Exception as e:
             logger.exception("下单接口异常")
@@ -1687,11 +1843,9 @@ def create_app() -> Flask:
         """查看当前行情缓存（调试用）"""
         detail = get_tick_cache_detail()
         cache_data = detail.get("symbols", {})
-        return jsonify({
-            "success": True,
-            "cache_size": len(cache_data),
-            "data": cache_data
-        })
+        return jsonify(
+            {"success": True, "cache_size": len(cache_data), "data": cache_data}
+        )
 
     # -----------------------------------------------------------------------
     # GET /api/backtests/presets — 获取可回测预设策略
@@ -1707,13 +1861,17 @@ def create_app() -> Flask:
         try:
             limit = max(1, min(int(raw_limit), 500))
         except ValueError:
-            return jsonify({"success": False, "message": "limit 必须是整数", "data": []}), 400
+            return jsonify(
+                {"success": False, "message": "limit 必须是整数", "data": []}
+            ), 400
 
         try:
             records = list_backtest_trade_logs(limit=limit)
         except Exception as e:
             logger.exception("Backtest history failed: %s", e)
-            return jsonify({"success": False, "message": f"加载回测历史失败: {e}", "data": []}), 500
+            return jsonify(
+                {"success": False, "message": f"加载回测历史失败: {e}", "data": []}
+            ), 500
         return jsonify({"success": True, "data": records, "total": len(records)})
 
     @app.route("/api/backtests/history/<log_id>", methods=["GET"])
@@ -1722,7 +1880,9 @@ def create_app() -> Flask:
         try:
             equity_points = max(1, min(int(raw_equity_points), 2000))
         except ValueError:
-            return jsonify({"success": False, "message": "equity_points 必须是整数"}), 400
+            return jsonify(
+                {"success": False, "message": "equity_points 必须是整数"}
+            ), 400
 
         try:
             record = read_backtest_trade_log(log_id, equity_points=equity_points)
@@ -1746,15 +1906,21 @@ def create_app() -> Flask:
         try:
             limit = int(raw_limit)
         except ValueError:
-            return jsonify({"success": False, "message": "limit 必须是整数", "data": []}), 400
+            return jsonify(
+                {"success": False, "message": "limit 必须是整数", "data": []}
+            ), 400
 
         try:
             rows = search_stocks(keyword, limit=limit)
         except Exception as e:
             logger.exception("Stock search failed: %s", e)
-            return jsonify({"success": False, "message": f"股票搜索失败: {e}", "data": []}), 500
+            return jsonify(
+                {"success": False, "message": f"股票搜索失败: {e}", "data": []}
+            ), 500
 
-        logger.info("Stock search: q=%s, limit=%s, results=%s", keyword, limit, len(rows))
+        logger.info(
+            "Stock search: q=%s, limit=%s, results=%s", keyword, limit, len(rows)
+        )
         return jsonify({"success": True, "data": rows, "total": len(rows)})
 
     # -----------------------------------------------------------------------
@@ -1827,10 +1993,17 @@ def create_app() -> Flask:
             status_arg = request.args.get("status")
             status = UserSignalStatus(status_arg) if status_arg else None
             signals = dao.list_user_signals(status)
-            return jsonify({"success": True, "data": [_serialize_user_signal(item) for item in signals]})
+            return jsonify(
+                {
+                    "success": True,
+                    "data": [_serialize_user_signal(item) for item in signals],
+                }
+            )
         except Exception as e:
             logger.exception("查询用户信号失败")
-            return jsonify({"success": False, "message": f"查询用户信号失败: {e}", "data": []}), 500
+            return jsonify(
+                {"success": False, "message": f"查询用户信号失败: {e}", "data": []}
+            ), 500
 
     @app.route("/api/signals", methods=["POST"])
     def create_user_signal():
@@ -1838,23 +2011,29 @@ def create_app() -> Flask:
         try:
             signal = _parse_signal_payload(body)
             if not signal.name or not signal.symbols or not signal.source_code:
-                return jsonify({"success": False, "message": "name、symbols、source_code 不能为空"}), 400
+                return jsonify(
+                    {"success": False, "message": "name、symbols、source_code 不能为空"}
+                ), 400
             try:
                 load_signal_class(signal.source_code)
             except ValueError as e:
-                return jsonify({
-                    "success": False,
-                    "message": "信号代码未通过校验",
-                    "diagnostics": str(e),
-                }), 400
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": "信号代码未通过校验",
+                        "diagnostics": str(e),
+                    }
+                ), 400
             new_id = dao.create_user_signal(signal)
             _reload_live_signal_monitor()
             saved = dao.get_user_signal(new_id)
-            return jsonify({
-                "success": True,
-                "message": "信号已保存",
-                "data": _serialize_user_signal(saved) if saved else {"id": new_id},
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "信号已保存",
+                    "data": _serialize_user_signal(saved) if saved else {"id": new_id},
+                }
+            )
         except ValueError as e:
             return jsonify({"success": False, "message": str(e)}), 400
         except Exception as e:
@@ -1870,23 +2049,29 @@ def create_app() -> Flask:
         try:
             signal = _parse_signal_payload(body, existing)
             if not signal.name or not signal.symbols or not signal.source_code:
-                return jsonify({"success": False, "message": "name、symbols、source_code 不能为空"}), 400
+                return jsonify(
+                    {"success": False, "message": "name、symbols、source_code 不能为空"}
+                ), 400
             try:
                 load_signal_class(signal.source_code)
             except ValueError as e:
-                return jsonify({
-                    "success": False,
-                    "message": "信号代码未通过校验",
-                    "diagnostics": str(e),
-                }), 400
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": "信号代码未通过校验",
+                        "diagnostics": str(e),
+                    }
+                ), 400
             dao.update_user_signal(signal_id, signal)
             _reload_live_signal_monitor()
             saved = dao.get_user_signal(signal_id)
-            return jsonify({
-                "success": True,
-                "message": "信号已更新",
-                "data": _serialize_user_signal(saved) if saved else None,
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "信号已更新",
+                    "data": _serialize_user_signal(saved) if saved else None,
+                }
+            )
         except ValueError as e:
             return jsonify({"success": False, "message": str(e)}), 400
         except Exception as e:
@@ -1897,28 +2082,36 @@ def create_app() -> Flask:
     def update_user_signal_status(signal_id: int):
         body = request.get_json(force=True, silent=True) or {}
         try:
-            status = UserSignalStatus(str(body.get("status", UserSignalStatus.DISABLED.value)))
+            status = UserSignalStatus(
+                str(body.get("status", UserSignalStatus.DISABLED.value))
+            )
             updated = dao.update_user_signal_status(signal_id, status)
             if not updated:
                 return jsonify({"success": False, "message": "信号不存在"}), 404
             _reload_live_signal_monitor()
             return jsonify({"success": True, "message": "状态已更新"})
         except ValueError:
-            return jsonify({"success": False, "message": "status 必须是 enabled 或 disabled"}), 400
+            return jsonify(
+                {"success": False, "message": "status 必须是 enabled 或 disabled"}
+            ), 400
         except Exception as e:
             logger.exception("更新用户信号状态失败")
-            return jsonify({"success": False, "message": f"更新用户信号状态失败: {e}"}), 500
+            return jsonify(
+                {"success": False, "message": f"更新用户信号状态失败: {e}"}
+            ), 500
 
     @app.route("/api/signals/validate", methods=["POST"])
     def validate_user_signal():
         body = request.get_json(force=True, silent=True) or {}
         source_code = str(body.get("source_code", ""))
         is_valid, diagnostics = SignalContractValidator().validate(source_code)
-        return jsonify({
-            "success": is_valid,
-            "message": "校验通过" if is_valid else "校验失败",
-            "diagnostics": [item.to_dict() for item in diagnostics],
-        }), 200 if is_valid else 400
+        return jsonify(
+            {
+                "success": is_valid,
+                "message": "校验通过" if is_valid else "校验失败",
+                "diagnostics": [item.to_dict() for item in diagnostics],
+            }
+        ), 200 if is_valid else 400
 
     @app.route("/api/signals/ctx-schema", methods=["GET"])
     def get_signal_ctx_schema():
@@ -1936,19 +2129,25 @@ def create_app() -> Flask:
             source_code = signal.source_code
 
         if not source_code:
-            return jsonify({"success": False, "message": "source_code 或 signal_id 必填"}), 400
+            return jsonify(
+                {"success": False, "message": "source_code 或 signal_id 必填"}
+            ), 400
 
         try:
             data = run_user_signal_backtest(
                 source_code=source_code,
                 data_source=str(body.get("data_source", "mock")).strip().lower(),
+                backtest_freq=body.get("backtest_freq"),
                 ts_code=body.get("ts_code"),
                 symbols=body.get("symbols", body.get("ts_codes")),
                 start_date=body.get("start_date"),
                 end_date=body.get("end_date"),
                 initial_cash=float(body.get("initial_cash", 1_000_000.0)),
+                commission_rate=float(body.get("commission_rate", 0.0)),
                 write_trade_log=_parse_bool_arg(body.get("write_trade_log"), True),
-                execution_timing=_parse_execution_timing(body.get("execution_timing"), "next_bar"),
+                execution_timing=_parse_execution_timing(
+                    body.get("execution_timing"), "next_bar"
+                ),
             )
             return jsonify({"success": True, "message": "回测完成", "data": data})
         except ValueError as e:

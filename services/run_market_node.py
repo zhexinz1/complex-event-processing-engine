@@ -13,7 +13,9 @@ import os
 # 这里务必使用 exec 级别的逃生舱，干净重启 Python 进程底层链接。
 _inherited_ld = os.environ.get("LD_LIBRARY_PATH", "")
 if "xt_sdk" in _inherited_ld:
-    print(f"⚠️ 探测到终端环境变量继承污染 ({_inherited_ld})\n⚠️ 正通过操作系统级 exec 重生纯净 Python 进程...")
+    print(
+        f"⚠️ 探测到终端环境变量继承污染 ({_inherited_ld})\n⚠️ 正通过操作系统级 exec 重生纯净 Python 进程..."
+    )
     _clean_paths = [p for p in _inherited_ld.split(":") if "xt_sdk" not in p]
     os.environ["LD_LIBRARY_PATH"] = ":".join(_clean_paths)
     os.execlp(sys.executable, sys.executable, "-m", "services.run_market_node")
@@ -37,8 +39,9 @@ from cep.core.remote_bus import RedisEventBridge
 from adapters.market_gateway import CTPMarketGateway
 from database.dao import DatabaseDAO
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
 
 def main():
 
@@ -64,9 +67,9 @@ def main():
         broker_id="8060",
         user_id="99683265",
         password="456123",
-        flow_path="./ctp_flow/"
+        flow_path="./ctp_flow/",
     )
-    
+
     if gateway.connect():
         # 记录我已经订阅过的合约，防止重复调用 CTP C++ 层
         subscribed_symbols = set()
@@ -77,7 +80,7 @@ def main():
                 target_pool = db_dao.get_all_target_assets()
 
                 # 防御性检查：CTP 只接受纯 InstrumentID，不能带交易所后缀
-                bad_codes = [s for s in target_pool if '.' in s]
+                bad_codes = [s for s in target_pool if "." in s]
                 if bad_codes:
                     logger.error(
                         "[Market Node] ⚠️ 数据库中存在带交易所后缀的合约代码: %s "
@@ -85,26 +88,32 @@ def main():
                         bad_codes,
                     )
                     # 过滤掉无效代码，只订阅合法的
-                    target_pool = [s for s in target_pool if '.' not in s]
+                    target_pool = [s for s in target_pool if "." not in s]
 
                 new_symbols = [s for s in target_pool if s not in subscribed_symbols]
 
                 if new_symbols:
-                    logger.info(f"[Market Node] 通过 DAO 发现并订阅新目标合约: {new_symbols}")
+                    logger.info(
+                        f"[Market Node] 通过 DAO 发现并订阅新目标合约: {new_symbols}"
+                    )
                     gateway.subscribe(new_symbols)
                     subscribed_symbols.update(new_symbols)
                 else:
                     logger.info(
                         "[Market Node] sync_symbols: DB返回 %d 个合约 %s, 已订阅 %d 个, 无新增",
-                        len(target_pool), target_pool, len(subscribed_symbols),
+                        len(target_pool),
+                        target_pool,
+                        len(subscribed_symbols),
                     )
             except Exception as e:
                 logger.error("[Market Node] sync_symbols 异常: %s", e, exc_info=True)
 
         # 启动时先强制同步一次数据库，保证默认/数据库挂载池加载
         sync_symbols()
-        
-        logger.info("[Market Node] 系统现已就绪。所有行情将通过 Redis 实时向全网分发。按 Ctrl+C 退出。")
+
+        logger.info(
+            "[Market Node] 系统现已就绪。所有行情将通过 Redis 实时向全网分发。按 Ctrl+C 退出。"
+        )
         try:
             # 7x24 全天候心跳监听，每30秒从数据库重载一次全网标的
             while True:
@@ -116,6 +125,7 @@ def main():
             redis_bridge.stop()
     else:
         logger.error("[Market Node] 无法连接到行情前置网络，服务即将终止。")
+
 
 if __name__ == "__main__":
     main()

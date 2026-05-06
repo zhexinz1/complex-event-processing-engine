@@ -64,22 +64,24 @@ def main():
     # position_source.connect()
 
     # 设置模拟持仓（仅用于测试）
-    position_source.set_position(Position(
-        symbol="AU2606.SHF",
-        quantity=50,
-        avg_price=580.0,
-        market_value=50 * 580.0 * 1000  # 50手 * 580元 * 1000乘数
-    ))
-    position_source.set_position(Position(
-        symbol="IC2606.CFE",
-        quantity=10,
-        avg_price=6500.0,
-        market_value=10 * 6500.0 * 200  # 10手 * 6500点 * 200乘数
-    ))
+    position_source.set_position(
+        Position(
+            symbol="AU2606.SHF",
+            quantity=50,
+            avg_price=580.0,
+            market_value=50 * 580.0 * 1000,  # 50手 * 580元 * 1000乘数
+        )
+    )
+    position_source.set_position(
+        Position(
+            symbol="IC2606.CFE",
+            quantity=10,
+            avg_price=6500.0,
+            market_value=10 * 6500.0 * 200,  # 10手 * 6500点 * 200乘数
+        )
+    )
     position_source.set_account_info(
-        total_nav=10_000_000.0,
-        available_cash=5_000_000.0,
-        margin_used=2_000_000.0
+        total_nav=10_000_000.0, available_cash=5_000_000.0, margin_used=2_000_000.0
     )
 
     logger.info("持仓数据源已创建（模拟）")
@@ -102,7 +104,7 @@ def main():
                 symbol="AU2606.SHF",
                 target_weight=0.30,
                 deviation_threshold=0.03,
-                algorithm="TWAP"
+                algorithm="TWAP",
             ),
             TargetWeightConfig(
                 date=date(2026, 3, 30),
@@ -110,10 +112,10 @@ def main():
                 symbol="IC2606.CFE",
                 target_weight=0.20,
                 deviation_threshold=0.05,
-                algorithm="TWAP"
+                algorithm="TWAP",
             ),
         ],
-        global_threshold=0.05
+        global_threshold=0.05,
     )
     config_loader.save_product_config(config)
 
@@ -169,9 +171,7 @@ def main():
     # 6. 创建月初定时触发器（不管偏离度，强制再平衡）
     # -----------------------------------------------------------------------
     monthly_trigger = MonthlyRebalanceTrigger(
-        event_bus=bus,
-        trigger_id="monthly_rebalance",
-        timer_id="MONTHLY_REBALANCE_0930"
+        event_bus=bus, trigger_id="monthly_rebalance", timer_id="MONTHLY_REBALANCE_0930"
     )
     monthly_trigger.register()
     logger.info("月初定时触发器已注册（每月1号9:30触发）")
@@ -215,12 +215,14 @@ def main():
 
     # 模拟持仓变化（迅投 GT API 返回新持仓）
     logger.info("\n持仓发生变化（模拟迅投 GT API 返回）...")
-    position_source.set_position(Position(
-        symbol="AU2606.SHF",
-        quantity=60,  # 增加了 10 手
-        avg_price=585.0,
-        market_value=60 * 585.0 * 1000
-    ))
+    position_source.set_position(
+        Position(
+            symbol="AU2606.SHF",
+            quantity=60,  # 增加了 10 手
+            avg_price=585.0,
+            market_value=60 * 585.0 * 1000,
+        )
+    )
 
     # 重新同步持仓
     portfolio_ctx.sync_positions_from_source()
@@ -247,10 +249,7 @@ def main():
     logger.info("=" * 80)
 
     # 发送月初定时事件
-    timer_event = TimerEvent(
-        timer_id="MONTHLY_REBALANCE_0930",
-        fired_at=datetime.now()
-    )
+    timer_event = TimerEvent(timer_id="MONTHLY_REBALANCE_0930", fired_at=datetime.now())
     bus.publish(timer_event)
 
     logger.info("\n" + "=" * 80)

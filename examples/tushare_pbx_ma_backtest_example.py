@@ -38,8 +38,7 @@ def main() -> None:
         )
     except Exception as e:
         raise SystemExit(
-            "Tushare 回测无法运行，请确认 token、积分/权限和日期范围。"
-            f"原始错误: {e}"
+            f"Tushare 回测无法运行，请确认 token、积分/权限和日期范围。原始错误: {e}"
         ) from e
 
     logger.info("ts_code: %s", ts_code)

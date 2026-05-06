@@ -21,6 +21,7 @@ from cep.core.events import (
     TradeEvent,
 )
 from .portfolio import PortfolioLedger
+from .rules import get_margin_rate, calculate_commission
 
 ExecutionTiming = Literal["current_bar", "next_bar"]
 
@@ -75,7 +76,9 @@ class SimulatedBroker:
 
     def on_tick(self, event: TickEvent) -> None:
         if self.execution_timing == "next_bar":
-            self._flush_pending_for_market_event(event, execution_price=event.last_price)
+            self._flush_pending_for_market_event(
+                event, execution_price=event.last_price
+            )
         self._latest_prices[event.symbol] = event.last_price
 
     def on_signal(self, signal: SignalEvent) -> None:
@@ -111,7 +114,9 @@ class SimulatedBroker:
             return
 
         if self.execution_timing == "next_bar":
-            pending = PendingSignalExecution(signal=signal, side=side, quantity=quantity)
+            pending = PendingSignalExecution(
+                signal=signal, side=side, quantity=quantity
+            )
             self._pending_signals.setdefault(signal.symbol, []).append(pending)
             return
 
@@ -148,13 +153,17 @@ class SimulatedBroker:
             return
 
         ready_entries = [
-            pending for pending in pending_entries if event.timestamp > pending.signal.timestamp
+            pending
+            for pending in pending_entries
+            if event.timestamp > pending.signal.timestamp
         ]
         if not ready_entries:
             return
 
         self._pending_signals[event.symbol] = [
-            pending for pending in pending_entries if event.timestamp <= pending.signal.timestamp
+            pending
+            for pending in pending_entries
+            if event.timestamp <= pending.signal.timestamp
         ]
         if not self._pending_signals[event.symbol]:
             self._pending_signals.pop(event.symbol, None)
@@ -191,9 +200,29 @@ class SimulatedBroker:
             return
 
         multiplier = self.contract_multipliers.get(signal.symbol, 1.0)
-        estimated_commission = price * quantity * self.commission_rate
-        trade_value = quantity * price * multiplier
-        if side == OrderSide.BUY and self.portfolio.cash + 1e-9 < trade_value + estimated_commission:
+        margin_rate = get_margin_rate(signal.symbol)
+        estimated_commission = calculate_commission(
+            signal.symbol, price, quantity, multiplier, self.commission_rate
+        )
+
+        position = self.portfolio.positions.get(signal.symbol)
+        current_qty = position.quantity if position is not None else 0.0
+
+        if side == OrderSide.BUY:
+            if current_qty < 0:
+                opening_qty = max(0.0, quantity - abs(current_qty))
+            else:
+                opening_qty = quantity
+        else:
+            if current_qty > 0:
+                opening_qty = max(0.0, quantity - current_qty)
+            else:
+                opening_qty = quantity
+
+        required_new_margin = opening_qty * price * multiplier * margin_rate
+        required_funds = required_new_margin + estimated_commission
+
+        if self.portfolio.available_funds + 1e-9 < required_funds:
             self._publish_rejected_order(
                 order_id=order_id,
                 signal=signal,
@@ -202,16 +231,15 @@ class SimulatedBroker:
                 price=price,
                 reason="insufficient_cash",
                 details={
-                    "required_cash": trade_value + estimated_commission,
-                    "available_cash": self.portfolio.cash,
-                    "multiplier": multiplier,
+                    "required_funds": required_funds,
+                    "available_funds": self.portfolio.available_funds,
+                    "margin_rate": margin_rate,
                 },
             )
             return
 
-        position = self.portfolio.positions.get(signal.symbol)
-        available_quantity = position.quantity if position is not None else 0.0
-        if side == OrderSide.SELL and quantity > available_quantity + 1e-9:
+        is_stock = signal.symbol.endswith((".SH", ".SZ", ".BJ"))
+        if side == OrderSide.SELL and is_stock and quantity > current_qty + 1e-9:
             self._publish_rejected_order(
                 order_id=order_id,
                 signal=signal,
@@ -220,7 +248,7 @@ class SimulatedBroker:
                 price=price,
                 reason="insufficient_position",
                 details={
-                    "available_quantity": available_quantity,
+                    "available_quantity": current_qty,
                     "requested_quantity": quantity,
                 },
             )

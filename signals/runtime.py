@@ -37,7 +37,9 @@ from .models import SignalDiagnostic
 logger = logging.getLogger(__name__)
 
 
-def normalize_user_signal_symbols(raw_symbols: Any, *, use_tushare_format: bool = True) -> list[str]:
+def normalize_user_signal_symbols(
+    raw_symbols: Any, *, use_tushare_format: bool = True
+) -> list[str]:
     """Normalize user-signal symbols while allowing single-symbol strategies."""
     if raw_symbols is None:
         return []
@@ -54,7 +56,9 @@ def normalize_user_signal_symbols(raw_symbols: Any, *, use_tushare_format: bool 
     for candidate in candidates:
         if not candidate:
             continue
-        symbol = normalize_ts_code(candidate) if use_tushare_format else candidate.upper()
+        symbol = (
+            normalize_ts_code(candidate) if use_tushare_format else candidate.upper()
+        )
         if symbol in seen:
             continue
         seen.add(symbol)
@@ -65,6 +69,7 @@ def normalize_user_signal_symbols(raw_symbols: Any, *, use_tushare_format: bool 
     if len(symbols) > 50:
         raise ValueError("用户信号回测最多支持 50 个标的")
     return symbols
+
 
 ALLOWED_BUILTINS = MappingProxyType(
     {
@@ -114,7 +119,11 @@ class SignalContractValidator:
         try:
             tree = ast.parse(source_code)
         except SyntaxError as exc:
-            logger.debug("User signal syntax validation failed at line %s: %s", exc.lineno, exc.msg)
+            logger.debug(
+                "User signal syntax validation failed at line %s: %s",
+                exc.lineno,
+                exc.msg,
+            )
             diagnostics.append(
                 SignalDiagnostic(
                     level="error",
@@ -133,7 +142,11 @@ class SignalContractValidator:
                         line=getattr(node, "lineno", None),
                     )
                 )
-            if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__"):
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr.startswith("__")
+                and node.attr.endswith("__")
+            ):
                 diagnostics.append(
                     SignalDiagnostic(
                         level="error",
@@ -145,7 +158,11 @@ class SignalContractValidator:
         signal_class = self._find_signal_class(tree)
         if signal_class is None:
             logger.debug("User signal validation failed: missing class Signal")
-            diagnostics.append(SignalDiagnostic(level="error", message="source must define class Signal"))
+            diagnostics.append(
+                SignalDiagnostic(
+                    level="error", message="source must define class Signal"
+                )
+            )
             return False, diagnostics
 
         metadata = {
@@ -165,7 +182,11 @@ class SignalContractValidator:
                 )
             )
 
-        methods = {node.name: node for node in signal_class.body if isinstance(node, ast.FunctionDef)}
+        methods = {
+            node.name: node
+            for node in signal_class.body
+            if isinstance(node, ast.FunctionDef)
+        }
         self._validate_method(methods, "__init__", ["self", "ctx"], diagnostics)
         self._validate_method(methods, "on_bar", ["self", "bar"], diagnostics)
 
@@ -192,10 +213,18 @@ class SignalContractValidator:
     ) -> None:
         method = methods.get(name)
         if method is None:
-            diagnostics.append(SignalDiagnostic(level="error", message=f"class Signal must define {name}()", line=None))
+            diagnostics.append(
+                SignalDiagnostic(
+                    level="error",
+                    message=f"class Signal must define {name}()",
+                    line=None,
+                )
+            )
             return
         actual_args = [arg.arg for arg in method.args.args]
-        if actual_args[: len(expected_args)] != expected_args or len(actual_args) != len(expected_args):
+        if actual_args[: len(expected_args)] != expected_args or len(
+            actual_args
+        ) != len(expected_args):
             diagnostics.append(
                 SignalDiagnostic(
                     level="error",
@@ -213,7 +242,9 @@ def load_signal_class(source_code: str) -> tuple[type, list[SignalDiagnostic]]:
     is_valid, diagnostics = validator.validate(source_code)
     if not is_valid:
         logger.debug("User signal class load blocked by contract diagnostics")
-        raise ValueError(json.dumps([item.to_dict() for item in diagnostics], ensure_ascii=False))
+        raise ValueError(
+            json.dumps([item.to_dict() for item in diagnostics], ensure_ascii=False)
+        )
 
     globals_dict: dict[str, Any] = {
         "__builtins__": ALLOWED_BUILTINS,
@@ -229,7 +260,9 @@ def load_signal_class(source_code: str) -> tuple[type, list[SignalDiagnostic]]:
     errors = [item for item in diagnostics if item.level == "error"]
     if errors:
         logger.debug("User signal class load blocked by runtime metadata diagnostics")
-        raise ValueError(json.dumps([item.to_dict() for item in diagnostics], ensure_ascii=False))
+        raise ValueError(
+            json.dumps([item.to_dict() for item in diagnostics], ensure_ascii=False)
+        )
     logger.info(
         "Loaded user signal class: name=%s symbols=%s bar_freq=%s",
         getattr(signal_class, "name", ""),
@@ -245,11 +278,28 @@ def _validate_runtime_metadata(signal_class: type) -> list[SignalDiagnostic]:
     symbols = getattr(signal_class, "symbols", [])
     bar_freq = getattr(signal_class, "bar_freq", "")
     if not isinstance(name, str) or not name.strip():
-        diagnostics.append(SignalDiagnostic(level="error", message="Signal.name must be a non-empty string"))
-    if not isinstance(symbols, list) or not symbols or not all(isinstance(item, str) and item.strip() for item in symbols):
-        diagnostics.append(SignalDiagnostic(level="error", message="Signal.symbols must be a non-empty list of strings"))
+        diagnostics.append(
+            SignalDiagnostic(
+                level="error", message="Signal.name must be a non-empty string"
+            )
+        )
+    if (
+        not isinstance(symbols, list)
+        or not symbols
+        or not all(isinstance(item, str) and item.strip() for item in symbols)
+    ):
+        diagnostics.append(
+            SignalDiagnostic(
+                level="error",
+                message="Signal.symbols must be a non-empty list of strings",
+            )
+        )
     if not isinstance(bar_freq, str) or not bar_freq.strip():
-        diagnostics.append(SignalDiagnostic(level="error", message="Signal.bar_freq must be a non-empty string"))
+        diagnostics.append(
+            SignalDiagnostic(
+                level="error", message="Signal.bar_freq must be a non-empty string"
+            )
+        )
     return diagnostics
 
 
@@ -279,8 +329,7 @@ class UserSignalTrigger(BaseTrigger):
             for symbol in self.symbols
         }
         self._instances = {
-            symbol: signal_class(self._contexts[symbol])
-            for symbol in self.symbols
+            symbol: signal_class(self._contexts[symbol]) for symbol in self.symbols
         }
         logger.info(
             "UserSignalTrigger initialized: trigger_id=%s symbols=%s bar_freq=%s",
@@ -292,7 +341,11 @@ class UserSignalTrigger(BaseTrigger):
     def register(self) -> None:
         for symbol in self.symbols:
             self.event_bus.subscribe(BarEvent, self.on_event, symbol=symbol)
-        logger.info("UserSignalTrigger registered: trigger_id=%s subscriptions=%s", self.trigger_id, len(self.symbols))
+        logger.info(
+            "UserSignalTrigger registered: trigger_id=%s subscriptions=%s",
+            self.trigger_id,
+            len(self.symbols),
+        )
 
     def on_event(self, event: BaseEvent) -> None:
         if not isinstance(event, BarEvent):
@@ -321,7 +374,11 @@ class UserSignalTrigger(BaseTrigger):
         try:
             result = self._instances[event.symbol].on_bar(event)
         except Exception as exc:
-            logger.exception("User signal on_bar failed: trigger_id=%s symbol=%s", self.trigger_id, event.symbol)
+            logger.exception(
+                "User signal on_bar failed: trigger_id=%s symbol=%s",
+                self.trigger_id,
+                event.symbol,
+            )
             self.diagnostics.append(
                 SignalDiagnostic(
                     level="error",
@@ -415,8 +472,10 @@ def run_user_signal_backtest(
     start_date: str | None = None,
     end_date: str | None = None,
     initial_cash: float = 1_000_000.0,
+    commission_rate: float = 0.0,
     write_trade_log: bool = False,
     execution_timing: ExecutionTiming = "next_bar",
+    backtest_freq: str | None = None,
 ) -> dict[str, Any]:
     """Run a user-authored Signal class through BacktestEngine."""
 
@@ -431,7 +490,8 @@ def run_user_signal_backtest(
     )
     signal_class, diagnostics = load_signal_class(source_code)
     signal_symbols = list(getattr(signal_class, "symbols"))
-    bar_freq = str(getattr(signal_class, "bar_freq"))
+    # 优先使用前端传入的 backtest_freq，其次是类定义的 bar_freq
+    bar_freq = backtest_freq or str(getattr(signal_class, "bar_freq"))
 
     if data_source == "mock":
         symbol = signal_symbols[0]
@@ -441,18 +501,30 @@ def run_user_signal_backtest(
     elif data_source == "adjusted_main_contract":
         if not start_date or not end_date:
             raise ValueError("adjusted_main_contract 回测需要 start_date、end_date")
-        run_symbols = normalize_user_signal_symbols(symbols, use_tushare_format=False) if symbols else [symbol.upper() for symbol in signal_symbols]
+        run_symbols = (
+            normalize_user_signal_symbols(symbols, use_tushare_format=False)
+            if symbols
+            else [symbol.upper() for symbol in signal_symbols]
+        )
         if len(run_symbols) == 1:
-            bars = fetch_adjusted_main_contract_bars(run_symbols[0], start_date, end_date)
+            bars = fetch_adjusted_main_contract_bars(
+                run_symbols[0], start_date, end_date
+            )
         else:
-            bars = fetch_adjusted_main_contract_bars_multi(run_symbols, start_date, end_date)
+            bars = fetch_adjusted_main_contract_bars_multi(
+                run_symbols, start_date, end_date
+            )
         effective_freq = "1m"
     elif data_source == "tushare":
         if not start_date or not end_date:
             raise ValueError("Tushare 回测需要 start_date、end_date")
-        run_symbols = normalize_user_signal_symbols(symbols) if symbols else signal_symbols
+        run_symbols = (
+            normalize_user_signal_symbols(symbols) if symbols else signal_symbols
+        )
         if len(run_symbols) == 1:
-            bars = fetch_tushare_daily_bars(ts_code or run_symbols[0], start_date, end_date)
+            bars = fetch_tushare_daily_bars(
+                ts_code or run_symbols[0], start_date, end_date
+            )
         else:
             bars = fetch_cross_section_tushare_bars(run_symbols, start_date, end_date)
         effective_freq = "1d"
@@ -460,7 +532,7 @@ def run_user_signal_backtest(
         raise ValueError(f"Unsupported backtest data source: {data_source}")
 
     logger.info(
-        "Prepared user signal backtest data: bars=%s run_symbols=%s effective_freq=%s signal_bar_freq=%s",
+        "Prepared user signal backtest data: bars=%s run_symbols=%s effective_freq=%s target_bar_freq=%s",
         len(bars),
         run_symbols,
         effective_freq,
@@ -468,12 +540,16 @@ def run_user_signal_backtest(
     )
     multiplier_symbols = {bar.symbol for bar in bars} or set(run_symbols)
     contract_multipliers = {
-        symbol: float(get_contract_multiplier(symbol))
-        for symbol in multiplier_symbols
+        symbol: float(get_contract_multiplier(symbol)) for symbol in multiplier_symbols
     }
+
+    aggregate_freqs = [bar_freq] if bar_freq != effective_freq else None
+
     engine = BacktestEngine(
         initial_cash=initial_cash,
+        commission_rate=commission_rate,
         base_bar_freq=effective_freq,
+        aggregate_freqs=aggregate_freqs,
         contract_multipliers=contract_multipliers,
         write_trade_log=write_trade_log,
         execution_timing=execution_timing,
@@ -483,21 +559,34 @@ def run_user_signal_backtest(
         trigger_id=f"USER_SIGNAL_{getattr(signal_class, 'name', 'Signal')}",
         signal_class=signal_class,
         symbols=run_symbols,
-        bar_freq=effective_freq if data_source != "mock" else bar_freq,
+        bar_freq=bar_freq,
     )
     trigger.register()
     engine.register_component(trigger)
     engine.ingest_bars(bars, assume_sorted=True)
+
+    import time as _time
+
+    t_engine_start = _time.monotonic()
     result = engine.run()
+    t_engine_end = _time.monotonic()
+
     payload = serialize_backtest_result(result)
-    payload["diagnostics"] = [item.to_dict() for item in [*diagnostics, *trigger.diagnostics]]
+    t_serialize_end = _time.monotonic()
+
+    payload["diagnostics"] = [
+        item.to_dict() for item in [*diagnostics, *trigger.diagnostics]
+    ]
     logger.info(
-        "Finished user signal backtest: market_events=%s signals=%s trades=%s diagnostics=%s final_equity=%.2f",
+        "Finished user signal backtest: market_events=%s signals=%s trades=%s diagnostics=%s "
+        "final_equity=%.2f engine=%.1fs serialize=%.1fs",
         payload["market_events_processed"],
-        len(payload["signals"]),
-        len(payload["trades"]),
+        payload.get("total_signals", len(payload["signals"])),
+        payload.get("total_trades", len(payload["trades"])),
         len(payload["diagnostics"]),
         payload["final_equity"],
+        t_engine_end - t_engine_start,
+        t_serialize_end - t_engine_end,
     )
     return payload
 
@@ -542,14 +631,26 @@ def deserialize_bar_event_payload(raw_payload: bytes | str) -> BarEvent:
     payload = json.loads(raw_payload)
     if not isinstance(payload, dict):
         raise ValueError("Redis bar payload must be a JSON object")
-    required = {"symbol", "freq", "open", "high", "low", "close", "volume", "turnover", "bar_time"}
+    required = {
+        "symbol",
+        "freq",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "turnover",
+        "bar_time",
+    }
     missing = sorted(required - payload.keys())
     if missing:
         raise ValueError(f"Redis bar payload missing fields: {', '.join(missing)}")
     timestamp = payload.get("timestamp")
     return BarEvent(
         event_id=str(payload.get("event_id", "")) or str(uuid4()),
-        timestamp=datetime.fromisoformat(timestamp) if isinstance(timestamp, str) else datetime.utcnow(),
+        timestamp=datetime.fromisoformat(timestamp)
+        if isinstance(timestamp, str)
+        else datetime.utcnow(),
         symbol=str(payload["symbol"]),
         freq=str(payload["freq"]),
         open=float(payload["open"]),
@@ -565,7 +666,9 @@ def deserialize_bar_event_payload(raw_payload: bytes | str) -> BarEvent:
 class LiveSignalMonitor:
     """In-process live signal monitor with an SSE fanout queue."""
 
-    def __init__(self, event_bus: EventBus | None = None, max_recent: int = 200) -> None:
+    def __init__(
+        self, event_bus: EventBus | None = None, max_recent: int = 200
+    ) -> None:
         self.event_bus = event_bus or EventBus()
         self.recent_signals: deque[dict[str, Any]] = deque(maxlen=max_recent)
         self.diagnostics: deque[dict[str, Any]] = deque(maxlen=max_recent)
@@ -582,7 +685,9 @@ class LiveSignalMonitor:
                 if definition.id is None:
                     continue
                 try:
-                    signal_class, diagnostics = load_signal_class(definition.source_code)
+                    signal_class, diagnostics = load_signal_class(
+                        definition.source_code
+                    )
                     trigger = UserSignalTrigger(
                         event_bus=self.event_bus,
                         trigger_id=f"USER_SIGNAL_{definition.id}",
@@ -606,7 +711,9 @@ class LiveSignalMonitor:
     def publish_bar(self, bar: BarEvent) -> None:
         self.event_bus.publish(bar)
 
-    def start_redis_subscriber(self, redis_url: str, channel: str = "cep_events") -> None:
+    def start_redis_subscriber(
+        self, redis_url: str, channel: str = "cep_events"
+    ) -> None:
         """Subscribe to Redis-published BarEvent objects for live monitoring."""
 
         if self._redis_thread and self._redis_thread.is_alive():
@@ -626,14 +733,18 @@ class LiveSignalMonitor:
             client = redis.from_url(redis_url)
             pubsub = client.pubsub()
             pubsub.subscribe(channel)
-            logger.info("[LiveSignalMonitor] Redis subscriber connected: channel=%s", channel)
+            logger.info(
+                "[LiveSignalMonitor] Redis subscriber connected: channel=%s", channel
+            )
             for message in pubsub.listen():
                 if message.get("type") != "message":
                     continue
                 try:
                     event = deserialize_bar_event_payload(message["data"])
                 except Exception as exc:
-                    logger.warning("[LiveSignalMonitor] failed to decode Redis event: %s", exc)
+                    logger.warning(
+                        "[LiveSignalMonitor] failed to decode Redis event: %s", exc
+                    )
                     continue
                 self.publish_bar(event)
         except Exception as exc:

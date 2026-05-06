@@ -10,7 +10,7 @@ from adapters.flask_app import create_app
 from database.models import UserSignalDefinition, UserSignalStatus
 
 
-VALID_SIGNAL = '''
+VALID_SIGNAL = """
 class Signal:
     name = "Test RSI"
     symbols = ["TEST"]
@@ -23,9 +23,9 @@ class Signal:
         if self.ctx.rsi is not None and self.ctx.rsi < 30:
             return {"side": "BUY", "reason": "oversold", "price": bar.close}
         return None
-'''
+"""
 
-AU_SIGNAL = '''
+AU_SIGNAL = """
 class Signal:
     name = "Gold RSI"
     symbols = ["AU9999.XSGE"]
@@ -38,9 +38,9 @@ class Signal:
         if self.ctx.rsi is not None and self.ctx.rsi < 30:
             return {"side": "BUY", "reason": "oversold", "price": bar.close}
         return None
-'''
+"""
 
-AG_SIGNAL = '''
+AG_SIGNAL = """
 class Signal:
     name = "Silver RSI"
     symbols = ["AG9999.XSGE"]
@@ -53,7 +53,7 @@ class Signal:
         if self.ctx.rsi is not None and self.ctx.rsi < 30:
             return {"side": "BUY", "reason": "oversold", "price": bar.close}
         return None
-'''
+"""
 
 
 @pytest.fixture
@@ -79,7 +79,9 @@ def test_validate_user_signal_accepts_valid_contract(client) -> None:
 
 
 def test_validate_user_signal_reports_contract_errors(client) -> None:
-    response = client.post("/api/signals/validate", json={"source_code": "class Signal:\n    name = 'x'\n"})
+    response = client.post(
+        "/api/signals/validate", json={"source_code": "class Signal:\n    name = 'x'\n"}
+    )
 
     assert response.status_code == 400
     payload = response.get_json()
@@ -92,14 +94,24 @@ def test_validate_user_signal_reports_contract_errors(client) -> None:
 def test_signal_ctx_schema_api_returns_python_metadata(client, monkeypatch) -> None:
     expected = {
         "summary": "ctx docs from python",
-        "core_fields": [{"name": "symbol", "type": "str", "description": "symbol field"}],
-        "indicator_fields": [{"name": "alpha", "type": "float", "description": "alpha signal"}],
-        "bar_fields": [{"name": "close", "type": "float", "description": "latest close"}],
-        "tick_fields": [{"name": "last_price", "type": "float", "description": "latest tick"}],
+        "core_fields": [
+            {"name": "symbol", "type": "str", "description": "symbol field"}
+        ],
+        "indicator_fields": [
+            {"name": "alpha", "type": "float", "description": "alpha signal"}
+        ],
+        "bar_fields": [
+            {"name": "close", "type": "float", "description": "latest close"}
+        ],
+        "tick_fields": [
+            {"name": "last_price", "type": "float", "description": "latest tick"}
+        ],
         "notes": ["note from backend"],
         "example_code": "class Signal:\n    pass\n",
     }
-    monkeypatch.setattr("adapters.flask_app.get_local_context_reference", lambda: expected)
+    monkeypatch.setattr(
+        "adapters.flask_app.get_local_context_reference", lambda: expected
+    )
 
     response = client.get("/api/signals/ctx-schema")
 
@@ -132,7 +144,9 @@ def test_run_user_signal_backtest_uses_runtime_result(client, monkeypatch) -> No
             "diagnostics": [],
         }
 
-    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+    monkeypatch.setattr(
+        "adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest
+    )
 
     response = client.post(
         "/api/backtests/run-user-signal",
@@ -155,7 +169,9 @@ def test_run_user_signal_backtest_uses_runtime_result(client, monkeypatch) -> No
     assert captured["symbols"] == ["TEST"]
 
 
-def test_run_user_signal_backtest_passes_write_trade_log_flag(client, monkeypatch) -> None:
+def test_run_user_signal_backtest_passes_write_trade_log_flag(
+    client, monkeypatch
+) -> None:
     captured = {}
 
     def fake_run_user_signal_backtest(**kwargs):
@@ -170,7 +186,9 @@ def test_run_user_signal_backtest_passes_write_trade_log_flag(client, monkeypatc
             "realized_pnl": 0.0,
         }
 
-    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+    monkeypatch.setattr(
+        "adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest
+    )
 
     response = client.post(
         "/api/backtests/run-user-signal",
@@ -187,7 +205,9 @@ def test_run_user_signal_backtest_passes_write_trade_log_flag(client, monkeypatc
     assert captured["write_trade_log"] is False
 
 
-def test_run_user_signal_backtest_passes_execution_timing_flag(client, monkeypatch) -> None:
+def test_run_user_signal_backtest_passes_execution_timing_flag(
+    client, monkeypatch
+) -> None:
     captured = {}
 
     def fake_run_user_signal_backtest(**kwargs):
@@ -202,7 +222,9 @@ def test_run_user_signal_backtest_passes_execution_timing_flag(client, monkeypat
             "realized_pnl": 0.0,
         }
 
-    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+    monkeypatch.setattr(
+        "adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest
+    )
 
     response = client.post(
         "/api/backtests/run-user-signal",
@@ -219,7 +241,9 @@ def test_run_user_signal_backtest_passes_execution_timing_flag(client, monkeypat
     assert captured["execution_timing"] == "current_bar"
 
 
-def test_run_user_signal_backtest_loads_source_code_from_signal_id(client, monkeypatch) -> None:
+def test_run_user_signal_backtest_loads_source_code_from_signal_id(
+    client, monkeypatch
+) -> None:
     captured = {}
 
     class FakeDao:
@@ -240,7 +264,9 @@ def test_run_user_signal_backtest_loads_source_code_from_signal_id(client, monke
         }
 
     monkeypatch.setattr("adapters.flask_app.dao", FakeDao())
-    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+    monkeypatch.setattr(
+        "adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest
+    )
 
     response = client.post(
         "/api/backtests/run-user-signal",
@@ -263,7 +289,9 @@ def test_run_user_signal_backtest_loads_source_code_from_signal_id(client, monke
     assert captured["data_source"] == "mock"
 
 
-def test_create_user_signal_persists_adjusted_main_contract_signal(client, monkeypatch) -> None:
+def test_create_user_signal_persists_adjusted_main_contract_signal(
+    client, monkeypatch
+) -> None:
     saved_signals: dict[int, UserSignalDefinition] = {}
 
     class FakeDao:
@@ -306,7 +334,9 @@ def test_create_user_signal_persists_adjusted_main_contract_signal(client, monke
     assert saved_signals[7].symbols == ["AU9999.XSGE"]
 
 
-def test_run_user_signal_backtest_with_saved_au_signal_on_adjusted_main_contract(client, monkeypatch) -> None:
+def test_run_user_signal_backtest_with_saved_au_signal_on_adjusted_main_contract(
+    client, monkeypatch
+) -> None:
     captured = {}
 
     class FakeDao:
@@ -331,13 +361,21 @@ def test_run_user_signal_backtest_with_saved_au_signal_on_adjusted_main_contract
             "final_equity": 1000010.0,
             "realized_pnl": 10.0,
             "equity_curve": [],
-            "signals": [{"symbol": "AU9999.XSGE", "timestamp": "2025-06-09T09:01:00", "payload": {"side": "BUY"}}],
+            "signals": [
+                {
+                    "symbol": "AU9999.XSGE",
+                    "timestamp": "2025-06-09T09:01:00",
+                    "payload": {"side": "BUY"},
+                }
+            ],
             "trades": [],
             "diagnostics": [],
         }
 
     monkeypatch.setattr("adapters.flask_app.dao", FakeDao())
-    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+    monkeypatch.setattr(
+        "adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest
+    )
 
     response = client.post(
         "/api/backtests/run-user-signal",
@@ -361,7 +399,9 @@ def test_run_user_signal_backtest_with_saved_au_signal_on_adjusted_main_contract
     assert captured["end_date"] == "20250630"
 
 
-def test_run_user_signal_backtest_with_inline_ag_signal_on_adjusted_main_contract(client, monkeypatch) -> None:
+def test_run_user_signal_backtest_with_inline_ag_signal_on_adjusted_main_contract(
+    client, monkeypatch
+) -> None:
     captured = {}
 
     def fake_run_user_signal_backtest(**kwargs):
@@ -371,12 +411,20 @@ def test_run_user_signal_backtest_with_inline_ag_signal_on_adjusted_main_contrac
             "final_equity": 1000020.0,
             "realized_pnl": 20.0,
             "equity_curve": [],
-            "signals": [{"symbol": "AG9999.XSGE", "timestamp": "2025-06-10T09:02:00", "payload": {"side": "BUY"}}],
+            "signals": [
+                {
+                    "symbol": "AG9999.XSGE",
+                    "timestamp": "2025-06-10T09:02:00",
+                    "payload": {"side": "BUY"},
+                }
+            ],
             "trades": [],
             "diagnostics": [],
         }
 
-    monkeypatch.setattr("adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest)
+    monkeypatch.setattr(
+        "adapters.flask_app.run_user_signal_backtest", fake_run_user_signal_backtest
+    )
 
     response = client.post(
         "/api/backtests/run-user-signal",

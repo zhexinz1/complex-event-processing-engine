@@ -45,6 +45,7 @@ _CTP_IMPORT_ERROR: Exception | None = None
 # 抽象基类
 # ---------------------------------------------------------------------------
 
+
 class MarketGateway(ABC):
     """
     行情网关抽象基类。
@@ -116,9 +117,11 @@ class MarketGateway(ABC):
 # CTP 行情网关（期货）
 # ---------------------------------------------------------------------------
 
+
 @_dataclass
 class _BarAccumulator:
     """每个订阅合约维护一个实例，用差分法将 CTP 累计量转换为分钟增量。"""
+
     symbol: str
     open: float = 0.0
     high: float = 0.0
@@ -127,8 +130,8 @@ class _BarAccumulator:
     volume: int = 0
     turnover: float = 0.0
     bar_minute: Optional[datetime] = None  # 当前 Bar 所属分钟（秒/微秒置 0）
-    last_cum_vol: int = 0                  # 上一 Tick 的累计成交量
-    last_cum_to: float = 0.0              # 上一 Tick 的累计成交额
+    last_cum_vol: int = 0  # 上一 Tick 的累计成交量
+    last_cum_to: float = 0.0  # 上一 Tick 的累计成交额
     initialized: bool = False
 
 
@@ -154,7 +157,9 @@ def _get_mdapi() -> Any:
 
     _CTP_AVAILABLE = False
     _CTP_IMPORT_ERROR = first_error
-    raise RuntimeError("openctp-ctp is not installed or failed to load") from first_error
+    raise RuntimeError(
+        "openctp-ctp is not installed or failed to load"
+    ) from first_error
 
 
 class CTPMdSpi(_CTP_MD_SPI_BASE):
@@ -199,25 +204,37 @@ class CTPMdSpi(_CTP_MD_SPI_BASE):
         logger.warning(f"CTP: 前置断开，原因码={nReason}，等待自动重连...")
         self.login_success = False
 
-    def OnRspUserLogin(self, pRspUserLogin, pRspInfo, nRequestID: int, bIsLast: bool) -> None:
+    def OnRspUserLogin(
+        self, pRspUserLogin, pRspInfo, nRequestID: int, bIsLast: bool
+    ) -> None:
         """登录响应：设置结果标志并解除 connect() 阻塞。"""
         if pRspInfo is not None and pRspInfo.ErrorID != 0:
-            logger.error(f"CTP: 登录失败，ErrorID={pRspInfo.ErrorID}，Msg={pRspInfo.ErrorMsg}")
+            logger.error(
+                f"CTP: 登录失败，ErrorID={pRspInfo.ErrorID}，Msg={pRspInfo.ErrorMsg}"
+            )
             self.login_success = False
         else:
             logger.info("CTP: 登录成功")
             self.login_success = True
         self._login_event.set()
 
-    def OnRspSubMarketData(self, pSpecificInstrument, pRspInfo, nRequestID: int, bIsLast: bool) -> None:
+    def OnRspSubMarketData(
+        self, pSpecificInstrument, pRspInfo, nRequestID: int, bIsLast: bool
+    ) -> None:
         if pRspInfo is not None and pRspInfo.ErrorID != 0:
-            logger.error(f"CTP: 订阅失败 {pSpecificInstrument.InstrumentID}，Msg={pRspInfo.ErrorMsg}")
+            logger.error(
+                f"CTP: 订阅失败 {pSpecificInstrument.InstrumentID}，Msg={pRspInfo.ErrorMsg}"
+            )
         else:
             logger.info(f"CTP: 订阅成功 {pSpecificInstrument.InstrumentID}")
 
-    def OnRspUnSubMarketData(self, pSpecificInstrument, pRspInfo, nRequestID: int, bIsLast: bool) -> None:
+    def OnRspUnSubMarketData(
+        self, pSpecificInstrument, pRspInfo, nRequestID: int, bIsLast: bool
+    ) -> None:
         if pRspInfo is not None and pRspInfo.ErrorID != 0:
-            logger.error(f"CTP: 取消订阅失败 {pSpecificInstrument.InstrumentID}，Msg={pRspInfo.ErrorMsg}")
+            logger.error(
+                f"CTP: 取消订阅失败 {pSpecificInstrument.InstrumentID}，Msg={pRspInfo.ErrorMsg}"
+            )
         else:
             logger.info(f"CTP: 取消订阅成功 {pSpecificInstrument.InstrumentID}")
 
@@ -301,7 +318,7 @@ class CTPMarketGateway(MarketGateway):
             return False
 
         import uuid
-        
+
         # 使用 unique UUID 作为 flow_path，防止多个进程/实例读写同一个 .con 文件导致底层 C++ Segfault
         unique_id = uuid.uuid4().hex[:8]
         self.flow_path = os.path.join(self.flow_path, f"run_{unique_id}/")
@@ -310,7 +327,7 @@ class CTPMarketGateway(MarketGateway):
 
         # openctp-ctp 在 Linux 下 CreateFtdcMdApi 必须传入 Python str
         self._api = ctp_mdapi.CThostFtdcMdApi.CreateFtdcMdApi(self.flow_path)
-        
+
         self._spi = CTPMdSpi(
             api=self._api,
             broker_id=self.broker_id,
@@ -410,8 +427,8 @@ class CTPMarketGateway(MarketGateway):
         # --- 解析时间 ---
         try:
             # TradingDay: "20240101"，UpdateTime: "09:30:00"，UpdateMillisec: 500
-            trading_day: str = d.TradingDay          # "YYYYMMDD"
-            update_time: str = d.UpdateTime          # "HH:MM:SS"
+            trading_day: str = d.TradingDay  # "YYYYMMDD"
+            update_time: str = d.UpdateTime  # "HH:MM:SS"
             ms: int = d.UpdateMillisec
             tick_time = datetime.strptime(
                 f"{trading_day} {update_time}", "%Y%m%d %H:%M:%S"
@@ -436,7 +453,9 @@ class CTPMarketGateway(MarketGateway):
         delta_to: float = d.Turnover - acc.last_cum_to
 
         # [DEBUG] 打印 CTP 原始五档数据（验证是否为无效值）
-        logger.debug(f"CTP原始数据 {symbol}: BidPrice2={d.BidPrice2:.2e}, AskPrice2={d.AskPrice2:.2e}, BidVol2={d.BidVolume2}")
+        logger.debug(
+            f"CTP原始数据 {symbol}: BidPrice2={d.BidPrice2:.2e}, AskPrice2={d.AskPrice2:.2e}, BidVol2={d.BidVolume2}"
+        )
 
         # 解析五档买卖价格和数量（价格和数量配套过滤：价格无效时数量也置0）
         bid_price_1 = d.BidPrice1 if d.BidPrice1 < 1e15 else 0.0
@@ -535,6 +554,7 @@ class CTPMarketGateway(MarketGateway):
 # 模拟行情网关（用于测试）
 # ---------------------------------------------------------------------------
 
+
 class MockMarketGateway(MarketGateway):
     """
     模拟行情网关，用于测试和回测。
@@ -585,7 +605,7 @@ class MockMarketGateway(MarketGateway):
         ask_prices: tuple[float, ...] | None = None,
         ask_volumes: tuple[int, ...] | None = None,
         volume: int = 0,
-        turnover: float = 0.0
+        turnover: float = 0.0,
     ) -> None:
         """
         手动推送 Tick 数据（用于测试）。
@@ -613,7 +633,7 @@ class MockMarketGateway(MarketGateway):
             ask_volumes=ask_volumes or (0,) * 5,
             volume=volume,
             turnover=turnover,
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
         )
         self._publish_tick(tick)
         logger.debug(f"Mock tick pushed: {symbol} @ {last_price}")

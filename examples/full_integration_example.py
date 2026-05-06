@@ -65,7 +65,7 @@ def main() -> None:
             "HC2610": 0.12,
             "I2609": 0.10,
             "JM2609": 0.10,
-            "J2609": 0.10
+            "J2609": 0.10,
         }
         config_source.save_target_weights("strategy_001", target_weights)
 
@@ -99,7 +99,9 @@ def main() -> None:
 
     # 注册合约信息
     contracts = {
-        "AU2606": ContractInfo("AU2606", multiplier=1000, min_tick=0.05, margin_rate=0.08),
+        "AU2606": ContractInfo(
+            "AU2606", multiplier=1000, min_tick=0.05, margin_rate=0.08
+        ),
         "P2609": ContractInfo("P2609", multiplier=10, min_tick=2, margin_rate=0.08),
         "RB2610": ContractInfo("RB2610", multiplier=10, min_tick=1, margin_rate=0.09),
         "HC2610": ContractInfo("HC2610", multiplier=10, min_tick=1, margin_rate=0.09),
@@ -114,19 +116,14 @@ def main() -> None:
     # 初始化账户信息
     initial_nav = 10_000_000.0  # 1000 万初始资金
     portfolio_ctx.update_account(
-        total_nav=initial_nav,
-        available_cash=initial_nav,
-        margin_used=0.0
+        total_nav=initial_nav, available_cash=initial_nav, margin_used=0.0
     )
 
     # 初始化持仓（空仓）
     for symbol in symbols:
-        portfolio_ctx.update_position(Position(
-            symbol=symbol,
-            quantity=0.0,
-            avg_price=0.0,
-            market_value=0.0
-        ))
+        portfolio_ctx.update_position(
+            Position(symbol=symbol, quantity=0.0, avg_price=0.0, market_value=0.0)
+        )
 
     # -----------------------------------------------------------------------
     # 4. 注册再平衡处理器和触发器
@@ -147,7 +144,7 @@ def main() -> None:
         event_bus=event_bus,
         trigger_id="PORTFOLIO_DEVIATION",
         portfolio_ctx=portfolio_ctx,
-        threshold=0.05  # 5% 偏离阈值
+        threshold=0.05,  # 5% 偏离阈值
     ).register()
 
     # -----------------------------------------------------------------------
@@ -183,9 +180,7 @@ def main() -> None:
 
     # 用户输入入金 200 万
     fund_request = FundInFlowRequest(
-        amount=2_000_000.0,
-        remark="客户追加投资",
-        operator="张三"
+        amount=2_000_000.0, remark="客户追加投资", operator="张三"
     )
 
     response = frontend_api.submit_fund_inflow(fund_request)
@@ -243,9 +238,7 @@ def main() -> None:
     logger.info("=" * 80)
 
     rebalance_request = RebalanceRequest(
-        reason="手动调仓",
-        new_capital=0.0,
-        operator="李四"
+        reason="手动调仓", new_capital=0.0, operator="李四"
     )
 
     response = frontend_api.trigger_rebalance(rebalance_request)

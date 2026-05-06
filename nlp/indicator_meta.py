@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # 指标元数据定义
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class IndicatorMeta:
     """
@@ -40,6 +41,7 @@ class IndicatorMeta:
         output_type:    返回值类型（"single" 单值 / "multi" 多值元组）
         description:    中文描述
     """
+
     name: str
     aliases: tuple[str, ...] = field(default_factory=tuple)
     default_params: dict[str, Any] = field(default_factory=dict)
@@ -140,6 +142,7 @@ def suggest_similar_indicators(name: str, max_suggestions: int = 3) -> list[str]
 # 预注册常用技术指标
 # ---------------------------------------------------------------------------
 
+
 def _compute_sma(bars: list, period: int = 20) -> Optional[float]:
     """简单移动平均线"""
     if len(bars) < period:
@@ -164,7 +167,7 @@ def _compute_rsi(bars: list, period: int = 14) -> Optional[float]:
     """相对强弱指标"""
     if len(bars) < period + 1:
         return None
-    closes = [bar.close for bar in bars[-(period + 1):]]
+    closes = [bar.close for bar in bars[-(period + 1) :]]
     gains = [max(closes[i] - closes[i - 1], 0) for i in range(1, len(closes))]
     losses = [max(closes[i - 1] - closes[i], 0) for i in range(1, len(closes))]
     avg_gain = sum(gains) / period
@@ -175,7 +178,9 @@ def _compute_rsi(bars: list, period: int = 14) -> Optional[float]:
     return 100 - (100 / (1 + rs))
 
 
-def _compute_macd(bars: list, fast: int = 12, slow: int = 26, signal: int = 9) -> Optional[tuple]:
+def _compute_macd(
+    bars: list, fast: int = 12, slow: int = 26, signal: int = 9
+) -> Optional[tuple]:
     """MACD 指标（返回 DIF, DEA, MACD）"""
     if len(bars) < slow:
         return None
@@ -217,7 +222,7 @@ def _compute_boll(bars: list, period: int = 20, std_dev: int = 2) -> Optional[tu
     closes = [bar.close for bar in bars[-period:]]
     middle = sum(closes) / period
     variance = sum((x - middle) ** 2 for x in closes) / period
-    std = variance ** 0.5
+    std = variance**0.5
     upper = middle + std_dev * std
     lower = middle - std_dev * std
     return (upper, middle, lower)
@@ -234,7 +239,7 @@ def _register_default_indicators():
             compute_func=_compute_sma,
             required_bars=20,
             output_type="single",
-            description="简单移动平均线，用于判断趋势方向"
+            description="简单移动平均线，用于判断趋势方向",
         ),
         IndicatorMeta(
             name="EMA",
@@ -243,7 +248,7 @@ def _register_default_indicators():
             compute_func=_compute_ema,
             required_bars=12,
             output_type="single",
-            description="指数移动平均线，对近期价格更敏感"
+            description="指数移动平均线，对近期价格更敏感",
         ),
         IndicatorMeta(
             name="RSI",
@@ -252,7 +257,7 @@ def _register_default_indicators():
             compute_func=_compute_rsi,
             required_bars=15,
             output_type="single",
-            description="相对强弱指标，衡量超买超卖状态（0-100）"
+            description="相对强弱指标，衡量超买超卖状态（0-100）",
         ),
         IndicatorMeta(
             name="MACD",
@@ -261,7 +266,7 @@ def _register_default_indicators():
             compute_func=_compute_macd,
             required_bars=26,
             output_type="multi",
-            description="MACD 指标，返回 (DIF, DEA, MACD) 三个值"
+            description="MACD 指标，返回 (DIF, DEA, MACD) 三个值",
         ),
         IndicatorMeta(
             name="KDJ",
@@ -270,7 +275,7 @@ def _register_default_indicators():
             compute_func=_compute_kdj,
             required_bars=9,
             output_type="multi",
-            description="KDJ 随机指标，返回 (K, D, J) 三个值"
+            description="KDJ 随机指标，返回 (K, D, J) 三个值",
         ),
         IndicatorMeta(
             name="BOLL",
@@ -279,7 +284,7 @@ def _register_default_indicators():
             compute_func=_compute_boll,
             required_bars=20,
             output_type="multi",
-            description="布林带，返回 (上轨, 中轨, 下轨) 三个值"
+            description="布林带，返回 (上轨, 中轨, 下轨) 三个值",
         ),
     ]
 

@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 # 全局上下文（宏观数据）
 # ---------------------------------------------------------------------------
 
+
 class GlobalContext:
     """
     全局上下文，存储跨品种的宏观数据和系统级配置。
@@ -83,7 +84,9 @@ class GlobalContext:
         """
         if name.startswith("_"):
             # 避免与内部属性冲突
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
         if name in self._data:
             return self._data[name]
         raise AttributeError(f"GlobalContext has no attribute '{name}'")
@@ -92,6 +95,7 @@ class GlobalContext:
 # ---------------------------------------------------------------------------
 # 本地上下文（品种级数据 + 惰性指标计算）
 # ---------------------------------------------------------------------------
+
 
 class LocalContext:
     """
@@ -114,6 +118,7 @@ class LocalContext:
         _cache:         指标缓存字典。
         _indicator_registry: 指标计算函数注册表。
     """
+
     symbol: str
     bar_window: Deque[BarEvent]
     latest_tick: Optional[TickEvent]
@@ -146,7 +151,9 @@ class LocalContext:
         self._cache: dict[str, Any] = {}
         self._indicator_registry = indicator_registry or {}
 
-        logger.info(f"LocalContext initialized for {symbol} (window_size={window_size})")
+        logger.info(
+            f"LocalContext initialized for {symbol} (window_size={window_size})"
+        )
 
     # -----------------------------------------------------------------------
     # 数据更新接口
@@ -175,9 +182,7 @@ class LocalContext:
             bar: BarEvent 实例。
         """
         if bar.symbol != self.symbol:
-            logger.warning(
-                f"Symbol mismatch: expected {self.symbol}, got {bar.symbol}"
-            )
+            logger.warning(f"Symbol mismatch: expected {self.symbol}, got {bar.symbol}")
             return
 
         self.bar_window.append(bar)
@@ -224,7 +229,9 @@ class LocalContext:
         """
         if name.startswith("_"):
             # 避免与内部属性冲突
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
 
         # 0. 暴露最新 Bar/Tick 的常用字段，便于规则直接引用 close/high/last_price 等变量
         if self.bar_window:
@@ -303,6 +310,7 @@ class LocalContext:
 # 示例：指标计算函数（实际项目中应调用 TA-Lib）
 # ---------------------------------------------------------------------------
 
+
 def compute_sma(bars: list[BarEvent], period: int = 20) -> Optional[float]:
     """
     简单移动平均线（Simple Moving Average）。
@@ -337,7 +345,7 @@ def compute_rsi(bars: list[BarEvent], period: int = 14) -> Optional[float]:
         return None
 
     # 简化计算：仅作示例，实际需用 Wilder's Smoothing
-    closes = [bar.close for bar in bars[-(period + 1):]]
+    closes = [bar.close for bar in bars[-(period + 1) :]]
     gains = [max(closes[i] - closes[i - 1], 0) for i in range(1, len(closes))]
     losses = [max(closes[i - 1] - closes[i], 0) for i in range(1, len(closes))]
 
@@ -472,7 +480,9 @@ def _format_type_hint(type_hint: Any) -> str:
         return "None"
 
     args = get_args(type_hint)
-    if str(origin).endswith("UnionType") or origin is getattr(__import__("typing"), "Union", None):
+    if str(origin).endswith("UnionType") or origin is getattr(
+        __import__("typing"), "Union", None
+    ):
         return " | ".join(_format_type_hint(arg) for arg in args)
 
     origin_name = getattr(origin, "__name__", str(origin).replace("typing.", ""))
@@ -480,7 +490,9 @@ def _format_type_hint(type_hint: Any) -> str:
     return f"{origin_name}[{inner}]" if inner else origin_name
 
 
-def _build_event_field_docs(event_type: type[Any], descriptions: dict[str, str]) -> list[dict[str, str]]:
+def _build_event_field_docs(
+    event_type: type[Any], descriptions: dict[str, str]
+) -> list[dict[str, str]]:
     hints = get_type_hints(event_type)
     docs: list[dict[str, str]] = []
     for field in dataclass_fields(event_type):
@@ -488,7 +500,9 @@ def _build_event_field_docs(event_type: type[Any], descriptions: dict[str, str])
             {
                 "name": field.name,
                 "type": _format_type_hint(hints.get(field.name, Any)),
-                "description": descriptions.get(field.name, f"{event_type.__name__}.{field.name}"),
+                "description": descriptions.get(
+                    field.name, f"{event_type.__name__}.{field.name}"
+                ),
             }
         )
     return docs
@@ -507,7 +521,9 @@ def get_local_context_reference() -> dict[str, Any]:
             {
                 "name": field_name,
                 "type": _format_type_hint(hints.get(field_name, type(value))),
-                "description": LOCAL_CONTEXT_FIELD_DOCS.get(field_name, "LocalContext public field."),
+                "description": LOCAL_CONTEXT_FIELD_DOCS.get(
+                    field_name, "LocalContext public field."
+                ),
             }
         )
 
@@ -527,7 +543,9 @@ def get_local_context_reference() -> dict[str, Any]:
             {
                 "name": indicator_name,
                 "type": meta.get("type", "Any"),
-                "description": meta.get("description", f"Registered indicator: {indicator_name}"),
+                "description": meta.get(
+                    "description", f"Registered indicator: {indicator_name}"
+                ),
             }
         )
 

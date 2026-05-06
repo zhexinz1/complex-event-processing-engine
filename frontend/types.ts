@@ -120,6 +120,8 @@ export interface BacktestResult {
   trades: BacktestTrade[];
   positions?: BacktestPosition[];
   performance?: PerformanceMetrics;
+  total_signals?: number;
+  total_trades?: number;
 }
 
 export interface BacktestHistoryItem {
@@ -195,11 +197,13 @@ export interface UserSignalBacktestRequest {
   signal_id?: number;
   source_code?: string;
   data_source: string;
+  backtest_freq?: string;
   ts_code?: string;
   symbols?: string[];
   start_date?: string;
   end_date?: string;
   initial_cash?: number;
+  commission_rate?: number;
   write_trade_log?: boolean;
   execution_timing?: 'current_bar' | 'next_bar';
 }

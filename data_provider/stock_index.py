@@ -58,7 +58,19 @@ def search_stocks(
                 ts_code
             LIMIT ?
             """,
-            (like, like, like, like, like, like, query, query, f"{query}%", f"{query}%", limit),
+            (
+                like,
+                like,
+                like,
+                like,
+                like,
+                like,
+                query,
+                query,
+                f"{query}%",
+                f"{query}%",
+                limit,
+            ),
         ).fetchall()
 
     return [dict(row) for row in rows]

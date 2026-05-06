@@ -10,7 +10,9 @@ import tushare as ts
 
 from cep.core.events import BarEvent
 from dotenv import load_dotenv
+
 load_dotenv()  # Load environment variables from .env file if present
+
 
 def normalize_ts_code(raw_code: str) -> str:
     """Normalize common A-share user input into a Tushare ts_code."""
@@ -60,7 +62,9 @@ def fetch_tushare_daily_bars(
     _validate_yyyymmdd("start_date", start_date)
     _validate_yyyymmdd("end_date", end_date)
 
-    resolved_token = token or os.getenv("TUSHARE_TOKEN") or os.getenv("TUSHARE_API_TOKEN")
+    resolved_token = (
+        token or os.getenv("TUSHARE_TOKEN") or os.getenv("TUSHARE_API_TOKEN")
+    )
     if not resolved_token:
         raise RuntimeError("Tushare token 未找到，请设置环境变量 TUSHARE_TOKEN")
     try:
@@ -76,14 +80,27 @@ def fetch_tushare_daily_bars(
         ) from e
 
     if df is None or df.empty:
-        raise ValueError(f"Tushare 未返回数据: {normalized_code} {start_date}-{end_date}")
+        raise ValueError(
+            f"Tushare 未返回数据: {normalized_code} {start_date}-{end_date}"
+        )
 
-    required_columns = {"ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"}
+    required_columns = {
+        "ts_code",
+        "trade_date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "vol",
+        "amount",
+    }
     missing = required_columns - set(df.columns)
     if missing:
         raise ValueError(f"Tushare daily 返回缺少字段: {sorted(missing)}")
 
-    rows = cast(list[dict[str, Any]], df.sort_values("trade_date").to_dict(orient="records"))
+    rows = cast(
+        list[dict[str, Any]], df.sort_values("trade_date").to_dict(orient="records")
+    )
     bars: list[BarEvent] = []
     for row in rows:
         trade_date = datetime.strptime(str(row["trade_date"]), "%Y%m%d")

@@ -2,23 +2,25 @@
 初始化数据库表结构
 执行 database/schema.sql 中的建表语句
 """
+
 import pymysql
 
 from database.config import DB_CONFIG
 
 PYMYSQL_CONFIG = {
-    'host': DB_CONFIG.host,
-    'port': DB_CONFIG.port,
-    'user': DB_CONFIG.user,
-    'password': DB_CONFIG.password,
-    'database': DB_CONFIG.database,
-    'charset': DB_CONFIG.charset,
+    "host": DB_CONFIG.host,
+    "port": DB_CONFIG.port,
+    "user": DB_CONFIG.user,
+    "password": DB_CONFIG.password,
+    "database": DB_CONFIG.database,
+    "charset": DB_CONFIG.charset,
 }
+
 
 def init_database():
     """初始化数据库表"""
     # 读取 SQL 文件
-    with open('database/schema.sql', 'r', encoding='utf-8') as f:
+    with open("database/schema.sql", "r", encoding="utf-8") as f:
         sql_script = f.read()
 
     # 连接数据库
@@ -27,7 +29,7 @@ def init_database():
     try:
         with conn.cursor() as cursor:
             # 分割并执行每条 SQL 语句
-            statements = sql_script.split(';')
+            statements = sql_script.split(";")
             for statement in statements:
                 statement = statement.strip()
                 if statement:
@@ -43,5 +45,6 @@ def init_database():
     finally:
         conn.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     init_database()

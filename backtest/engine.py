@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 from typing import Any, Iterable, Optional
 
 from cep.core.context import DEFAULT_INDICATOR_REGISTRY, LocalContext
@@ -120,8 +123,12 @@ class BacktestEngine:
 
     def run(self) -> BacktestResult:
         """运行回测。"""
+        _logger = logging.getLogger(__name__)
         market_events_processed = 0
         last_timestamp = None
+        total_events = len(self.event_queue)
+        t0 = time.monotonic()
+        _logger.info("BacktestEngine.run(): starting, total_events=%s", total_events)
 
         while not self.event_queue.empty():
             next_event = self.event_queue.peek()
@@ -135,8 +142,31 @@ class BacktestEngine:
             if isinstance(event, (BarEvent, TickEvent)):
                 market_events_processed += 1
                 last_timestamp = event.timestamp
+                if market_events_processed % 50_000 == 0:
+                    elapsed = time.monotonic() - t0
+                    pct = (
+                        market_events_processed / total_events * 100
+                        if total_events
+                        else 0
+                    )
+                    _logger.info(
+                        "BacktestEngine progress: %d/%d events (%.1f%%) elapsed=%.1fs",
+                        market_events_processed,
+                        total_events,
+                        pct,
+                        elapsed,
+                    )
 
+        self.aggregator.flush()
         self.broker.finalize()
+        elapsed = time.monotonic() - t0
+        _logger.info(
+            "BacktestEngine.run(): engine loop finished, events=%d signals=%d trades=%d elapsed=%.1fs",
+            market_events_processed,
+            len(self.recorder.signals),
+            len(self.recorder.trades),
+            elapsed,
+        )
 
         # 记录最后一步执行后的状态，防止最终权益变化未能反映在序列中
         if last_timestamp is not None:
@@ -153,7 +183,7 @@ class BacktestEngine:
             final_market_value=self.portfolio.market_value,
             final_equity=self.portfolio.equity,
             realized_pnl=self.portfolio.realized_pnl,
-            unrealized_pnl=self.portfolio.equity - self.initial_cash - self.portfolio.realized_pnl,
+            unrealized_pnl=self.portfolio.unrealized_pnl,
             positions=self.portfolio.snapshot_positions(),
         )
         if self.write_trade_log:

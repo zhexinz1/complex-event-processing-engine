@@ -45,7 +45,8 @@ def main():
     print("  - 行情通道: Redis Pub/Sub (已接入 Market Node 实时行情)\n")
 
     # 绑定 0.0.0.0 以便外网或物理机能够访问，5000 端口
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+
 
 if __name__ == "__main__":
     main()

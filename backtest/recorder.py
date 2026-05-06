@@ -38,7 +38,9 @@ class PerformanceRecorder:
     def capture_snapshot(self, timestamp: datetime) -> None:
         """在一个顶层 market event 完成分发后记录权益。"""
         open_positions = sum(
-            1 for position in self.portfolio.positions.values() if position.quantity != 0
+            1
+            for position in self.portfolio.positions.values()
+            if position.quantity != 0
         )
         self.snapshots.append(
             EquitySnapshot(

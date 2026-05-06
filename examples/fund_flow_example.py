@@ -45,8 +45,10 @@ logger = logging.getLogger("fund_flow_example")
 # 模拟数据源（生产环境替换为真实数据源）
 # ---------------------------------------------------------------------------
 
+
 class MockFundFlowSource:
     """模拟出入金数据源"""
+
     def __init__(self):
         self.records = []
 
@@ -54,14 +56,19 @@ class MockFundFlowSource:
         self.records.append(record)
         return True
 
-    def get_fund_flow_records(self, product_name: str, start_date: date, end_date: date):
-        return [r for r in self.records
-                if r.product_name == product_name
-                and start_date <= r.date <= end_date]
+    def get_fund_flow_records(
+        self, product_name: str, start_date: date, end_date: date
+    ):
+        return [
+            r
+            for r in self.records
+            if r.product_name == product_name and start_date <= r.date <= end_date
+        ]
 
 
 class MockValuationSource:
     """模拟估值数据源（生产环境替换为 XunTouValuationSource）"""
+
     def __init__(self):
         self.valuations = {}
 
@@ -74,9 +81,14 @@ class MockValuationSource:
         self.valuations[key] = valuation
         return True
 
-    def get_valuation_history(self, product_name: str, start_date: date, end_date: date):
-        return [v for (pn, d), v in self.valuations.items()
-                if pn == product_name and start_date <= d <= end_date]
+    def get_valuation_history(
+        self, product_name: str, start_date: date, end_date: date
+    ):
+        return [
+            v
+            for (pn, d), v in self.valuations.items()
+            if pn == product_name and start_date <= d <= end_date
+        ]
 
 
 def main():
@@ -91,22 +103,24 @@ def main():
 
     # 创建持仓数据源（模拟迅投 GT API）
     position_source = MockPositionSource()
-    position_source.set_position(Position(
-        symbol="AU2606.SHF",
-        quantity=40,
-        avg_price=580.0,
-        market_value=40 * 580.0 * 1000
-    ))
-    position_source.set_position(Position(
-        symbol="IC2606.CFE",
-        quantity=15,
-        avg_price=6500.0,
-        market_value=15 * 6500.0 * 200
-    ))
+    position_source.set_position(
+        Position(
+            symbol="AU2606.SHF",
+            quantity=40,
+            avg_price=580.0,
+            market_value=40 * 580.0 * 1000,
+        )
+    )
+    position_source.set_position(
+        Position(
+            symbol="IC2606.CFE",
+            quantity=15,
+            avg_price=6500.0,
+            market_value=15 * 6500.0 * 200,
+        )
+    )
     position_source.set_account_info(
-        total_nav=10_000_000.0,
-        available_cash=5_000_000.0,
-        margin_used=2_000_000.0
+        total_nav=10_000_000.0, available_cash=5_000_000.0, margin_used=2_000_000.0
     )
 
     portfolio_ctx = PortfolioContext(position_source=position_source)
@@ -123,7 +137,7 @@ def main():
                 symbol="AU2606.SHF",
                 target_weight=0.30,
                 deviation_threshold=0.03,
-                algorithm="TWAP"
+                algorithm="TWAP",
             ),
             TargetWeightConfig(
                 date=date.today(),
@@ -131,10 +145,10 @@ def main():
                 symbol="IC2606.CFE",
                 target_weight=0.20,
                 deviation_threshold=0.05,
-                algorithm="TWAP"
+                algorithm="TWAP",
             ),
         ],
-        global_threshold=0.05
+        global_threshold=0.05,
     )
     config_loader.save_product_config(config)
 
@@ -167,7 +181,7 @@ def main():
         total_liabilities=500_000.0,
         unit_nav=1.0,
         pnl=0.0,
-        source="xuntou_api"
+        source="xuntou_api",
     )
     valuation_source.save_valuation(yesterday_valuation)
 
@@ -181,7 +195,7 @@ def main():
         total_liabilities=550_000.0,
         unit_nav=1.135,
         pnl=50_000.0,  # 今日盈亏 5 万
-        source="xuntou_api"
+        source="xuntou_api",
     )
     valuation_source.save_valuation(today_valuation)
 
@@ -193,10 +207,7 @@ def main():
     rebalance_handler = RebalanceHandler(bus, portfolio_ctx)
     rebalance_handler.register()
 
-    fund_flow_trigger = FundFlowTrigger(
-        event_bus=bus,
-        trigger_id="fund_flow"
-    )
+    fund_flow_trigger = FundFlowTrigger(event_bus=bus, trigger_id="fund_flow")
     fund_flow_trigger.register()
 
     # -----------------------------------------------------------------------
@@ -213,7 +224,7 @@ def main():
         inflow=1_300_000.0,  # 入金 130 万
         outflow=0.0,
         operator="张三",
-        remark="客户追加投资"
+        remark="客户追加投资",
     )
 
     if success:
@@ -229,8 +240,7 @@ def main():
     logger.info("=" * 80)
 
     net_capital_change = fund_flow_manager.calculate_net_capital_change(
-        product_name="明钺全天候1号",
-        calculation_date=today
+        product_name="明钺全天候1号", calculation_date=today
     )
 
     if not net_capital_change:
@@ -248,14 +258,16 @@ def main():
 
     # 验证计算
     expected_net_capital = (
-        net_capital_change.current_nav -
-        net_capital_change.previous_nav -
-        net_capital_change.pnl
+        net_capital_change.current_nav
+        - net_capital_change.previous_nav
+        - net_capital_change.pnl
     )
-    logger.info(f"\n验证: {net_capital_change.current_nav:,.2f} - "
-                f"{net_capital_change.previous_nav:,.2f} - "
-                f"{net_capital_change.pnl:,.2f} = "
-                f"{expected_net_capital:,.2f}")
+    logger.info(
+        f"\n验证: {net_capital_change.current_nav:,.2f} - "
+        f"{net_capital_change.previous_nav:,.2f} - "
+        f"{net_capital_change.pnl:,.2f} = "
+        f"{expected_net_capital:,.2f}"
+    )
 
     # -----------------------------------------------------------------------
     # 6. 触发再平衡
@@ -276,7 +288,7 @@ def main():
         current_nav=net_capital_change.current_nav,
         pnl=net_capital_change.pnl,
         operator="张三",
-        remark="客户追加投资 130 万"
+        remark="客户追加投资 130 万",
     )
 
     # -----------------------------------------------------------------------

@@ -71,11 +71,12 @@
             </label>
           </div>
 
-          <textarea
+          <Codemirror
             v-if="activeTab"
             v-model="activeTab.draft.source_code"
+            :extensions="extensions"
+            :style="{ height: '500px', width: '100%', fontSize: '14px', borderRadius: '8px', overflow: 'hidden' }"
             class="code-editor"
-            spellcheck="false"
           />
 
           <div v-if="activeTab && activeTab.diagnostics.length" class="diagnostics">
@@ -94,7 +95,7 @@
           <div class="panel-head">
             <div>
               <h2>回测验证</h2>
-              <p>{{ activeTab?.backtestResult ? `${activeTab.backtestResult.signals.length} 个信号` : '使用 mock、Tushare 或主连历史库验证' }}</p>
+              <p>{{ activeTab?.backtestResult ? `${activeTab.backtestResult.total_signals ?? activeTab.backtestResult.signals.length} 个信号` : '使用 mock、Tushare 或主连历史库验证' }}</p>
             </div>
             <button class="btn btn-primary" :disabled="busy || !activeTab" @click="runBacktest">运行回测</button>
           </div>
@@ -103,8 +104,18 @@
               <span>数据源</span>
               <select v-model="backtestDataSource" class="inp">
                 <option value="mock">mock</option>
-                <option value="tushare">tushare</option>
                 <option value="adjusted_main_contract">adjusted_main_contract</option>
+              </select>
+            </label>
+            <label>
+              <span>回测频率</span>
+              <select v-model="backtestFreq" class="inp">
+                <option value="1m">1m</option>
+                <option value="5m">5m</option>
+                <option value="15m">15m</option>
+                <option value="30m">30m</option>
+                <option value="1h">1h</option>
+                <option value="1d">1d</option>
               </select>
             </label>
             <label>
@@ -114,6 +125,16 @@
             <label>
               <span>结束日期</span>
               <input v-model="backtestEndDate" type="date" class="inp" />
+            </label>
+            <label>
+              <span>手续费率</span>
+              <select v-model="commissionRate" class="inp">
+                <option :value="-1">-1 (按品种交易所规则)</option>
+                <option :value="0">0 (无手续费)</option>
+                <option :value="0.0001">0.01%</option>
+                <option :value="0.0003">0.03%</option>
+                <option :value="0.001">0.1%</option>
+              </select>
             </label>
           </div>
 
@@ -155,11 +176,11 @@
             </div>
             <div class="stat-block">
               <span class="stat-label">信号数</span>
-              <span class="stat-value">{{ activeTab.backtestResult.signals.length }}</span>
+              <span class="stat-value">{{ activeTab.backtestResult.total_signals ?? activeTab.backtestResult.signals.length }}</span>
             </div>
             <div class="stat-block">
               <span class="stat-label">成交数</span>
-              <span class="stat-value">{{ activeTab.backtestResult.trades.length }}</span>
+              <span class="stat-value">{{ activeTab.backtestResult.total_trades ?? activeTab.backtestResult.trades.length }}</span>
             </div>
             <div class="stat-block">
               <span class="stat-label">未平仓</span>
@@ -256,6 +277,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, markRaw } from 'vue';
+import { Codemirror } from 'vue-codemirror';
+import { python } from '@codemirror/lang-python';
+import { oneDark } from '@codemirror/theme-one-dark';
 import { CepApi } from '../api';
 import type {
   BacktestResult,
@@ -285,14 +309,18 @@ const sampleCode = `class Signal:
         return None
 `;
 
+const extensions = [python(), oneDark];
+
 const { showToast } = useToast();
 const signals = ref<UserSignalDefinition[]>([]);
 const liveSignals = ref<LiveSignal[]>([]);
 const liveConnected = ref(false);
 const busy = ref(false);
-const backtestDataSource = ref('mock');
+const backtestDataSource = ref('adjusted_main_contract');
+const backtestFreq = ref('1m');
 const backtestStartDate = ref('2024-01-01');
 const backtestEndDate = ref(new Date().toISOString().slice(0, 10));
+const commissionRate = ref(-1.0);
 let eventSource: EventSource | null = null;
 
 interface SignalEditorTab {
@@ -553,16 +581,20 @@ async function runBacktest() {
       signal_id: tab.draft.id,
       source_code: tab.draft.source_code,
       data_source: backtestDataSource.value,
+      backtest_freq: backtestFreq.value,
       symbols: derivedConfig.symbols,
       start_date: toTushareDate(backtestStartDate.value),
       end_date: toTushareDate(backtestEndDate.value),
+      commission_rate: commissionRate.value,
     });
     if (json.success) {
       tab.backtestResult = json.data ? markRaw(json.data) : null;
       tab.diagnostics = json.data?.diagnostics || [];
       tab.backtestStatus = 'success';
+      const totalSignals = json.data?.total_signals ?? json.data?.signals?.length ?? 0;
+      const totalTrades = json.data?.total_trades ?? json.data?.trades?.length ?? 0;
       tab.backtestMessage = json.data
-        ? `回测完成：${json.data.signals.length} 个信号，${json.data.trades.length} 笔成交`
+        ? `回测完成：${totalSignals} 个信号，${totalTrades} 笔成交`
         : '回测完成，但后端没有返回结果数据';
       showToast(json.message || '回测完成');
     } else {
@@ -745,18 +777,14 @@ label span {
 }
 
 .code-editor {
-  background: #111827;
   border: 1px solid #1f2937;
   border-radius: 8px;
-  color: #e5e7eb;
-  font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  min-height: 360px;
-  outline: none;
-  padding: 16px;
-  resize: vertical;
+  overflow: hidden;
   width: 100%;
+}
+.code-editor .cm-editor {
+  height: 100%;
+  font-family: "SFMono-Regular", Consolas, monospace;
 }
 
 .diagnostics {

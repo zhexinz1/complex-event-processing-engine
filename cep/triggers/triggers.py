@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 # 触发器基类
 # ---------------------------------------------------------------------------
 
+
 class BaseTrigger(ABC):
     """
     触发器抽象基类。
@@ -120,6 +121,7 @@ class BaseTrigger(ABC):
 # AST 规则触发器
 # ---------------------------------------------------------------------------
 
+
 class AstRuleTrigger(BaseTrigger):
     """
     基于 AST 的代数规则触发器。
@@ -166,8 +168,12 @@ class AstRuleTrigger(BaseTrigger):
 
     def register(self) -> None:
         """订阅 BarEvent（利用 EventBus 的 Topic 机制精准路由）。"""
-        self.event_bus.subscribe(BarEvent, self.on_event, symbol=self.local_context.symbol)
-        logger.info(f"AstRuleTrigger '{self.trigger_id}' subscribed to BarEvent for '{self.local_context.symbol}'.")
+        self.event_bus.subscribe(
+            BarEvent, self.on_event, symbol=self.local_context.symbol
+        )
+        logger.info(
+            f"AstRuleTrigger '{self.trigger_id}' subscribed to BarEvent for '{self.local_context.symbol}'."
+        )
 
     def on_event(self, event: BaseEvent) -> None:
         """
@@ -223,6 +229,7 @@ class AstRuleTrigger(BaseTrigger):
 # 持仓偏离触发器
 # ---------------------------------------------------------------------------
 
+
 class DeviationTrigger(BaseTrigger):
     """
     持仓偏离触发器（用于动态再平衡）。
@@ -265,15 +272,19 @@ class DeviationTrigger(BaseTrigger):
         self.local_context = local_context
         self.global_context = global_context
         self.threshold = threshold
-        
+
         # 冷却锁与防抖期设定
         self._last_trigger_time: float = 0.0
         self._cooldown_seconds: float = 2.0
 
     def register(self) -> None:
         """订阅 TickEvent（精确路由至该标的）。"""
-        self.event_bus.subscribe(TickEvent, self.on_event, symbol=self.local_context.symbol)
-        logger.info(f"DeviationTrigger '{self.trigger_id}' subscribed to TickEvent for '{self.local_context.symbol}'.")
+        self.event_bus.subscribe(
+            TickEvent, self.on_event, symbol=self.local_context.symbol
+        )
+        logger.info(
+            f"DeviationTrigger '{self.trigger_id}' subscribed to TickEvent for '{self.local_context.symbol}'."
+        )
 
     def on_event(self, event: BaseEvent) -> None:
         """
@@ -301,8 +312,12 @@ class DeviationTrigger(BaseTrigger):
         deviation = abs(current_weight - target_weight)
 
         import math
+
         # 1. IEEE 754 浮点数精度保护：使用 isclose 防误触边缘值
-        if math.isclose(deviation, self.threshold, rel_tol=1e-9) or deviation <= self.threshold:
+        if (
+            math.isclose(deviation, self.threshold, rel_tol=1e-9)
+            or deviation <= self.threshold
+        ):
             return
 
         # 2. 信号防抖冷却（Debounce Lock）
@@ -337,6 +352,7 @@ class DeviationTrigger(BaseTrigger):
 # ---------------------------------------------------------------------------
 # 定时触发器
 # ---------------------------------------------------------------------------
+
 
 class CronTrigger(BaseTrigger):
     """
@@ -423,6 +439,7 @@ class CronTrigger(BaseTrigger):
 # ---------------------------------------------------------------------------
 # 触发器工厂（可选扩展）
 # ---------------------------------------------------------------------------
+
 
 def create_ast_trigger(
     event_bus: EventBus,

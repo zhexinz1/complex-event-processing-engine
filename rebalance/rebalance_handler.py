@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # 再平衡信号处理器
 # ---------------------------------------------------------------------------
 
+
 class RebalanceHandler:
     """
     再平衡信号处理器。
@@ -103,8 +104,7 @@ class RebalanceHandler:
         # 调用再平衡引擎计算
         try:
             result = self.rebalance_engine.calculate(
-                new_capital=new_capital,
-                reason=trigger_type
+                new_capital=new_capital, reason=trigger_type
             )
 
             # 校验订单
@@ -168,19 +168,24 @@ class RebalanceHandler:
         # 获取合约信息
         contract_info = self.portfolio_ctx.get_contract_info(order.symbol)
         if not contract_info:
-            logger.warning(f"Contract info not found for {order.symbol}, cannot update position.")
+            logger.warning(
+                f"Contract info not found for {order.symbol}, cannot update position."
+            )
             return
 
         # 计算新市值
-        new_market_value = new_quantity * order.estimated_price * contract_info.multiplier
+        new_market_value = (
+            new_quantity * order.estimated_price * contract_info.multiplier
+        )
 
         # 更新持仓
         from rebalance.portfolio_context import Position
+
         new_position = Position(
             symbol=order.symbol,
             quantity=new_quantity,
             avg_price=order.estimated_price,  # 简化：使用当前价格作为均价
-            market_value=new_market_value
+            market_value=new_market_value,
         )
         self.portfolio_ctx.update_position(new_position)
 

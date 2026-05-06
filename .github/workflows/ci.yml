@@ -50,11 +50,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: npm
+          node-version: "20"
+
 
       - name: Install Node dependencies
-        run: npm ci
+        run: npm install
 
       - name: Type-check frontend
         run: npm run frontend:check

@@ -60,7 +60,7 @@ def main():
                 symbol="AU2606.SHF",
                 target_weight=0.2561,
                 deviation_threshold=0.03,  # 黄金 3% 阈值
-                algorithm="TWAP"
+                algorithm="TWAP",
             ),
             TargetWeightConfig(
                 date=date(2026, 3, 30),
@@ -68,7 +68,7 @@ def main():
                 symbol="IC2606.CFE",
                 target_weight=0.2048,
                 deviation_threshold=0.05,  # 股指 5% 阈值
-                algorithm="TWAP"
+                algorithm="TWAP",
             ),
             TargetWeightConfig(
                 date=date(2026, 3, 30),
@@ -76,7 +76,7 @@ def main():
                 symbol="T2605.CFE",
                 target_weight=1.2476,  # 国债期货可以超过 100%（杠杆）
                 deviation_threshold=0.02,  # 国债 2% 阈值（更严格）
-                algorithm="TWAP"
+                algorithm="TWAP",
             ),
             TargetWeightConfig(
                 date=date(2026, 3, 30),
@@ -84,10 +84,10 @@ def main():
                 symbol="M2609.DCE",
                 target_weight=0.0781,
                 deviation_threshold=0.04,  # 豆粕 4% 阈值
-                algorithm="TWAP"
+                algorithm="TWAP",
             ),
         ],
-        global_threshold=0.05  # 全局默认 5%
+        global_threshold=0.05,  # 全局默认 5%
     )
 
     # 保存配置到加载器
@@ -135,19 +135,14 @@ def main():
 
     # 初始化账户（1000万）
     portfolio_ctx.update_account(
-        total_nav=10_000_000.0,
-        available_cash=10_000_000.0,
-        margin_used=0.0
+        total_nav=10_000_000.0, available_cash=10_000_000.0, margin_used=0.0
     )
 
     # 初始化持仓（空仓）
     for symbol in target_weights.keys():
-        portfolio_ctx.update_position(Position(
-            symbol=symbol,
-            quantity=0.0,
-            avg_price=0.0,
-            market_value=0.0
-        ))
+        portfolio_ctx.update_position(
+            Position(symbol=symbol, quantity=0.0, avg_price=0.0, market_value=0.0)
+        )
 
     # -----------------------------------------------------------------------
     # 4. 创建再平衡处理器
@@ -165,7 +160,7 @@ def main():
         trigger_id="portfolio_deviation",
         portfolio_ctx=portfolio_ctx,
         threshold=loaded_config.global_threshold,  # 全局默认阈值
-        symbol_thresholds=symbol_thresholds,       # 每个资产的独立阈值
+        symbol_thresholds=symbol_thresholds,  # 每个资产的独立阈值
         cooldown=5.0,  # 5 秒冷却（测试用）
     )
     deviation_trigger.register()
@@ -209,6 +204,7 @@ def main():
 
     # 等待冷却期
     import time
+
     time.sleep(6)
 
     # 黄金价格上涨 4%（超过 3% 阈值）
