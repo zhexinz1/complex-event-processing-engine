@@ -18,14 +18,28 @@ def _get_bucket(dt: datetime, freq: str) -> datetime:
     if freq.endswith("m"):
         minutes = int(freq[:-1])
         if minutes >= 60:
+            if minutes % 60 != 0:
+                raise ValueError(
+                    f"Minute frequency {freq} must be a multiple of 60 (e.g., 60m, 120m) if >= 60."
+                )
             hours = minutes // 60
+            if 24 % hours != 0:
+                raise ValueError(
+                    f"Hour-equivalent frequency {freq} must perfectly divide 24 hours."
+                )
             bucket_hour = (dt.hour // hours) * hours
             return dt.replace(hour=bucket_hour, minute=0, second=0, microsecond=0)
         else:
+            if 60 % minutes != 0:
+                raise ValueError(
+                    f"Minute frequency {freq} must perfectly divide 60 minutes (e.g., 1m, 5m, 15m, 30m)."
+                )
             bucket_minute = (dt.minute // minutes) * minutes
             return dt.replace(minute=bucket_minute, second=0, microsecond=0)
     elif freq.endswith("h"):
         hours = int(freq[:-1])
+        if 24 % hours != 0:
+            raise ValueError(f"Hour frequency {freq} must perfectly divide 24 hours.")
         bucket_hour = (dt.hour // hours) * hours
         return dt.replace(hour=bucket_hour, minute=0, second=0, microsecond=0)
     elif freq.endswith("d"):
