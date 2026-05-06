@@ -1,6 +1,8 @@
 import builtins
 import importlib.util
 import sys
+from types import SimpleNamespace
+from typing import Any
 import uuid
 from pathlib import Path
 
@@ -68,3 +70,76 @@ def test_ctp_market_gateway_connect_returns_false_when_ctp_unavailable() -> None
         builtins.__import__ = real_import
 
     assert module._CTP_IMPORT_ERROR is exc
+
+
+def test_ctp_market_gateway_registers_native_md_spi_subclass() -> None:
+    real_import = builtins.__import__
+    registered_spi = None
+
+    class FakeMdSpi:
+        pass
+
+    class FakeLoginField:
+        BrokerID = ""
+        UserID = ""
+        Password = ""
+
+    class FakeMdApi:
+        spi: Any
+
+        @classmethod
+        def CreateFtdcMdApi(cls, flow_path):
+            return cls()
+
+        def RegisterFront(self, front_addr):
+            self.front_addr = front_addr
+
+        def RegisterSpi(self, spi):
+            nonlocal registered_spi
+            registered_spi = spi
+            assert isinstance(spi, FakeMdSpi)
+            self.spi = spi
+
+        def Init(self):
+            self.spi.OnRspUserLogin(None, None, 1, True)
+
+        def Release(self):
+            pass
+
+    fake_mdapi = SimpleNamespace(
+        CThostFtdcMdSpi=FakeMdSpi,
+        CThostFtdcReqUserLoginField=FakeLoginField,
+        CThostFtdcMdApi=FakeMdApi,
+    )
+    fake_package = SimpleNamespace(thostmduserapi=fake_mdapi, mdapi=fake_mdapi)
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "openctp_ctp":
+            return fake_package
+        return real_import(name, globals, locals, fromlist, level)
+
+    builtins.__import__ = fake_import
+    module_name = f"test_market_gateway_{uuid.uuid4().hex}"
+    spec = importlib.util.spec_from_file_location(module_name, MODULE_PATH)
+    assert spec is not None
+    assert spec.loader is not None
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+        gateway = module.CTPMarketGateway(
+            event_bus=EventBus(),
+            front_addr="tcp://example:1234",
+            broker_id="0000",
+            user_id="demo",
+            password="secret",
+        )
+
+        assert gateway.connect() is True
+    finally:
+        builtins.__import__ = real_import
+        sys.modules.pop(module_name, None)
+
+    assert registered_spi is not None
+    assert module.CTPMdSpi.__mro__[1] is FakeMdSpi

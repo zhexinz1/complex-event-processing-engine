@@ -39,6 +39,7 @@ mdapi: Any = None
 _CTP_AVAILABLE = False
 _CTP_MD_SPI_BASE = object
 _CTP_IMPORT_ERROR: Exception | None = None
+_CTP_MD_SPI_CLASS: type | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -179,8 +180,7 @@ class CTPMdSpi(_CTP_MD_SPI_BASE):
         login_event: threading.Event,
         on_tick_callback: Callable,
     ):
-        if _CTP_AVAILABLE is not False:
-            super().__init__()
+        type(self).__mro__[1].__init__(self)
         self._api = api
         self._broker_id = broker_id
         self._user_id = user_id
@@ -246,6 +246,27 @@ class CTPMdSpi(_CTP_MD_SPI_BASE):
             logger.exception("CTP: _on_tick_callback 处理异常")
 
 
+def _get_ctp_md_spi_class() -> type:
+    """Build the SPI subclass after the native mdapi module has been loaded."""
+    global CTPMdSpi, _CTP_MD_SPI_CLASS
+
+    ctp_mdapi = _get_mdapi()
+    spi_base = getattr(ctp_mdapi, "CThostFtdcMdSpi", object)
+    if _CTP_MD_SPI_CLASS is not None and issubclass(_CTP_MD_SPI_CLASS, spi_base):
+        return _CTP_MD_SPI_CLASS
+
+    attrs = {
+        name: value
+        for name, value in CTPMdSpi.__dict__.items()
+        if name not in {"__dict__", "__weakref__"}
+    }
+    attrs["__module__"] = __name__
+
+    _CTP_MD_SPI_CLASS = type("CTPMdSpi", (spi_base,), attrs)
+    CTPMdSpi = _CTP_MD_SPI_CLASS
+    return _CTP_MD_SPI_CLASS
+
+
 class CTPMarketGateway(MarketGateway):
     """
     CTP 行情网关实现。
@@ -295,7 +316,7 @@ class CTPMarketGateway(MarketGateway):
         self.flow_path = flow_path
 
         self._api: Any = None
-        self._spi: Optional[CTPMdSpi] = None
+        self._spi: Any = None
         self._api_thread: Optional[threading.Thread] = None
         self._login_event: threading.Event = threading.Event()
         self._bar_accumulators: dict[str, _BarAccumulator] = {}
@@ -328,7 +349,8 @@ class CTPMarketGateway(MarketGateway):
         # openctp-ctp 在 Linux 下 CreateFtdcMdApi 必须传入 Python str
         self._api = ctp_mdapi.CThostFtdcMdApi.CreateFtdcMdApi(self.flow_path)
 
-        self._spi = CTPMdSpi(
+        spi_class = _get_ctp_md_spi_class()
+        self._spi = spi_class(
             api=self._api,
             broker_id=self.broker_id,
             user_id=self.user_id,
