@@ -18,7 +18,7 @@ DEFAULT_BASE_URL = os.environ.get("CEP_API_BASE_URL", "http://localhost:5000")
 BACKTEST_PATH = "/api/backtests/run-user-signal"
 
 
-BUY_HOLD_SOURCE = '''
+BUY_HOLD_SOURCE = """
 class Signal:
     name = "SC Buy Hold Baseline"
     symbols = ["SC9999.XINE"]
@@ -34,7 +34,7 @@ class Signal:
             return None
         cls.invested = True
         return {"side": "BUY", "quantity": 1, "reason": "buy_hold_oil", "price": bar.close}
-'''
+"""
 
 
 def build_lagged_ratio_source(
@@ -340,7 +340,9 @@ def run_api(
     response = requests.post(endpoint, json=body, timeout=timeout_seconds)
     payload = response.json()
     if response.status_code != 200 or not payload.get("success"):
-        raise RuntimeError(f"{name} failed: status={response.status_code} payload={payload}")
+        raise RuntimeError(
+            f"{name} failed: status={response.status_code} payload={payload}"
+        )
     return payload["data"]
 
 
@@ -371,10 +373,18 @@ def summarize(data: dict[str, Any]) -> dict[str, Any]:
 
     exposure = 0.0
     if curve:
-        exposure = sum(1 for point in curve if abs(float(point["market_value"])) > 0) / len(curve)
+        exposure = sum(
+            1 for point in curve if abs(float(point["market_value"])) > 0
+        ) / len(curve)
 
     trades = data["trades"]
-    turnover = sum(float(trade["price"]) * float(trade["quantity"]) * OIL_MULTIPLIER for trade in trades) / INITIAL_CASH
+    turnover = (
+        sum(
+            float(trade["price"]) * float(trade["quantity"]) * OIL_MULTIPLIER
+            for trade in trades
+        )
+        / INITIAL_CASH
+    )
     closed_pnls = []
     open_buy: dict[str, Any] | None = None
     for trade in trades:
@@ -383,8 +393,10 @@ def summarize(data: dict[str, Any]) -> dict[str, Any]:
             open_buy = trade
         elif side == "SELL" and open_buy is not None:
             pnl = (
-                float(trade["price"]) - float(open_buy["price"])
-            ) * float(trade["quantity"]) * OIL_MULTIPLIER
+                (float(trade["price"]) - float(open_buy["price"]))
+                * float(trade["quantity"])
+                * OIL_MULTIPLIER
+            )
             closed_pnls.append(pnl)
             open_buy = None
     wins = [pnl for pnl in closed_pnls if pnl > 0]
@@ -437,7 +449,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Backtest CU/AG ratio signals against SC through a running Flask API server."
     )
-    parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="Flask API base URL.")
+    parser.add_argument(
+        "--base-url", default=DEFAULT_BASE_URL, help="Flask API base URL."
+    )
     parser.add_argument("--start-date", default=START_DATE)
     parser.add_argument("--end-date", default=END_DATE)
     parser.add_argument("--initial-cash", type=float, default=INITIAL_CASH)

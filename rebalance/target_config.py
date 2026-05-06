@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 # 数据类定义
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TargetWeightConfig:
     """
@@ -43,6 +44,7 @@ class TargetWeightConfig:
         deviation_threshold: 偏离阈值（如 0.03 表示 3%）
         algorithm:          执行算法（如 "TWAP", "VWAP", "POV"）
     """
+
     date: date
     product_name: str
     symbol: str
@@ -62,6 +64,7 @@ class ProductConfig:
         assets:             资产配置列表
         global_threshold:   全局偏离阈值（如果资产未单独配置，使用此值）
     """
+
     product_name: str
     date: date
     assets: list[TargetWeightConfig]
@@ -84,6 +87,7 @@ class ProductConfig:
 # 配置加载接口（抽象协议）
 # ---------------------------------------------------------------------------
 
+
 class TargetConfigLoader(Protocol):
     """
     目标权重配置加载器接口。
@@ -95,9 +99,7 @@ class TargetConfigLoader(Protocol):
     """
 
     def load_product_config(
-        self,
-        product_name: str,
-        config_date: Optional[date] = None
+        self, product_name: str, config_date: Optional[date] = None
     ) -> Optional[ProductConfig]:
         """
         加载指定产品的目标权重配置。
@@ -128,6 +130,7 @@ class TargetConfigLoader(Protocol):
 # 内存配置加载器（用于测试和简单场景）
 # ---------------------------------------------------------------------------
 
+
 class InMemoryConfigLoader:
     """
     内存配置加载器（用于测试和简单场景）。
@@ -142,9 +145,7 @@ class InMemoryConfigLoader:
         logger.info("InMemoryConfigLoader initialized")
 
     def load_product_config(
-        self,
-        product_name: str,
-        config_date: Optional[date] = None
+        self, product_name: str, config_date: Optional[date] = None
     ) -> Optional[ProductConfig]:
         """
         加载指定产品的目标权重配置。
@@ -159,8 +160,7 @@ class InMemoryConfigLoader:
         if config_date is None:
             # 查找最新配置
             matching_configs = [
-                (d, cfg) for (pn, d), cfg in self._configs.items()
-                if pn == product_name
+                (d, cfg) for (pn, d), cfg in self._configs.items() if pn == product_name
             ]
             if not matching_configs:
                 logger.warning(f"No config found for product: {product_name}")
@@ -205,6 +205,7 @@ class InMemoryConfigLoader:
 # 数据库配置加载器（预留接口）
 # ---------------------------------------------------------------------------
 
+
 class DatabaseConfigLoader:
     """
     数据库配置加载器（预留接口）。
@@ -225,12 +226,12 @@ class DatabaseConfigLoader:
         self.db_connection_string = db_connection_string
         # TODO: 初始化数据库连接
         # self.db = connect(db_connection_string)
-        logger.info(f"DatabaseConfigLoader initialized (connection: {db_connection_string})")
+        logger.info(
+            f"DatabaseConfigLoader initialized (connection: {db_connection_string})"
+        )
 
     def load_product_config(
-        self,
-        product_name: str,
-        config_date: Optional[date] = None
+        self, product_name: str, config_date: Optional[date] = None
     ) -> Optional[ProductConfig]:
         """
         从数据库加载指定产品的目标权重配置。
@@ -271,6 +272,7 @@ class DatabaseConfigLoader:
 # 辅助函数
 # ---------------------------------------------------------------------------
 
+
 def create_sample_config() -> ProductConfig:
     """
     创建示例配置（用于测试）。
@@ -285,7 +287,7 @@ def create_sample_config() -> ProductConfig:
             symbol="AU2606.SHF",
             target_weight=0.2561,
             deviation_threshold=0.03,
-            algorithm="TWAP"
+            algorithm="TWAP",
         ),
         TargetWeightConfig(
             date=date(2026, 3, 30),
@@ -293,7 +295,7 @@ def create_sample_config() -> ProductConfig:
             symbol="IC2606.CFE",
             target_weight=0.2048,
             deviation_threshold=0.05,
-            algorithm="TWAP"
+            algorithm="TWAP",
         ),
         TargetWeightConfig(
             date=date(2026, 3, 30),
@@ -301,7 +303,7 @@ def create_sample_config() -> ProductConfig:
             symbol="T2605.CFE",
             target_weight=1.2476,  # 注意：可以超过 100%（杠杆）
             deviation_threshold=0.02,
-            algorithm="TWAP"
+            algorithm="TWAP",
         ),
         TargetWeightConfig(
             date=date(2026, 3, 30),
@@ -309,7 +311,7 @@ def create_sample_config() -> ProductConfig:
             symbol="M2609.DCE",
             target_weight=0.0781,
             deviation_threshold=0.04,
-            algorithm="TWAP"
+            algorithm="TWAP",
         ),
     ]
 
@@ -317,5 +319,5 @@ def create_sample_config() -> ProductConfig:
         product_name="明钺全天候1号",
         date=date(2026, 3, 30),
         assets=assets,
-        global_threshold=0.05
+        global_threshold=0.05,
     )

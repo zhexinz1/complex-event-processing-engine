@@ -54,17 +54,46 @@ def test_backtest_engine_register_component_keeps_strong_reference() -> None:
     assert component_ref() is not None
 
 
-def test_backtest_engine_processes_market_signal_order_and_trade_flow(monkeypatch, tmp_path) -> None:
+def test_backtest_engine_processes_market_signal_order_and_trade_flow(
+    monkeypatch, tmp_path
+) -> None:
     symbol = "600519.SH"
 
     # 这组 close 序列满足：
     #   1. 最后 20 根的 close > SMA(20)
     #   2. 最后 15 根在简化 RSI 实现下 < 30
     closes = [
-        100.0, 99.94, 102.96, 106.85, 109.97, 106.2, 109.07, 107.78,
-        106.8, 107.9, 110.91, 114.19, 112.0, 113.62, 117.2, 121.02,
-        124.19, 120.4, 119.14, 118.23, 115.76, 115.51, 115.13, 116.37,
-        116.75, 117.17, 115.16, 115.39, 115.39, 116.77, 117.07,
+        100.0,
+        99.94,
+        102.96,
+        106.85,
+        109.97,
+        106.2,
+        109.07,
+        107.78,
+        106.8,
+        107.9,
+        110.91,
+        114.19,
+        112.0,
+        113.62,
+        117.2,
+        121.02,
+        124.19,
+        120.4,
+        119.14,
+        118.23,
+        115.76,
+        115.51,
+        115.13,
+        116.37,
+        116.75,
+        117.17,
+        115.16,
+        115.39,
+        115.39,
+        116.77,
+        117.07,
     ]
 
     bars = _make_bars(symbol, closes)
@@ -100,8 +129,12 @@ def test_backtest_engine_processes_market_signal_order_and_trade_flow(monkeypatc
     assert result.trades, "Expected simulated broker to emit trade events"
     assert result.snapshots
 
-    submitted_orders = [order for order in result.orders if order.status == OrderStatus.SUBMITTED]
-    filled_orders = [order for order in result.orders if order.status == OrderStatus.FILLED]
+    submitted_orders = [
+        order for order in result.orders if order.status == OrderStatus.SUBMITTED
+    ]
+    filled_orders = [
+        order for order in result.orders if order.status == OrderStatus.FILLED
+    ]
     assert submitted_orders
     assert filled_orders
 
@@ -224,7 +257,9 @@ def test_backtest_engine_rejects_next_bar_signal_without_following_bar() -> None
     engine.ingest_bars(bars)
     result = engine.run()
 
-    rejected_orders = [order for order in result.orders if order.status == OrderStatus.REJECTED]
+    rejected_orders = [
+        order for order in result.orders if order.status == OrderStatus.REJECTED
+    ]
     assert result.trades == []
     assert rejected_orders
     assert rejected_orders[0].payload["reason"] == "no_next_bar"
@@ -255,7 +290,9 @@ def test_backtest_engine_rejects_buy_signal_when_cash_is_insufficient() -> None:
     engine.ingest_bars(bars)
     result = engine.run()
 
-    rejected_orders = [order for order in result.orders if order.status == OrderStatus.REJECTED]
+    rejected_orders = [
+        order for order in result.orders if order.status == OrderStatus.REJECTED
+    ]
     assert rejected_orders
     assert rejected_orders[0].payload["reason"] == "insufficient_cash"
     assert result.trades == []
@@ -299,7 +336,9 @@ def test_backtest_engine_rejects_sell_signal_without_position() -> None:
     engine.ingest_bars(bars)
     result = engine.run()
 
-    rejected_orders = [order for order in result.orders if order.status == OrderStatus.REJECTED]
+    rejected_orders = [
+        order for order in result.orders if order.status == OrderStatus.REJECTED
+    ]
     assert rejected_orders
     assert rejected_orders[0].payload["reason"] == "insufficient_position"
     assert result.trades == []

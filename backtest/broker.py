@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -77,7 +76,9 @@ class SimulatedBroker:
 
     def on_tick(self, event: TickEvent) -> None:
         if self.execution_timing == "next_bar":
-            self._flush_pending_for_market_event(event, execution_price=event.last_price)
+            self._flush_pending_for_market_event(
+                event, execution_price=event.last_price
+            )
         self._latest_prices[event.symbol] = event.last_price
 
     def on_signal(self, signal: SignalEvent) -> None:
@@ -113,7 +114,9 @@ class SimulatedBroker:
             return
 
         if self.execution_timing == "next_bar":
-            pending = PendingSignalExecution(signal=signal, side=side, quantity=quantity)
+            pending = PendingSignalExecution(
+                signal=signal, side=side, quantity=quantity
+            )
             self._pending_signals.setdefault(signal.symbol, []).append(pending)
             return
 
@@ -150,13 +153,17 @@ class SimulatedBroker:
             return
 
         ready_entries = [
-            pending for pending in pending_entries if event.timestamp > pending.signal.timestamp
+            pending
+            for pending in pending_entries
+            if event.timestamp > pending.signal.timestamp
         ]
         if not ready_entries:
             return
 
         self._pending_signals[event.symbol] = [
-            pending for pending in pending_entries if event.timestamp <= pending.signal.timestamp
+            pending
+            for pending in pending_entries
+            if event.timestamp <= pending.signal.timestamp
         ]
         if not self._pending_signals[event.symbol]:
             self._pending_signals.pop(event.symbol, None)
@@ -194,7 +201,6 @@ class SimulatedBroker:
 
         multiplier = self.contract_multipliers.get(signal.symbol, 1.0)
         margin_rate = get_margin_rate(signal.symbol)
-        trade_notional = quantity * price * multiplier
         estimated_commission = calculate_commission(
             signal.symbol, price, quantity, multiplier, self.commission_rate
         )

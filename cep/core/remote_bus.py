@@ -15,15 +15,21 @@ from cep.core.event_bus import EventBus
 
 logger = logging.getLogger(__name__)
 
+
 class RedisEventBridge:
-    def __init__(self, local_bus: EventBus, redis_url: str = "redis://localhost:6379/0", channel: str = "cep_events"):
+    def __init__(
+        self,
+        local_bus: EventBus,
+        redis_url: str = "redis://localhost:6379/0",
+        channel: str = "cep_events",
+    ):
         self.local_bus = local_bus
         self.channel = channel
         self.redis_client = redis.from_url(redis_url)
         self.pubsub = self.redis_client.pubsub()
         self._running = False
         self._thread = None
-        
+
     def start_publishing(self, event_types: list[type]):
         """
         作为【发送方/Market Node】启动：
@@ -31,8 +37,10 @@ class RedisEventBridge:
         """
         for etype in event_types:
             self.local_bus.subscribe(etype, self._on_local_event)
-        logger.info(f"[RedisBridge Publisher] Ready to relay events: {[t.__name__ for t in event_types]}")
-            
+        logger.info(
+            f"[RedisBridge Publisher] Ready to relay events: {[t.__name__ for t in event_types]}"
+        )
+
     def _on_local_event(self, event: Any):
         """本地产生事件 -> 序列化为字节 -> Redis Pub"""
         try:
@@ -48,10 +56,14 @@ class RedisEventBridge:
         """
         self.pubsub.subscribe(**{self.channel: self._on_redis_message})
         self._running = True
-        self._thread = threading.Thread(target=self._run_consumer, daemon=True, name="RedisConsumerWorker")
+        self._thread = threading.Thread(
+            target=self._run_consumer, daemon=True, name="RedisConsumerWorker"
+        )
         self._thread.start()
-        logger.info(f"[RedisBridge Consumer] Started listening to remote channel: {self.channel}")
-        
+        logger.info(
+            f"[RedisBridge Consumer] Started listening to remote channel: {self.channel}"
+        )
+
     def _run_consumer(self):
         try:
             for message in self.pubsub.listen():
@@ -59,17 +71,17 @@ class RedisEventBridge:
                     break
         except Exception as e:
             logger.error(f"Redis 消费线程异常退出: {e}")
-            
+
     def _on_redis_message(self, message):
         """核心流转逻辑：Redis 收到二进制流 -> 反序列化为 Dataclass -> 触发本地 EventBus"""
-        if message['type'] == 'message':
+        if message["type"] == "message":
             try:
-                event = pickle.loads(message['data'])
+                event = pickle.loads(message["data"])
                 # 把网络事件当成本地事件投递给后端的引擎执行
                 self.local_bus.publish(event)
             except Exception as e:
                 logger.error(f"解析跨进程事件包失败: {e}")
-                
+
     def stop(self):
         """优雅退出"""
         self._running = False

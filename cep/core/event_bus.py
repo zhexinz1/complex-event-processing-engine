@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 # EventBus 核心实现
 # ---------------------------------------------------------------------------
 
+
 class EventBus:
     """
     全局事件总线，基于发布/订阅模式实现模块间解耦通信。
@@ -54,7 +55,9 @@ class EventBus:
                       弱引用列表避免忘记取消订阅导致的内存泄漏。
                       使用 list 而非 set 保证 handler 按注册顺序调用。
         """
-        self._subscribers: dict[Type[BaseEvent], dict[str, list[Any]]] = defaultdict(lambda: defaultdict(list))
+        self._subscribers: dict[Type[BaseEvent], dict[str, list[Any]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
         logger.info("EventBus initialized with Topic(Symbol) routing and WeakRefs.")
 
     # -----------------------------------------------------------------------
@@ -76,23 +79,23 @@ class EventBus:
             symbol:     标的代码（空字符串表示全局订阅）。
         """
         import weakref
-        
+
         # 将方法封装为 WeakMethod，将普通函数封装为 ref
-        if hasattr(handler, '__self__'):
+        if hasattr(handler, "__self__"):
             ref = weakref.WeakMethod(handler)
         else:
             ref = weakref.ref(handler)
-            
+
         subs = self._subscribers[event_type][symbol]
         # 防止重复订阅
         if not any(r() == handler for r in subs if r() is not None):
             subs.append(ref)
-            handler_name = getattr(handler, '__name__', str(handler))
+            handler_name = getattr(handler, "__name__", str(handler))
             logger.debug(
                 f"Subscribed {handler_name} to {event_type.__name__} (symbol='{symbol}')"
             )
         else:
-            handler_name = getattr(handler, '__name__', str(handler))
+            handler_name = getattr(handler, "__name__", str(handler))
             logger.warning(
                 f"Handler {handler_name} already subscribed to {event_type.__name__} (symbol='{symbol}')"
             )
@@ -116,12 +119,12 @@ class EventBus:
         if to_remove:
             for r in to_remove:
                 subs.remove(r)
-            handler_name = getattr(handler, '__name__', str(handler))
+            handler_name = getattr(handler, "__name__", str(handler))
             logger.debug(
                 f"Unsubscribed {handler_name} from {event_type.__name__} (symbol='{symbol}')"
             )
         else:
-            handler_name = getattr(handler, '__name__', str(handler))
+            handler_name = getattr(handler, "__name__", str(handler))
             logger.warning(
                 f"Handler {handler_name} not found in {event_type.__name__} (symbol='{symbol}') subscribers"
             )
@@ -142,7 +145,7 @@ class EventBus:
         """
         event_type = type(event)
         symbol = getattr(event, "symbol", "")
-        
+
         # 匹配精准 symbol 级别，以及全局订阅级别 (symbol="")
         # 使用 list 保留注册顺序：先 symbol 级别，再全局级别
         target_refs: list[Any] = []
@@ -167,11 +170,14 @@ class EventBus:
                 dead_refs.append(ref)
             else:
                 handlers_to_call.append(handler)
-                
+
         # 清理失效的弱引用
         for ref in dead_refs:
             for s in [symbol, ""]:
-                if s in self._subscribers[event_type] and ref in self._subscribers[event_type][s]:
+                if (
+                    s in self._subscribers[event_type]
+                    and ref in self._subscribers[event_type][s]
+                ):
                     self._subscribers[event_type][s].remove(ref)
 
         logger.debug(
@@ -183,7 +189,7 @@ class EventBus:
             try:
                 handler(event)
             except Exception as e:
-                handler_name = getattr(handler, '__name__', str(handler))
+                handler_name = getattr(handler, "__name__", str(handler))
                 logger.exception(
                     f"Handler {handler_name} failed on {event_type.__name__}: {e}"
                 )

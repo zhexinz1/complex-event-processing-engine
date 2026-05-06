@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # 数据类定义
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FundFlowRecord:
     """
@@ -42,6 +43,7 @@ class FundFlowRecord:
         operator:     操作员
         remark:       备注
     """
+
     date: date
     product_name: str
     inflow: float
@@ -66,6 +68,7 @@ class ProductValuation:
         pnl:          当日盈亏
         source:       数据来源（"xuntou_api" / "manual"）
     """
+
     date: date
     product_name: str
     nav: float
@@ -92,6 +95,7 @@ class NetCapitalChange:
         net_capital_change: 净入金（= 当前净值 - 昨日净值 - 今日盈亏）
         calculation_method: 计算方法说明
     """
+
     date: date
     product_name: str
     previous_nav: float
@@ -106,6 +110,7 @@ class NetCapitalChange:
 # ---------------------------------------------------------------------------
 # 出入金数据源接口
 # ---------------------------------------------------------------------------
+
 
 class FundFlowDataSource(Protocol):
     """
@@ -122,10 +127,7 @@ class FundFlowDataSource(Protocol):
         ...
 
     def get_fund_flow_records(
-        self,
-        product_name: str,
-        start_date: date,
-        end_date: date
+        self, product_name: str, start_date: date, end_date: date
     ) -> list[FundFlowRecord]:
         """查询出入金记录"""
         ...
@@ -134,6 +136,7 @@ class FundFlowDataSource(Protocol):
 # ---------------------------------------------------------------------------
 # 估值数据源接口
 # ---------------------------------------------------------------------------
+
 
 class ValuationDataSource(Protocol):
     """
@@ -145,9 +148,7 @@ class ValuationDataSource(Protocol):
     """
 
     def fetch_valuation(
-        self,
-        product_name: str,
-        valuation_date: date
+        self, product_name: str, valuation_date: date
     ) -> Optional[ProductValuation]:
         """从迅投 API 获取产品估值"""
         ...
@@ -157,10 +158,7 @@ class ValuationDataSource(Protocol):
         ...
 
     def get_valuation_history(
-        self,
-        product_name: str,
-        start_date: date,
-        end_date: date
+        self, product_name: str, start_date: date, end_date: date
     ) -> list[ProductValuation]:
         """查询历史估值"""
         ...
@@ -169,6 +167,7 @@ class ValuationDataSource(Protocol):
 # ---------------------------------------------------------------------------
 # 迅投估值数据源（预留接口）
 # ---------------------------------------------------------------------------
+
 
 class XunTouValuationSource:
     """
@@ -182,13 +181,7 @@ class XunTouValuationSource:
       - 实现盈亏查询接口
     """
 
-    def __init__(
-        self,
-        server_addr: str,
-        account_id: str,
-        password: str,
-        app_id: str
-    ):
+    def __init__(self, server_addr: str, account_id: str, password: str, app_id: str):
         """
         初始化迅投估值数据源。
 
@@ -215,9 +208,7 @@ class XunTouValuationSource:
         return False
 
     def fetch_valuation(
-        self,
-        product_name: str,
-        valuation_date: date
+        self, product_name: str, valuation_date: date
     ) -> Optional[ProductValuation]:
         """
         从迅投 GT API 获取产品估值。
@@ -249,11 +240,7 @@ class XunTouValuationSource:
         logger.warning(f"XunTou GT fetch_valuation not implemented: {product_name}")
         return None
 
-    def fetch_pnl(
-        self,
-        product_name: str,
-        valuation_date: date
-    ) -> float:
+    def fetch_pnl(self, product_name: str, valuation_date: date) -> float:
         """
         从迅投 GT API 获取当日盈亏。
 
@@ -279,6 +266,7 @@ class XunTouValuationSource:
 # ---------------------------------------------------------------------------
 # 数据库数据源（预留接口）
 # ---------------------------------------------------------------------------
+
 
 class DatabaseFundFlowSource:
     """
@@ -326,14 +314,13 @@ class DatabaseFundFlowSource:
         remark=VALUES(remark)
         """
         # TODO: 实现数据库插入逻辑
-        logger.warning("DatabaseFundFlowSource.save_fund_flow_record not implemented yet")
+        logger.warning(
+            "DatabaseFundFlowSource.save_fund_flow_record not implemented yet"
+        )
         return False
 
     def get_fund_flow_records(
-        self,
-        product_name: str,
-        start_date: date,
-        end_date: date
+        self, product_name: str, start_date: date, end_date: date
     ) -> list[FundFlowRecord]:
         """
         从数据库查询出入金记录。
@@ -345,7 +332,9 @@ class DatabaseFundFlowSource:
         ORDER BY date DESC
         """
         # TODO: 实现数据库查询逻辑
-        logger.warning("DatabaseFundFlowSource.get_fund_flow_records not implemented yet")
+        logger.warning(
+            "DatabaseFundFlowSource.get_fund_flow_records not implemented yet"
+        )
         return []
 
 
@@ -384,20 +373,20 @@ class DatabaseValuationSource:
         return False
 
     def get_valuation_history(
-        self,
-        product_name: str,
-        start_date: date,
-        end_date: date
+        self, product_name: str, start_date: date, end_date: date
     ) -> list[ProductValuation]:
         """查询历史估值"""
         # TODO: 实现数据库查询逻辑
-        logger.warning("DatabaseValuationSource.get_valuation_history not implemented yet")
+        logger.warning(
+            "DatabaseValuationSource.get_valuation_history not implemented yet"
+        )
         return []
 
 
 # ---------------------------------------------------------------------------
 # 资金流动管理器
 # ---------------------------------------------------------------------------
+
 
 class FundFlowManager:
     """
@@ -413,7 +402,7 @@ class FundFlowManager:
     def __init__(
         self,
         fund_flow_source: FundFlowDataSource,
-        valuation_source: ValuationDataSource
+        valuation_source: ValuationDataSource,
     ):
         """
         初始化资金流动管理器。
@@ -433,7 +422,7 @@ class FundFlowManager:
         inflow: float,
         outflow: float,
         operator: str,
-        remark: str = ""
+        remark: str = "",
     ) -> bool:
         """
         记录出入金。
@@ -458,7 +447,7 @@ class FundFlowManager:
             outflow=outflow,
             net_flow=net_flow,
             operator=operator,
-            remark=remark
+            remark=remark,
         )
 
         success = self.fund_flow_source.save_fund_flow_record(record)
@@ -474,9 +463,7 @@ class FundFlowManager:
         return success
 
     def calculate_net_capital_change(
-        self,
-        product_name: str,
-        calculation_date: date
+        self, product_name: str, calculation_date: date
     ) -> Optional[NetCapitalChange]:
         """
         计算净入金金额。
@@ -501,6 +488,7 @@ class FundFlowManager:
 
         # 2. 获取昨日估值
         from datetime import timedelta
+
         previous_date = calculation_date - timedelta(days=1)
         previous_valuation = self.valuation_source.fetch_valuation(
             product_name, previous_date
@@ -533,7 +521,7 @@ class FundFlowManager:
             fund_inflow=fund_inflow,
             fund_outflow=fund_outflow,
             net_capital_change=net_capital_change,
-            calculation_method="current_nav - previous_nav - pnl"
+            calculation_method="current_nav - previous_nav - pnl",
         )
 
         logger.info(
@@ -548,9 +536,7 @@ class FundFlowManager:
         return result
 
     def sync_valuation_from_xuntou(
-        self,
-        product_name: str,
-        valuation_date: date
+        self, product_name: str, valuation_date: date
     ) -> bool:
         """
         从迅投 API 同步估值到数据库。
@@ -563,9 +549,7 @@ class FundFlowManager:
             是否成功
         """
         # 从迅投 API 获取估值
-        valuation = self.valuation_source.fetch_valuation(
-            product_name, valuation_date
-        )
+        valuation = self.valuation_source.fetch_valuation(product_name, valuation_date)
 
         if not valuation:
             logger.error(f"Failed to fetch valuation from XunTou: {product_name}")

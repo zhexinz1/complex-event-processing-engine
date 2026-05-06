@@ -7,7 +7,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
+
 
 @dataclass(frozen=True)
 class DatabaseConfig:
@@ -25,11 +27,13 @@ WRITE_TIMEOUT_SECONDS = 10
 
 _REQUIRED_KEYS = ("DB_HOST", "DB_PORT", "DB_USER", "DB_PASS", "DB_NAME")
 
+
 def _get_required_env(key: str, error_msg: str) -> str:
     value = os.getenv(key)
     if value is None:
         raise ValueError(error_msg)
     return value
+
 
 DB_CONFIG = DatabaseConfig(
     host=_get_required_env("DB_HOST", "环境变量 DB_HOST 未设置"),

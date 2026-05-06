@@ -13,7 +13,7 @@ from typing import Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-sys.path.insert(0, '/home/ubuntu/xt_sdk')
+sys.path.insert(0, "/home/ubuntu/xt_sdk")
 
 try:
     from XtTraderPyApi import (
@@ -23,6 +23,7 @@ try:
         EPriceType as _EPriceType,
         EOperationType as _EOperationType,
     )
+
     _XT_AVAILABLE = True
     XtError: Any = _XtError
     COrdinaryOrder: Any = _COrdinaryOrder
@@ -84,10 +85,12 @@ logger = logging.getLogger(__name__)
 # 数据结构
 # ---------------------------------------------------------------------------
 
+
 class OrderDirection(Enum):
     """订单方向"""
-    BUY = "buy"              # 股票买入
-    SELL = "sell"            # 股票卖出
+
+    BUY = "buy"  # 股票买入
+    SELL = "sell"  # 股票卖出
     OPEN_LONG = "open_long"  # 期货开多
     CLOSE_LONG = "close_long"  # 期货平多
     OPEN_SHORT = "open_short"  # 期货开空
@@ -96,29 +99,32 @@ class OrderDirection(Enum):
 
 class OrderPriceType(Enum):
     """订单价格类型"""
-    LIMIT = "limit"          # 限价
-    MARKET = "market"        # 市价
-    BEST_PRICE = "best"      # 最优价
-    TWAP = "twap"            # 时间加权平均价格算法
-    VWAP = "vwap"            # 成交量加权平均价格算法
+
+    LIMIT = "limit"  # 限价
+    MARKET = "market"  # 市价
+    BEST_PRICE = "best"  # 最优价
+    TWAP = "twap"  # 时间加权平均价格算法
+    VWAP = "vwap"  # 成交量加权平均价格算法
 
 
 @dataclass
 class OrderRequest:
     """下单请求"""
-    account_id: str          # 资金账号
-    asset_code: str          # 资产代码（如 "600519.SH"）
+
+    account_id: str  # 资金账号
+    asset_code: str  # 资产代码（如 "600519.SH"）
     direction: OrderDirection  # 买卖方向
-    quantity: int            # 数量
-    price: float = 0.0       # 价格（市价单可为0）
+    quantity: int  # 数量
+    price: float = 0.0  # 价格（市价单可为0）
     price_type: OrderPriceType = OrderPriceType.LIMIT
-    market: str = ""         # 市场代码（如 "SH"/"SZ"），如果为空则从asset_code解析
-    instrument: str = ""     # 合约代码（如 "600519"），如果为空则从asset_code解析
+    market: str = ""  # 市场代码（如 "SH"/"SZ"），如果为空则从asset_code解析
+    instrument: str = ""  # 合约代码（如 "600519"），如果为空则从asset_code解析
 
 
 @dataclass
 class OrderResult:
     """下单结果"""
+
     success: bool
     order_id: Optional[int] = None
     error_msg: Optional[str] = None
@@ -128,25 +134,32 @@ class OrderResult:
 # 下单回调（扩展基础回调，增加订单/成交推送）
 # ---------------------------------------------------------------------------
 
+
 class _OrderCallback(_XtBaseCallback):
     """迅投下单服务回调 — 在基础回调上增加订单和成交推送处理，直接写入 DB"""
 
     # SDK 订单状态枚举 → 我们的 XtStatus 映射
     _STATUS_MAP = {
         # EEntrustStatus 数值
-        1: "sent", 49: "sent",           # 已报
-        2: "partial", 50: "partial",     # 部分成交
-        3: "filled", 51: "filled",       # 全部成交
-        4: "cancelled", 54: "cancelled", # 已撤单
-        5: "partial", 55: "partial",     # 部成部撤
-        6: "rejected", 56: "rejected",   # 废单
-        52: "sent",                       # 待报
-        53: "sent",                       # 待撤
+        1: "sent",
+        49: "sent",  # 已报
+        2: "partial",
+        50: "partial",  # 部分成交
+        3: "filled",
+        51: "filled",  # 全部成交
+        4: "cancelled",
+        54: "cancelled",  # 已撤单
+        5: "partial",
+        55: "partial",  # 部成部撤
+        6: "rejected",
+        56: "rejected",  # 废单
+        52: "sent",  # 待报
+        53: "sent",  # 待撤
     }
 
     def __init__(self, **kwargs):
         # 提取 dao 参数，其余传给父类
-        self._dao = kwargs.pop('dao', None)
+        self._dao = kwargs.pop("dao", None)
         super().__init__(**kwargs)
 
     def onOrderEvent(self, order_event, error):
@@ -156,7 +169,7 @@ class _OrderCallback(_XtBaseCallback):
 
         # 解析状态值
         status_val = raw_status
-        if hasattr(status_val, 'value'):
+        if hasattr(status_val, "value"):
             status_val = status_val.value
 
         xt_status = self._STATUS_MAP.get(status_val, "sent")
@@ -164,7 +177,10 @@ class _OrderCallback(_XtBaseCallback):
 
         logger.info(
             "订单回报: order_id=%s, raw_status=%s → xt_status=%s, error=%s",
-            order_id, raw_status, xt_status, error_msg,
+            order_id,
+            raw_status,
+            xt_status,
+            error_msg,
         )
 
         if self._dao and order_id:
@@ -186,7 +202,9 @@ class _OrderCallback(_XtBaseCallback):
 
             logger.info(
                 "成交回报: order_id=%s, volume=%d, price=%.2f",
-                order_id, volume, price,
+                order_id,
+                volume,
+                price,
             )
 
             if self._dao and order_id:
@@ -206,6 +224,7 @@ class _OrderCallback(_XtBaseCallback):
 # 下单服务
 # ---------------------------------------------------------------------------
 
+
 class XtOrderService(XtBaseService):
     """
     迅投下单服务
@@ -216,7 +235,9 @@ class XtOrderService(XtBaseService):
     # 使用扩展的回调类（包含订单/成交推送）
     _callback_class = _OrderCallback
 
-    def place_order(self, order_req: OrderRequest, timeout: float = 10.0) -> OrderResult:
+    def place_order(
+        self, order_req: OrderRequest, timeout: float = 10.0
+    ) -> OrderResult:
         """
         同步下单
 
@@ -235,20 +256,20 @@ class XtOrderService(XtBaseService):
         if account_key is None:
             return OrderResult(
                 success=False,
-                error_msg=f"未找到账号 {order_req.account_id} 对应的 account_key"
+                error_msg=f"未找到账号 {order_req.account_id} 对应的 account_key",
             )
 
         try:
             # 解析资产代码
             if not order_req.market or not order_req.instrument:
-                parts = order_req.asset_code.split('.')
+                parts = order_req.asset_code.split(".")
                 if len(parts) == 2:
                     order_req.instrument = parts[0].lower()  # 合约代码必须小写！
-                    order_req.market = parts[1].upper()      # 交易所代码大写
+                    order_req.market = parts[1].upper()  # 交易所代码大写
                 else:
                     return OrderResult(
                         success=False,
-                        error_msg=f"无效的资产代码格式: {order_req.asset_code}"
+                        error_msg=f"无效的资产代码格式: {order_req.asset_code}",
                     )
 
             # 构造订单对象
@@ -261,8 +282,12 @@ class XtOrderService(XtBaseService):
 
             logger.info(
                 "准备下单: account_id=%s, instrument=%s, market=%s, volume=%d, price=%.2f, direction=%s",
-                order.m_strAccountID, order.m_strInstrument, order.m_strMarket,
-                order.m_nVolume, order.m_dPrice, order_req.direction.value,
+                order.m_strAccountID,
+                order.m_strInstrument,
+                order.m_strMarket,
+                order.m_nVolume,
+                order.m_dPrice,
+                order_req.direction.value,
             )
 
             # TWAP / VWAP → 走智能算法单路径
@@ -288,7 +313,9 @@ class XtOrderService(XtBaseService):
                 OrderDirection.OPEN_SHORT: EOperationType.OPT_OPEN_SHORT,
                 OrderDirection.CLOSE_SHORT: EOperationType.OPT_CLOSE_SHORT_TODAY,
             }
-            order.m_eOperationType = direction_map.get(order_req.direction, EOperationType.OPT_BUY)
+            order.m_eOperationType = direction_map.get(
+                order_req.direction, EOperationType.OPT_BUY
+            )
 
             # 同步下单
             error = XtError(0, "")
@@ -296,18 +323,28 @@ class XtOrderService(XtBaseService):
 
             logger.info(
                 "orderSync 返回: order_id=%s, error.isSuccess()=%s, error.errorMsg()=%s",
-                order_id, error.isSuccess(), error.errorMsg(),
+                order_id,
+                error.isSuccess(),
+                error.errorMsg(),
             )
 
             if error.isSuccess() and order_id > 0:
                 logger.info(
                     "下单成功: order_id=%s, account=%s, asset=%s, direction=%s, quantity=%d, price=%.2f",
-                    order_id, order_req.account_id, order_req.asset_code,
-                    order_req.direction.value, order_req.quantity, order_req.price,
+                    order_id,
+                    order_req.account_id,
+                    order_req.asset_code,
+                    order_req.direction.value,
+                    order_req.quantity,
+                    order_req.price,
                 )
                 return OrderResult(success=True, order_id=order_id)
             else:
-                error_msg = error.errorMsg() if not error.isSuccess() else f"订单被拒绝 (order_id={order_id})"
+                error_msg = (
+                    error.errorMsg()
+                    if not error.isSuccess()
+                    else f"订单被拒绝 (order_id={order_id})"
+                )
                 logger.error("下单失败: %s", error_msg)
                 return OrderResult(success=False, error_msg=error_msg)
 
@@ -325,7 +362,10 @@ class XtOrderService(XtBaseService):
         algo_type = order_req.price_type.value.upper()
         logger.info(
             "准备下达 %s 算法单: account=%s, asset=%s, volume=%d",
-            algo_type, order_req.account_id, order_req.asset_code, order_req.quantity,
+            algo_type,
+            order_req.account_id,
+            order_req.asset_code,
+            order_req.quantity,
         )
 
         try:
@@ -346,7 +386,9 @@ class XtOrderService(XtBaseService):
                 OrderDirection.OPEN_SHORT: EOperationType.OPT_OPEN_SHORT,
                 OrderDirection.CLOSE_SHORT: EOperationType.OPT_CLOSE_SHORT_TODAY,
             }
-            order.m_eOperationType = direction_map.get(order_req.direction, EOperationType.OPT_BUY)
+            order.m_eOperationType = direction_map.get(
+                order_req.direction, EOperationType.OPT_BUY
+            )
 
             now_ts = int(time.time())
             order.m_nValidTimeStart = now_ts
@@ -360,7 +402,7 @@ class XtOrderService(XtBaseService):
             if account_key is None:
                 return OrderResult(
                     success=False,
-                    error_msg=f"未找到账号 {order_req.account_id} 对应的 account_key"
+                    error_msg=f"未找到账号 {order_req.account_id} 对应的 account_key",
                 )
 
             error = XtError(0, "")
@@ -368,17 +410,27 @@ class XtOrderService(XtBaseService):
 
             logger.info(
                 "%s orderSync 返回: order_id=%s, success=%s, msg=%s",
-                algo_type, order_id, error.isSuccess(), error.errorMsg(),
+                algo_type,
+                order_id,
+                error.isSuccess(),
+                error.errorMsg(),
             )
 
             if error.isSuccess() and order_id > 0:
                 logger.info(
                     "%s 算法单下单成功: order_id=%s, asset=%s, quantity=%d",
-                    algo_type, order_id, order_req.asset_code, order_req.quantity,
+                    algo_type,
+                    order_id,
+                    order_req.asset_code,
+                    order_req.quantity,
                 )
                 return OrderResult(success=True, order_id=order_id)
             else:
-                error_msg = error.errorMsg() if not error.isSuccess() else f"算法单被拒绝 (order_id={order_id})"
+                error_msg = (
+                    error.errorMsg()
+                    if not error.isSuccess()
+                    else f"算法单被拒绝 (order_id={order_id})"
+                )
                 logger.error("%s 算法单下单失败: %s", algo_type, error_msg)
                 return OrderResult(success=False, error_msg=error_msg)
 
@@ -394,8 +446,7 @@ class XtOrderService(XtBaseService):
         account_key = self._account_ready.get(account_id)
         if account_key is None:
             return OrderResult(
-                success=False,
-                error_msg=f"未找到账号 {account_id} 对应的 account_key"
+                success=False, error_msg=f"未找到账号 {account_id} 对应的 account_key"
             )
 
         try:

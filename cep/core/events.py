@@ -18,13 +18,15 @@ from typing import Any
 # 信号类型枚举
 # ---------------------------------------------------------------------------
 
+
 class SignalType(str, Enum):
     """SignalEvent 的语义分类，下游 Handler 按此路由处理逻辑。"""
-    TRADE_OPPORTUNITY  = "TRADE_OPPORTUNITY"   # AST 规则命中，存在交易机会
-    REBALANCE_TRIGGER  = "REBALANCE_TRIGGER"   # 持仓偏离超阈值，需再平衡（已废弃，使用 REBALANCE_REQUEST）
-    REBALANCE_REQUEST  = "REBALANCE_REQUEST"   # 再平衡请求（统一的再平衡信号）
-    FUND_ALLOCATION    = "FUND_ALLOCATION"     # 定时资金分配指令
-    RISK_ALERT         = "RISK_ALERT"          # 风控预警（预留）
+
+    TRADE_OPPORTUNITY = "TRADE_OPPORTUNITY"  # AST 规则命中，存在交易机会
+    REBALANCE_TRIGGER = "REBALANCE_TRIGGER"  # 持仓偏离超阈值，需再平衡（已废弃，使用 REBALANCE_REQUEST）
+    REBALANCE_REQUEST = "REBALANCE_REQUEST"  # 再平衡请求（统一的再平衡信号）
+    FUND_ALLOCATION = "FUND_ALLOCATION"  # 定时资金分配指令
+    RISK_ALERT = "RISK_ALERT"  # 风控预警（预留）
 
 
 class OrderSide(str, Enum):
@@ -54,6 +56,7 @@ class OrderStatus(str, Enum):
 # 基类
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class BaseEvent:
     """
@@ -63,13 +66,15 @@ class BaseEvent:
         event_id:   全局唯一 ID，用于幂等去重与链路追踪。
         timestamp:  事件产生的 UTC 时间戳（精确到微秒）。
     """
-    event_id:  str      = field(default_factory=lambda: str(uuid.uuid4()))
+
+    event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
 # ---------------------------------------------------------------------------
 # 行情事件
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class TickEvent(BaseEvent):
@@ -89,19 +94,20 @@ class TickEvent(BaseEvent):
     向后兼容：
         可通过 .bid 和 .ask 属性访问买一价和卖一价（等价于 bid_prices[0] 和 ask_prices[0]）。
     """
-    symbol:      str   = ""
-    last_price:  float = 0.0
+
+    symbol: str = ""
+    last_price: float = 0.0
 
     # 五档买盘 (bid_prices[0] 是最优买价)
-    bid_prices:  tuple[float, ...] = field(default_factory=lambda: (0.0,) * 5)
-    bid_volumes: tuple[int, ...]   = field(default_factory=lambda: (0,) * 5)
+    bid_prices: tuple[float, ...] = field(default_factory=lambda: (0.0,) * 5)
+    bid_volumes: tuple[int, ...] = field(default_factory=lambda: (0,) * 5)
 
     # 五档卖盘 (ask_prices[0] 是最优卖价)
-    ask_prices:  tuple[float, ...] = field(default_factory=lambda: (0.0,) * 5)
-    ask_volumes: tuple[int, ...]   = field(default_factory=lambda: (0,) * 5)
+    ask_prices: tuple[float, ...] = field(default_factory=lambda: (0.0,) * 5)
+    ask_volumes: tuple[int, ...] = field(default_factory=lambda: (0,) * 5)
 
-    volume:      int   = 0
-    turnover:    float = 0.0
+    volume: int = 0
+    turnover: float = 0.0
 
     # 向后兼容的属性
     @property
@@ -128,20 +134,22 @@ class BarEvent(BaseEvent):
         turnover:  成交额（元）。
         bar_time:  该 Bar 的开盘时间。
     """
-    symbol:   str      = ""
-    freq:     str      = "1m"
-    open:     float    = 0.0
-    high:     float    = 0.0
-    low:      float    = 0.0
-    close:    float    = 0.0
-    volume:   int      = 0
-    turnover: float    = 0.0
+
+    symbol: str = ""
+    freq: str = "1m"
+    open: float = 0.0
+    high: float = 0.0
+    low: float = 0.0
+    close: float = 0.0
+    volume: int = 0
+    turnover: float = 0.0
     bar_time: datetime = field(default_factory=datetime.utcnow)
 
 
 # ---------------------------------------------------------------------------
 # 定时事件
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class TimerEvent(BaseEvent):
@@ -152,13 +160,15 @@ class TimerEvent(BaseEvent):
         timer_id:  定时器名称，如 "DAILY_REBALANCE_1430"。
         fired_at:  实际触发时间（可能与计划时间有微小偏差）。
     """
-    timer_id: str      = ""
+
+    timer_id: str = ""
     fired_at: datetime = field(default_factory=datetime.utcnow)
 
 
 # ---------------------------------------------------------------------------
 # 信号事件（规则引擎的输出）
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SignalEvent(BaseEvent):
@@ -176,11 +186,12 @@ class SignalEvent(BaseEvent):
         payload:     附加元数据字典，内容由各触发器自定义。
         rule_id:     触发该信号的规则 ID（可选，用于回测归因）。
     """
-    source:      str        = ""
-    symbol:      str        = ""
+
+    source: str = ""
+    symbol: str = ""
     signal_type: SignalType = SignalType.TRADE_OPPORTUNITY
-    payload:     dict[str, Any] = field(default_factory=dict)
-    rule_id:     str        = ""
+    payload: dict[str, Any] = field(default_factory=dict)
+    rule_id: str = ""
 
 
 @dataclass(frozen=True)

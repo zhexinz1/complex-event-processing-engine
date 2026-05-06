@@ -2,6 +2,7 @@
 数据库模型定义
 用于净入金触发的增量买入流程
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -11,12 +12,14 @@ from typing import Optional
 
 class ProductStatus(str, Enum):
     """产品状态"""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
 
 
 class OrderStatus(str, Enum):
     """订单状态"""
+
     PENDING = "pending"
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"
@@ -26,6 +29,7 @@ class OrderStatus(str, Enum):
 
 class FundInflowStatus(str, Enum):
     """净入金状态"""
+
     PENDING = "pending"
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"
@@ -33,26 +37,29 @@ class FundInflowStatus(str, Enum):
 
 class UserSignalStatus(str, Enum):
     """用户信号状态"""
+
     ENABLED = "enabled"
     DISABLED = "disabled"
 
 
 class XtStatus(str, Enum):
     """迅投侧订单状态"""
-    NOT_SENT = "not_sent"          # 订单已创建，尚未调用 SDK
-    SEND_FAILED = "send_failed"    # 调用 SDK 时报错（网络断、SDK 崩）
-    SENT = "sent"                  # SDK 返回了 xt_order_id，已入迅投系统
-    RUNNING = "running"            # 指令运行中
-    REJECTED = "rejected"          # 迅投/CTP 驳回（资金不足等）
-    FILLED = "filled"              # 全部成交
-    PARTIAL = "partial"            # 部分成交
-    CANCELLED = "cancelled"        # 已撤单
-    STOPPED = "stopped"            # 已停止
+
+    NOT_SENT = "not_sent"  # 订单已创建，尚未调用 SDK
+    SEND_FAILED = "send_failed"  # 调用 SDK 时报错（网络断、SDK 崩）
+    SENT = "sent"  # SDK 返回了 xt_order_id，已入迅投系统
+    RUNNING = "running"  # 指令运行中
+    REJECTED = "rejected"  # 迅投/CTP 驳回（资金不足等）
+    FILLED = "filled"  # 全部成交
+    PARTIAL = "partial"  # 部分成交
+    CANCELLED = "cancelled"  # 已撤单
+    STOPPED = "stopped"  # 已停止
 
 
 @dataclass
 class Product:
     """产品配置"""
+
     id: Optional[int]
     product_name: str
     leverage_ratio: Decimal  # 杠杆倍数
@@ -68,6 +75,7 @@ class Product:
 @dataclass
 class FractionalShare:
     """留白数据（合约维度）"""
+
     id: Optional[int]
     product_name: str
     asset_code: str  # 合约代码
@@ -78,6 +86,7 @@ class FractionalShare:
 @dataclass
 class PendingOrder:
     """待确认订单"""
+
     id: Optional[int]
     batch_id: str  # 批次ID
     product_name: str
@@ -94,17 +103,18 @@ class PendingOrder:
     confirmed_at: Optional[datetime] = None
     executed_at: Optional[datetime] = None
     error_msg: Optional[str] = None
-    xt_order_id: Optional[int] = None      # 迅投返回的指令ID
-    xt_status: str = "not_sent"            # 迅投侧状态（XtStatus 枚举值）
-    xt_error_msg: Optional[str] = None     # CTP 驳回原因
-    xt_traded_volume: int = 0              # 迅投回报的成交量
-    xt_traded_price: float = 0.0           # 迅投回报的成交价
-    order_price_type: str = "limit"        # 下单价格类型 (limit/market/best/twap/vwap)
+    xt_order_id: Optional[int] = None  # 迅投返回的指令ID
+    xt_status: str = "not_sent"  # 迅投侧状态（XtStatus 枚举值）
+    xt_error_msg: Optional[str] = None  # CTP 驳回原因
+    xt_traded_volume: int = 0  # 迅投回报的成交量
+    xt_traded_price: float = 0.0  # 迅投回报的成交价
+    order_price_type: str = "limit"  # 下单价格类型 (limit/market/best/twap/vwap)
 
 
 @dataclass
 class FundInflow:
     """净入金记录"""
+
     id: Optional[int]
     batch_id: str
     product_name: str

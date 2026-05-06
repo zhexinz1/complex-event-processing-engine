@@ -53,7 +53,7 @@ class MultiTimeframeBarAggregator:
         self.event_bus = event_bus
         self.base_freq = base_freq
         self.target_freqs = target_freqs or []
-        
+
         # 记录每个 (symbol, target_freq) 当前正在聚合的 K 线属性
         self._current_buckets: dict[tuple[str, str], datetime] = {}
         self._buffers: dict[tuple[str, str], list[BarEvent]] = {}
@@ -74,7 +74,7 @@ class MultiTimeframeBarAggregator:
             key = (event.symbol, target_freq)
 
             current_bucket = self._current_buckets.get(key)
-            
+
             if current_bucket is None:
                 # 初始状态
                 self._current_buckets[key] = bucket
@@ -82,7 +82,7 @@ class MultiTimeframeBarAggregator:
             elif bucket > current_bucket:
                 # 跨越了边界，封闭上一根 K 线并发布
                 self._emit_aggregated_bar(key, target_freq)
-                
+
                 # 开启新周期
                 self._current_buckets[key] = bucket
                 self._buffers[key] = [event]
@@ -97,15 +97,15 @@ class MultiTimeframeBarAggregator:
             target_freq = key[1]
             self._emit_aggregated_bar(key, target_freq)
             self._current_buckets.pop(key, None)
-            
+
     def _emit_aggregated_bar(self, key: tuple[str, str], target_freq: str) -> None:
         buffer = self._buffers.get(key)
         if not buffer:
             return
-            
+
         symbol = key[0]
         bucket_time = self._current_buckets[key]
-        
+
         aggregated = BarEvent(
             symbol=symbol,
             freq=target_freq,

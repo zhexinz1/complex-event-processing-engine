@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-MOCK_USER_SIGNAL_CODE = '''
+MOCK_USER_SIGNAL_CODE = """
 class Signal:
     name = "贵州茅台RSI均值回归"
     symbols = ["600519.SH"]
@@ -56,7 +56,7 @@ class Signal:
             }
 
         return None
-'''
+"""
 
 
 def main() -> None:

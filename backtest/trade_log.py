@@ -20,9 +20,13 @@ def _log_timestamp(path: Path) -> str:
     prefix = "backtest-"
     stem = path.stem
     if stem.startswith(prefix):
-        raw_timestamp = stem[len(prefix):].split("-", 1)[0]
+        raw_timestamp = stem[len(prefix) :].split("-", 1)[0]
         try:
-            return datetime.strptime(raw_timestamp, "%Y%m%dT%H%M%S").replace(tzinfo=UTC).isoformat()
+            return (
+                datetime.strptime(raw_timestamp, "%Y%m%dT%H%M%S")
+                .replace(tzinfo=UTC)
+                .isoformat()
+            )
         except ValueError:
             pass
     return datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat()
@@ -33,7 +37,11 @@ def _summarize_symbols(payload: dict[str, Any]) -> list[str]:
     for key in ("signals", "orders", "trades", "positions"):
         rows = payload.get(key, [])
         if isinstance(rows, list):
-            symbols.update(str(row.get("symbol")) for row in rows if isinstance(row, dict) and row.get("symbol"))
+            symbols.update(
+                str(row.get("symbol"))
+                for row in rows
+                if isinstance(row, dict) and row.get("symbol")
+            )
     return sorted(symbols)
 
 
@@ -87,12 +95,22 @@ def _summarize_log_payload(path: Path, payload: dict[str, Any]) -> dict[str, Any
         "final_equity": payload.get("final_equity", 0.0),
         "realized_pnl": payload.get("realized_pnl", 0.0),
         "unrealized_pnl": payload.get("unrealized_pnl", 0.0),
-        "signal_count": len(payload.get("signals", [])) if isinstance(payload.get("signals"), list) else 0,
-        "order_count": len(payload.get("orders", [])) if isinstance(payload.get("orders"), list) else 0,
-        "trade_count": len(payload.get("trades", [])) if isinstance(payload.get("trades"), list) else 0,
-        "position_count": len(payload.get("positions", [])) if isinstance(payload.get("positions"), list) else 0,
+        "signal_count": len(payload.get("signals", []))
+        if isinstance(payload.get("signals"), list)
+        else 0,
+        "order_count": len(payload.get("orders", []))
+        if isinstance(payload.get("orders"), list)
+        else 0,
+        "trade_count": len(payload.get("trades", []))
+        if isinstance(payload.get("trades"), list)
+        else 0,
+        "position_count": len(payload.get("positions", []))
+        if isinstance(payload.get("positions"), list)
+        else 0,
         "symbols": _summarize_symbols(payload),
-        "equity_curve_count": len(payload.get("equity_curve", [])) if isinstance(payload.get("equity_curve"), list) else 0,
+        "equity_curve_count": len(payload.get("equity_curve", []))
+        if isinstance(payload.get("equity_curve"), list)
+        else 0,
         "first_timestamp": first_timestamp,
         "last_timestamp": last_timestamp,
     }
@@ -107,14 +125,18 @@ def _resolve_log_path(log_id: str, log_dir: Path) -> Path:
     return path
 
 
-def list_backtest_trade_logs(log_dir: Path | None = None, limit: int = 100) -> list[dict[str, Any]]:
+def list_backtest_trade_logs(
+    log_dir: Path | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
     """Read persisted backtest trade log summaries, newest first."""
     target_dir = log_dir or DEFAULT_LOG_DIR
     if not target_dir.exists():
         return []
 
     records: list[dict[str, Any]] = []
-    for path in sorted(target_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+    for path in sorted(
+        target_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True
+    ):
         if len(records) >= limit:
             break
         payload = _read_log_payload(path)
@@ -138,7 +160,9 @@ def read_backtest_trade_log(
     if payload is None:
         return None
     summary = _summarize_log_payload(path, payload)
-    payload["equity_curve"] = _sample_sequence(payload.get("equity_curve", []), equity_points)
+    payload["equity_curve"] = _sample_sequence(
+        payload.get("equity_curve", []), equity_points
+    )
     summary["data"] = payload
     return summary
 
@@ -225,5 +249,7 @@ def write_backtest_trade_log(
         ],
     }
 
-    log_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    log_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return log_path

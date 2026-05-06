@@ -2,6 +2,7 @@
 数据库访问层 (DAO)
 提供对产品、留白数据、待确认订单、净入金记录的 CRUD 操作
 """
+
 import pymysql
 import json
 from decimal import Decimal
@@ -10,10 +11,14 @@ from datetime import datetime
 import uuid
 
 from database.models import (
-    Product, ProductStatus,
-    PendingOrder, OrderStatus,
-    FundInflow, FundInflowStatus,
-    UserSignalDefinition, UserSignalStatus,
+    Product,
+    ProductStatus,
+    PendingOrder,
+    OrderStatus,
+    FundInflow,
+    FundInflowStatus,
+    UserSignalDefinition,
+    UserSignalStatus,
 )
 from database.config import DB_CONFIG
 
@@ -30,13 +35,13 @@ class DatabaseDAO:
         database: str | None = None,
     ):
         self.connection_params = {
-            'host': host or DB_CONFIG.host,
-            'port': port or DB_CONFIG.port,
-            'user': user or DB_CONFIG.user,
-            'password': password if password is not None else DB_CONFIG.password,
-            'database': database or DB_CONFIG.database,
-            'charset': DB_CONFIG.charset,
-            'cursorclass': pymysql.cursors.DictCursor
+            "host": host or DB_CONFIG.host,
+            "port": port or DB_CONFIG.port,
+            "user": user or DB_CONFIG.user,
+            "password": password if password is not None else DB_CONFIG.password,
+            "database": database or DB_CONFIG.database,
+            "charset": DB_CONFIG.charset,
+            "cursorclass": pymysql.cursors.DictCursor,
         }
 
     def _get_connection(self):
@@ -55,16 +60,16 @@ class DatabaseDAO:
                 row = cursor.fetchone()
                 if row:
                     return Product(
-                        id=row['id'],
-                        product_name=row['product_name'],
-                        leverage_ratio=row['leverage_ratio'],
-                        account_id=row['account_id'],
-                        fund_account=row.get('fund_account'),
-                        xt_username=row.get('xt_username'),
-                        xt_password=row.get('xt_password'),
-                        status=ProductStatus(row['status']),
-                        created_at=row['created_at'],
-                        updated_at=row['updated_at']
+                        id=row["id"],
+                        product_name=row["product_name"],
+                        leverage_ratio=row["leverage_ratio"],
+                        account_id=row["account_id"],
+                        fund_account=row.get("fund_account"),
+                        xt_username=row.get("xt_username"),
+                        xt_password=row.get("xt_password"),
+                        status=ProductStatus(row["status"]),
+                        created_at=row["created_at"],
+                        updated_at=row["updated_at"],
                     )
                 return None
         finally:
@@ -80,16 +85,16 @@ class DatabaseDAO:
                 rows = cursor.fetchall()
                 return [
                     Product(
-                        id=row['id'],
-                        product_name=row['product_name'],
-                        leverage_ratio=row['leverage_ratio'],
-                        account_id=row['account_id'],
-                        fund_account=row.get('fund_account'),
-                        xt_username=row.get('xt_username'),
-                        xt_password=row.get('xt_password'),
-                        status=ProductStatus(row['status']),
-                        created_at=row['created_at'],
-                        updated_at=row['updated_at']
+                        id=row["id"],
+                        product_name=row["product_name"],
+                        leverage_ratio=row["leverage_ratio"],
+                        account_id=row["account_id"],
+                        fund_account=row.get("fund_account"),
+                        xt_username=row.get("xt_username"),
+                        xt_password=row.get("xt_password"),
+                        status=ProductStatus(row["status"]),
+                        created_at=row["created_at"],
+                        updated_at=row["updated_at"],
                     )
                     for row in rows
                 ]
@@ -98,7 +103,9 @@ class DatabaseDAO:
 
     # ==================== 用户信号管理 ====================
 
-    def list_user_signals(self, status: Optional[UserSignalStatus] = None) -> List[UserSignalDefinition]:
+    def list_user_signals(
+        self, status: Optional[UserSignalStatus] = None
+    ) -> List[UserSignalDefinition]:
         """查询研究员信号定义"""
         conn = self._get_connection()
         try:
@@ -119,7 +126,9 @@ class DatabaseDAO:
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM user_signal_definitions WHERE id = %s", (signal_id,))
+                cursor.execute(
+                    "SELECT * FROM user_signal_definitions WHERE id = %s", (signal_id,)
+                )
                 row = cursor.fetchone()
                 return self._row_to_user_signal(row) if row else None
         finally:
@@ -184,7 +193,9 @@ class DatabaseDAO:
         finally:
             conn.close()
 
-    def update_user_signal_status(self, signal_id: int, status: UserSignalStatus) -> bool:
+    def update_user_signal_status(
+        self, signal_id: int, status: UserSignalStatus
+    ) -> bool:
         """启用或停用研究员信号"""
         conn = self._get_connection()
         try:
@@ -204,7 +215,9 @@ class DatabaseDAO:
         """将数据库行转换为 UserSignalDefinition 对象"""
         symbols_raw = row.get("symbols") or "[]"
         try:
-            symbols = json.loads(symbols_raw) if isinstance(symbols_raw, str) else symbols_raw
+            symbols = (
+                json.loads(symbols_raw) if isinstance(symbols_raw, str) else symbols_raw
+            )
         except json.JSONDecodeError:
             symbols = []
         return UserSignalDefinition(
@@ -229,11 +242,13 @@ class DatabaseDAO:
                 sql = "SELECT fractional_amount FROM fractional_shares WHERE product_name = %s AND asset_code = %s"
                 cursor.execute(sql, (product_name, asset_code))
                 row = cursor.fetchone()
-                return row['fractional_amount'] if row else Decimal('0.0')
+                return row["fractional_amount"] if row else Decimal("0.0")
         finally:
             conn.close()
 
-    def update_fractional_share(self, product_name: str, asset_code: str, fractional_amount: Decimal):
+    def update_fractional_share(
+        self, product_name: str, asset_code: str, fractional_amount: Decimal
+    ):
         """更新留白数据（INSERT ON DUPLICATE KEY UPDATE）"""
         conn = self._get_connection()
         try:
@@ -243,7 +258,10 @@ class DatabaseDAO:
                 VALUES (%s, %s, %s)
                 ON DUPLICATE KEY UPDATE fractional_amount = %s, last_updated = CURRENT_TIMESTAMP
                 """
-                cursor.execute(sql, (product_name, asset_code, fractional_amount, fractional_amount))
+                cursor.execute(
+                    sql,
+                    (product_name, asset_code, fractional_amount, fractional_amount),
+                )
             conn.commit()
         finally:
             conn.close()
@@ -263,13 +281,23 @@ class DatabaseDAO:
                     order_price_type
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                cursor.execute(sql, (
-                    order.batch_id, order.product_name, order.asset_code,
-                    order.target_market_value, order.price, order.contract_multiplier,
-                    order.theoretical_quantity, order.rounded_quantity,
-                    order.fractional_part, order.final_quantity, order.status.value,
-                    order.order_price_type
-                ))
+                cursor.execute(
+                    sql,
+                    (
+                        order.batch_id,
+                        order.product_name,
+                        order.asset_code,
+                        order.target_market_value,
+                        order.price,
+                        order.contract_multiplier,
+                        order.theoretical_quantity,
+                        order.rounded_quantity,
+                        order.fractional_part,
+                        order.final_quantity,
+                        order.status.value,
+                        order.order_price_type,
+                    ),
+                )
             conn.commit()
             return cursor.lastrowid
         finally:
@@ -287,7 +315,9 @@ class DatabaseDAO:
         finally:
             conn.close()
 
-    def get_pending_orders_by_product(self, product_name: str, status: Optional[OrderStatus] = None) -> List[PendingOrder]:
+    def get_pending_orders_by_product(
+        self, product_name: str, status: Optional[OrderStatus] = None
+    ) -> List[PendingOrder]:
         """根据产品名称查询待确认订单"""
         conn = self._get_connection()
         try:
@@ -306,28 +336,28 @@ class DatabaseDAO:
     def _row_to_pending_order(self, row: dict) -> PendingOrder:
         """将数据库行转换为 PendingOrder 对象"""
         return PendingOrder(
-            id=row['id'],
-            batch_id=row['batch_id'],
-            product_name=row['product_name'],
-            asset_code=row['asset_code'],
-            target_market_value=row['target_market_value'],
-            price=row['price'],
-            contract_multiplier=row['contract_multiplier'],
-            theoretical_quantity=row['theoretical_quantity'],
-            rounded_quantity=row['rounded_quantity'],
-            fractional_part=row['fractional_part'],
-            final_quantity=row['final_quantity'],
-            status=OrderStatus(row['status']),
-            created_at=row['created_at'],
-            confirmed_at=row['confirmed_at'],
-            executed_at=row['executed_at'],
-            error_msg=row['error_msg'],
-            xt_order_id=row.get('xt_order_id'),
-            xt_status=row.get('xt_status', 'not_sent'),
-            xt_error_msg=row.get('xt_error_msg'),
-            xt_traded_volume=row.get('xt_traded_volume', 0),
-            xt_traded_price=row.get('xt_traded_price', 0.0),
-            order_price_type=row.get('order_price_type', 'limit'),
+            id=row["id"],
+            batch_id=row["batch_id"],
+            product_name=row["product_name"],
+            asset_code=row["asset_code"],
+            target_market_value=row["target_market_value"],
+            price=row["price"],
+            contract_multiplier=row["contract_multiplier"],
+            theoretical_quantity=row["theoretical_quantity"],
+            rounded_quantity=row["rounded_quantity"],
+            fractional_part=row["fractional_part"],
+            final_quantity=row["final_quantity"],
+            status=OrderStatus(row["status"]),
+            created_at=row["created_at"],
+            confirmed_at=row["confirmed_at"],
+            executed_at=row["executed_at"],
+            error_msg=row["error_msg"],
+            xt_order_id=row.get("xt_order_id"),
+            xt_status=row.get("xt_status", "not_sent"),
+            xt_error_msg=row.get("xt_error_msg"),
+            xt_traded_volume=row.get("xt_traded_volume", 0),
+            xt_traded_price=row.get("xt_traded_price", 0.0),
+            order_price_type=row.get("order_price_type", "limit"),
         )
 
     def update_order_final_quantity(self, order_id: int, final_quantity: int):
@@ -341,9 +371,13 @@ class DatabaseDAO:
         finally:
             conn.close()
 
-    def update_order_status(self, order_id: int, status: OrderStatus,
-                           confirmed_by: Optional[str] = None,
-                           error_msg: Optional[str] = None):
+    def update_order_status(
+        self,
+        order_id: int,
+        status: OrderStatus,
+        confirmed_by: Optional[str] = None,
+        error_msg: Optional[str] = None,
+    ):
         """更新订单状态"""
         conn = self._get_connection()
         try:
@@ -406,14 +440,16 @@ class DatabaseDAO:
         "stopped": "failed",
     }
 
-    def update_order_xt_status(self, xt_order_id: int, xt_status: str,
-                               xt_error_msg: str = ""):
+    def update_order_xt_status(
+        self, xt_order_id: int, xt_status: str, xt_error_msg: str = ""
+    ):
         """根据迅投指令ID更新订单的迅投侧状态（回调 / 对账使用）
 
         当 xt_status 到达终态（filled/rejected/cancelled/stopped）时，
         同步更新业务 status 字段，保持两个状态一致。
         """
         import logging as _logging
+
         _logger = _logging.getLogger(__name__)
 
         conn = self._get_connection()
@@ -425,22 +461,32 @@ class DatabaseDAO:
                     sql = """UPDATE pending_orders
                              SET xt_status = %s, xt_error_msg = %s, status = %s
                              WHERE xt_order_id = %s"""
-                    cursor.execute(sql, (xt_status, xt_error_msg, biz_status, xt_order_id))
+                    cursor.execute(
+                        sql, (xt_status, xt_error_msg, biz_status, xt_order_id)
+                    )
                 else:
                     sql = """UPDATE pending_orders
                              SET xt_status = %s, xt_error_msg = %s
                              WHERE xt_order_id = %s"""
                     cursor.execute(sql, (xt_status, xt_error_msg, xt_order_id))
                 if cursor.rowcount == 0:
-                    _logger.debug("update_order_xt_status: xt_order_id=%s 未匹配到订单", xt_order_id)
+                    _logger.debug(
+                        "update_order_xt_status: xt_order_id=%s 未匹配到订单",
+                        xt_order_id,
+                    )
                 elif biz_status:
-                    _logger.info("update_order_xt_status: xt_order_id=%s 终态同步 status → %s", xt_order_id, biz_status)
+                    _logger.info(
+                        "update_order_xt_status: xt_order_id=%s 终态同步 status → %s",
+                        xt_order_id,
+                        biz_status,
+                    )
             conn.commit()
         finally:
             conn.close()
 
-    def update_order_xt_trade(self, xt_order_id: int, traded_volume: int,
-                              traded_price: float):
+    def update_order_xt_trade(
+        self, xt_order_id: int, traded_volume: int, traded_price: float
+    ):
         """成交回报写入（回调使用）"""
         conn = self._get_connection()
         try:
@@ -460,8 +506,10 @@ class DatabaseDAO:
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:
-                placeholders = ', '.join(['%s'] * len(statuses))
-                sql = f"SELECT * FROM pending_orders WHERE xt_status IN ({placeholders})"
+                placeholders = ", ".join(["%s"] * len(statuses))
+                sql = (
+                    f"SELECT * FROM pending_orders WHERE xt_status IN ({placeholders})"
+                )
                 cursor.execute(sql, statuses)
                 return [self._row_to_pending_order(row) for row in cursor.fetchall()]
         finally:
@@ -480,11 +528,18 @@ class DatabaseDAO:
                     leveraged_amount, input_by, status
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """
-                cursor.execute(sql, (
-                    inflow.batch_id, inflow.product_name, inflow.net_inflow,
-                    inflow.leverage_ratio, inflow.leveraged_amount,
-                    inflow.input_by, inflow.status.value
-                ))
+                cursor.execute(
+                    sql,
+                    (
+                        inflow.batch_id,
+                        inflow.product_name,
+                        inflow.net_inflow,
+                        inflow.leverage_ratio,
+                        inflow.leveraged_amount,
+                        inflow.input_by,
+                        inflow.status.value,
+                    ),
+                )
             conn.commit()
             return inflow.batch_id
         finally:
@@ -500,17 +555,17 @@ class DatabaseDAO:
                 row = cursor.fetchone()
                 if row:
                     return FundInflow(
-                        id=row['id'],
-                        batch_id=row['batch_id'],
-                        product_name=row['product_name'],
-                        net_inflow=row['net_inflow'],
-                        leverage_ratio=row['leverage_ratio'],
-                        leveraged_amount=row['leveraged_amount'],
-                        input_by=row['input_by'],
-                        input_at=row['input_at'],
-                        confirmed_by=row['confirmed_by'],
-                        confirmed_at=row['confirmed_at'],
-                        status=FundInflowStatus(row['status'])
+                        id=row["id"],
+                        batch_id=row["batch_id"],
+                        product_name=row["product_name"],
+                        net_inflow=row["net_inflow"],
+                        leverage_ratio=row["leverage_ratio"],
+                        leveraged_amount=row["leveraged_amount"],
+                        input_by=row["input_by"],
+                        input_at=row["input_at"],
+                        confirmed_by=row["confirmed_by"],
+                        confirmed_at=row["confirmed_at"],
+                        status=FundInflowStatus(row["status"]),
                     )
                 return None
         finally:
@@ -526,25 +581,29 @@ class DatabaseDAO:
                 rows = cursor.fetchall()
                 return [
                     FundInflow(
-                        id=row['id'],
-                        batch_id=row['batch_id'],
-                        product_name=row['product_name'],
-                        net_inflow=row['net_inflow'],
-                        leverage_ratio=row['leverage_ratio'],
-                        leveraged_amount=row['leveraged_amount'],
-                        input_by=row['input_by'],
-                        input_at=row['input_at'],
-                        confirmed_by=row['confirmed_by'],
-                        confirmed_at=row['confirmed_at'],
-                        status=FundInflowStatus(row['status'])
+                        id=row["id"],
+                        batch_id=row["batch_id"],
+                        product_name=row["product_name"],
+                        net_inflow=row["net_inflow"],
+                        leverage_ratio=row["leverage_ratio"],
+                        leveraged_amount=row["leveraged_amount"],
+                        input_by=row["input_by"],
+                        input_at=row["input_at"],
+                        confirmed_by=row["confirmed_by"],
+                        confirmed_at=row["confirmed_at"],
+                        status=FundInflowStatus(row["status"]),
                     )
                     for row in rows
                 ]
         finally:
             conn.close()
 
-    def update_fund_inflow_status(self, batch_id: str, status: FundInflowStatus,
-                                  confirmed_by: Optional[str] = None):
+    def update_fund_inflow_status(
+        self,
+        batch_id: str,
+        status: FundInflowStatus,
+        confirmed_by: Optional[str] = None,
+    ):
         """更新净入金状态"""
         conn = self._get_connection()
         try:
@@ -575,6 +634,7 @@ class DatabaseDAO:
     def get_all_target_assets(self) -> List[str]:
         """获取全网需要监听行情的目标资产合约代码列表"""
         import logging as _logging
+
         _logger = _logging.getLogger(__name__)
 
         conn = self._get_connection()
@@ -584,7 +644,7 @@ class DatabaseDAO:
                 cursor.execute(sql)
                 rows = cursor.fetchall()
                 if rows:
-                    return [row['asset_code'] for row in rows]
+                    return [row["asset_code"] for row in rows]
                 return []
         except Exception as e:
             _logger.error("get_all_target_assets 查询异常（可能连接超时）: %s", e)

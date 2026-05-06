@@ -41,9 +41,9 @@ logger = logging.getLogger("ctp_example")
 # SimNow 仿真账户配置（替换为你自己的账号）
 # ---------------------------------------------------------------------------
 FRONT_ADDR = "tcp://182.254.243.31:30011"  # 你原来用的地址
-BROKER_ID  = "9999"          # SimNow 固定经纪商代码
-USER_ID    = "259563"  # 替换为你的 SimNow 账号
-PASSWORD   = "ZZXgoUSA@2018" # 替换为你的 SimNow 密码
+BROKER_ID = "9999"  # SimNow 固定经纪商代码
+USER_ID = "259563"  # 替换为你的 SimNow 账号
+PASSWORD = "ZZXgoUSA@2018"  # 替换为你的 SimNow 密码
 
 # 订阅的主力合约（按当期主力合约调整）
 # 尝试订阅 2026年4月的近月合约
@@ -53,33 +53,36 @@ SYMBOLS = ["au2604", "rb2605", "hc2605"]
 # 事件处理器
 # ---------------------------------------------------------------------------
 
+
 def on_tick(event: TickEvent) -> None:
     """处理 Tick 事件，显示五档行情"""
-    logger.info(f"\n{'='*80}")
-    logger.info(f"[TICK] {event.symbol:12s} 最新价={event.last_price:>10.2f}  成交量={event.volume}")
-    logger.info(f"{'='*80}")
+    logger.info(f"\n{'=' * 80}")
+    logger.info(
+        f"[TICK] {event.symbol:12s} 最新价={event.last_price:>10.2f}  成交量={event.volume}"
+    )
+    logger.info(f"{'=' * 80}")
 
     # 显示五档卖盘（从卖五到卖一，价格从高到低）
     logger.info("  卖盘 (Ask):")
     for i in range(4, -1, -1):  # 从卖五到卖一
         price = event.ask_prices[i]
         volume = event.ask_volumes[i]
-        level = f"卖{i+1}"
+        level = f"卖{i + 1}"
         logger.info(f"    {level}  价格: {price:>10.2f}  量: {volume:>8d}")
 
-    logger.info(f"  {'-'*60}")
+    logger.info(f"  {'-' * 60}")
     logger.info(f"  最新价: {event.last_price:>10.2f}")
-    logger.info(f"  {'-'*60}")
+    logger.info(f"  {'-' * 60}")
 
     # 显示五档买盘（从买一到买五，价格从高到低）
     logger.info("  买盘 (Bid):")
     for i in range(5):  # 从买一到买五
         price = event.bid_prices[i]
         volume = event.bid_volumes[i]
-        level = f"买{i+1}"
+        level = f"买{i + 1}"
         logger.info(f"    {level}  价格: {price:>10.2f}  量: {volume:>8d}")
 
-    logger.info(f"{'='*80}\n")
+    logger.info(f"{'=' * 80}\n")
 
 
 def on_bar(event: BarEvent) -> None:
@@ -93,6 +96,7 @@ def on_bar(event: BarEvent) -> None:
 # ---------------------------------------------------------------------------
 # 主程序
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     # 1. 创建事件总线

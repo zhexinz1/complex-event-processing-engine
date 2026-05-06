@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # API 请求/响应数据类
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FundInFlowRequest:
     """
@@ -42,6 +43,7 @@ class FundInFlowRequest:
         operator:    操作人
         timestamp:   操作时间
     """
+
     amount: float
     remark: str = ""
     operator: str = "system"
@@ -62,6 +64,7 @@ class RebalanceRequest:
         new_capital: 新增资金（可选）
         operator:    操作人
     """
+
     reason: str = "manual"
     new_capital: float = 0.0
     operator: str = "system"
@@ -78,6 +81,7 @@ class APIResponse:
         data:     响应数据
         code:     状态码
     """
+
     success: bool
     message: str
     data: Any = None
@@ -87,6 +91,7 @@ class APIResponse:
 # ---------------------------------------------------------------------------
 # 前端 API 接口
 # ---------------------------------------------------------------------------
+
 
 class FrontendAPI:
     """
@@ -117,11 +122,7 @@ class FrontendAPI:
     ```
     """
 
-    def __init__(
-        self,
-        event_bus: EventBus,
-        portfolio_ctx: PortfolioContext
-    ):
+    def __init__(self, event_bus: EventBus, portfolio_ctx: PortfolioContext):
         """
         初始化前端 API。
 
@@ -161,9 +162,7 @@ class FrontendAPI:
             # 校验入金金额
             if request.amount <= 0:
                 return APIResponse(
-                    success=False,
-                    message="入金金额必须大于 0",
-                    code=400
+                    success=False, message="入金金额必须大于 0", code=400
                 )
 
             # 记录入金信息（实际应存储到数据库）
@@ -183,9 +182,9 @@ class FrontendAPI:
                     "trigger_type": "fund_inflow",
                     "new_capital": request.amount,
                     "operator": request.operator,
-                    "remark": request.remark
+                    "remark": request.remark,
                 },
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
             self.event_bus.publish(signal)
 
@@ -194,22 +193,20 @@ class FrontendAPI:
                 message=f"入金申请已提交，金额：{request.amount:,.2f} 元",
                 data={
                     "amount": request.amount,
-                    "timestamp": request.timestamp.isoformat() if request.timestamp else None
-                }
+                    "timestamp": request.timestamp.isoformat()
+                    if request.timestamp
+                    else None,
+                },
             )
 
         except Exception as e:
             logger.exception(f"Failed to submit fund inflow: {e}")
             return APIResponse(
-                success=False,
-                message=f"入金申请失败：{str(e)}",
-                code=500
+                success=False, message=f"入金申请失败：{str(e)}", code=500
             )
 
     def get_fund_inflow_history(
-        self,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None
     ) -> APIResponse:
         """
         查询入金历史记录。
@@ -225,9 +222,13 @@ class FrontendAPI:
             # 过滤日期范围
             history = self._fund_inflow_history
             if start_date:
-                history = [r for r in history if r.timestamp and r.timestamp >= start_date]
+                history = [
+                    r for r in history if r.timestamp and r.timestamp >= start_date
+                ]
             if end_date:
-                history = [r for r in history if r.timestamp and r.timestamp <= end_date]
+                history = [
+                    r for r in history if r.timestamp and r.timestamp <= end_date
+                ]
 
             # 转换为字典列表
             data = [
@@ -235,24 +236,18 @@ class FrontendAPI:
                     "amount": r.amount,
                     "remark": r.remark,
                     "operator": r.operator,
-                    "timestamp": r.timestamp.isoformat() if r.timestamp else None
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else None,
                 }
                 for r in history
             ]
 
             return APIResponse(
-                success=True,
-                message=f"查询到 {len(data)} 条入金记录",
-                data=data
+                success=True, message=f"查询到 {len(data)} 条入金记录", data=data
             )
 
         except Exception as e:
             logger.exception(f"Failed to query fund inflow history: {e}")
-            return APIResponse(
-                success=False,
-                message=f"查询失败：{str(e)}",
-                code=500
-            )
+            return APIResponse(success=False, message=f"查询失败：{str(e)}", code=500)
 
     # -----------------------------------------------------------------------
     # 再平衡管理
@@ -284,9 +279,9 @@ class FrontendAPI:
                 payload={
                     "trigger_type": request.reason,
                     "new_capital": request.new_capital,
-                    "operator": request.operator
+                    "operator": request.operator,
                 },
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
             self.event_bus.publish(signal)
 
@@ -296,16 +291,14 @@ class FrontendAPI:
                 data={
                     "reason": request.reason,
                     "new_capital": request.new_capital,
-                    "timestamp": datetime.now().isoformat()
-                }
+                    "timestamp": datetime.now().isoformat(),
+                },
             )
 
         except Exception as e:
             logger.exception(f"Failed to trigger rebalance: {e}")
             return APIResponse(
-                success=False,
-                message=f"再平衡触发失败：{str(e)}",
-                code=500
+                success=False, message=f"再平衡触发失败：{str(e)}", code=500
             )
 
     # -----------------------------------------------------------------------
@@ -339,8 +332,10 @@ class FrontendAPI:
                     "quantity": pos.quantity,
                     "avg_price": pos.avg_price,
                     "market_value": pos.market_value,
-                    "current_weight": self.portfolio_ctx.calculate_current_weight(pos.symbol),
-                    "target_weight": self.portfolio_ctx.get_target_weight(pos.symbol)
+                    "current_weight": self.portfolio_ctx.calculate_current_weight(
+                        pos.symbol
+                    ),
+                    "target_weight": self.portfolio_ctx.get_target_weight(pos.symbol),
                 }
                 for pos in positions.values()
             ]
@@ -352,20 +347,16 @@ class FrontendAPI:
                     "account": {
                         "total_nav": total_nav,
                         "available_cash": available_cash,
-                        "margin_used": margin_used
+                        "margin_used": margin_used,
                     },
                     "positions": position_list,
-                    "timestamp": datetime.now().isoformat()
-                }
+                    "timestamp": datetime.now().isoformat(),
+                },
             )
 
         except Exception as e:
             logger.exception(f"Failed to query portfolio status: {e}")
-            return APIResponse(
-                success=False,
-                message=f"查询失败：{str(e)}",
-                code=500
-            )
+            return APIResponse(success=False, message=f"查询失败：{str(e)}", code=500)
 
     def get_weight_deviation(self) -> APIResponse:
         """
@@ -387,13 +378,17 @@ class FrontendAPI:
                 current = current_weights.get(symbol, 0.0)
                 deviation = current - target
 
-                deviations.append({
-                    "symbol": symbol,
-                    "target_weight": target,
-                    "current_weight": current,
-                    "deviation": deviation,
-                    "deviation_pct": (deviation / target * 100) if target > 0 else 0.0
-                })
+                deviations.append(
+                    {
+                        "symbol": symbol,
+                        "target_weight": target,
+                        "current_weight": current,
+                        "deviation": deviation,
+                        "deviation_pct": (deviation / target * 100)
+                        if target > 0
+                        else 0.0,
+                    }
+                )
 
             # 按偏离度绝对值排序
             deviations.sort(key=lambda x: abs(x["deviation"]), reverse=True)
@@ -403,17 +398,13 @@ class FrontendAPI:
                 message=f"查询到 {len(deviations)} 个品种的权重偏离",
                 data={
                     "deviations": deviations,
-                    "timestamp": datetime.now().isoformat()
-                }
+                    "timestamp": datetime.now().isoformat(),
+                },
             )
 
         except Exception as e:
             logger.exception(f"Failed to query weight deviation: {e}")
-            return APIResponse(
-                success=False,
-                message=f"查询失败：{str(e)}",
-                code=500
-            )
+            return APIResponse(success=False, message=f"查询失败：{str(e)}", code=500)
 
     # -----------------------------------------------------------------------
     # 健康检查
@@ -429,8 +420,5 @@ class FrontendAPI:
         return APIResponse(
             success=True,
             message="系统运行正常",
-            data={
-                "status": "healthy",
-                "timestamp": datetime.now().isoformat()
-            }
+            data={"status": "healthy", "timestamp": datetime.now().isoformat()},
         )

@@ -40,12 +40,16 @@ class PortfolioLedger:
     def on_trade(self, event: TradeEvent) -> None:
         """根据成交事件更新持仓和资金。"""
         multiplier = self.contract_multipliers.get(event.symbol, 1.0)
-        signed_quantity = event.quantity if event.side == OrderSide.BUY else -event.quantity
-        
+        signed_quantity = (
+            event.quantity if event.side == OrderSide.BUY else -event.quantity
+        )
+
         # Commission is always deducted from the balance
         self.balance -= event.commission
 
-        position = self.positions.setdefault(event.symbol, BacktestPosition(symbol=event.symbol))
+        position = self.positions.setdefault(
+            event.symbol, BacktestPosition(symbol=event.symbol)
+        )
         current_qty = position.quantity
         new_qty = current_qty + signed_quantity
 
@@ -53,7 +57,8 @@ class PortfolioLedger:
             total_abs_qty = abs(current_qty) + abs(signed_quantity)
             if total_abs_qty > 0:
                 position.avg_price = (
-                    (abs(current_qty) * position.avg_price) + (abs(signed_quantity) * event.price)
+                    (abs(current_qty) * position.avg_price)
+                    + (abs(signed_quantity) * event.price)
                 ) / total_abs_qty
         else:
             closed_qty = min(abs(current_qty), abs(signed_quantity))
@@ -82,7 +87,9 @@ class PortfolioLedger:
                 continue
             latest_price = self.latest_prices.get(symbol, position.avg_price)
             multiplier = self.contract_multipliers.get(symbol, 1.0)
-            total += position.quantity * (latest_price - position.avg_price) * multiplier
+            total += (
+                position.quantity * (latest_price - position.avg_price) * multiplier
+            )
         return total
 
     @property

@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # 持仓数据源接口（抽象协议）
 # ---------------------------------------------------------------------------
 
+
 class PositionSource(Protocol):
     """
     持仓数据源接口。
@@ -74,6 +75,7 @@ class PositionSource(Protocol):
 # 迅投 GT 持仓数据源（预留接口）
 # ---------------------------------------------------------------------------
 
+
 class XunTouPositionSource:
     """
     迅投 GT 持仓数据源。
@@ -87,13 +89,7 @@ class XunTouPositionSource:
       - 处理网络异常和重连
     """
 
-    def __init__(
-        self,
-        server_addr: str,
-        account_id: str,
-        password: str,
-        app_id: str
-    ):
+    def __init__(self, server_addr: str, account_id: str, password: str, app_id: str):
         """
         初始化迅投 GT 持仓数据源。
 
@@ -213,6 +209,7 @@ class XunTouPositionSource:
 # CTP 持仓数据源（预留接口）
 # ---------------------------------------------------------------------------
 
+
 class CTPPositionSource:
     """
     CTP 持仓数据源。
@@ -225,13 +222,7 @@ class CTPPositionSource:
       - 实现账户资金查询接口
     """
 
-    def __init__(
-        self,
-        front_addr: str,
-        broker_id: str,
-        user_id: str,
-        password: str
-    ):
+    def __init__(self, front_addr: str, broker_id: str, user_id: str, password: str):
         """
         初始化 CTP 持仓数据源。
 
@@ -281,6 +272,7 @@ class CTPPositionSource:
 # 模拟持仓数据源（用于测试）
 # ---------------------------------------------------------------------------
 
+
 class MockPositionSource:
     """
     模拟持仓数据源（用于测试）。
@@ -292,9 +284,9 @@ class MockPositionSource:
         """初始化模拟持仓数据源。"""
         self._positions: dict[str, Position] = {}
         self._account_info: dict[str, float] = {
-            'total_nav': 10_000_000.0,
-            'available_cash': 10_000_000.0,
-            'margin_used': 0.0
+            "total_nav": 10_000_000.0,
+            "available_cash": 10_000_000.0,
+            "margin_used": 0.0,
         }
         logger.info("MockPositionSource initialized")
 
@@ -319,11 +311,13 @@ class MockPositionSource:
         self._positions[position.symbol] = position
         logger.debug(f"Set mock position: {position.symbol}, qty={position.quantity}")
 
-    def set_account_info(self, total_nav: float, available_cash: float, margin_used: float) -> None:
+    def set_account_info(
+        self, total_nav: float, available_cash: float, margin_used: float
+    ) -> None:
         """设置模拟账户信息（测试用）。"""
         self._account_info = {
-            'total_nav': total_nav,
-            'available_cash': available_cash,
-            'margin_used': margin_used
+            "total_nav": total_nav,
+            "available_cash": available_cash,
+            "margin_used": margin_used,
         }
         logger.debug(f"Set mock account info: NAV={total_nav:,.2f}")

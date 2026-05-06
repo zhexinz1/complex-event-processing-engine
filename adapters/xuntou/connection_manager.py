@@ -34,6 +34,7 @@ class _XtFullService(XtOrderService, XtQueryService):
     - service.query_instructions(...)
     无需 wrap() 或创建额外对象。
     """
+
     pass
 
 
@@ -51,7 +52,7 @@ class XtConnectionManager:
         return cls._instance
 
     def __init__(self):
-        if hasattr(self, '_initialized'):
+        if hasattr(self, "_initialized"):
             return
 
         self._initialized = True

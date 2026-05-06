@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 # 信号处理器（下游业务逻辑）
 # ---------------------------------------------------------------------------
 
+
 def on_trade_opportunity(signal: SignalEvent) -> None:
     """
     处理交易机会信号（示例：打印日志，实际应调用下单模块）。
@@ -106,6 +107,7 @@ def on_fund_allocation(signal: SignalEvent) -> None:
 # 主函数：系统初始化与事件模拟
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     """
     主函数：演示完整的系统集成流程。
@@ -125,10 +127,13 @@ def main() -> None:
     global_context = GlobalContext()
     global_context.set("vix", 18.5)  # 波动率指数
     global_context.set("total_nav", 10_000_000.0)  # 总净值 1000 万
-    global_context.set("target_weights", {
-        "600519.SH": 0.30,  # 贵州茅台目标权重 30%
-        "000858.SZ": 0.25,  # 五粮液目标权重 25%
-    })
+    global_context.set(
+        "target_weights",
+        {
+            "600519.SH": 0.30,  # 贵州茅台目标权重 30%
+            "000858.SZ": 0.25,  # 五粮液目标权重 25%
+        },
+    )
 
     # 创建本地上下文（品种级数据）
     local_context_maotai = LocalContext(
@@ -153,7 +158,9 @@ def main() -> None:
     # 语义：超卖且价格突破均线，视为买入机会
     rule_tree_maotai = build_and(
         build_comparison("rsi", Operator.LT, 30),
-        build_comparison("close", Operator.GT, "sma"),  # 注意：这里 "sma" 会从 Context 读取
+        build_comparison(
+            "close", Operator.GT, "sma"
+        ),  # 注意：这里 "sma" 会从 Context 读取
     )
 
     logger.info(f"规则树（贵州茅台）: {rule_tree_maotai}")
@@ -219,13 +226,42 @@ def main() -> None:
     logger.info("=" * 80 + "\n")
 
     # 5.1 模拟贵州茅台的 K 线数据（触发 AST 规则）
-    logger.info(">>> 发布贵州茅台 BarEvent（使用一组可触发 RSI < 30 且 close > SMA 的 mock 数据）")
+    logger.info(
+        ">>> 发布贵州茅台 BarEvent（使用一组可触发 RSI < 30 且 close > SMA 的 mock 数据）"
+    )
 
     closes = [
-        100.0, 99.94, 102.96, 106.85, 109.97, 106.2, 109.07, 107.78,
-        106.8, 107.9, 110.91, 114.19, 112.0, 113.62, 117.2, 121.02,
-        124.19, 120.4, 119.14, 118.23, 115.76, 115.51, 115.13, 116.37,
-        116.75, 117.17, 115.16, 115.39, 115.39, 116.77, 117.07,
+        100.0,
+        99.94,
+        102.96,
+        106.85,
+        109.97,
+        106.2,
+        109.07,
+        107.78,
+        106.8,
+        107.9,
+        110.91,
+        114.19,
+        112.0,
+        113.62,
+        117.2,
+        121.02,
+        124.19,
+        120.4,
+        119.14,
+        118.23,
+        115.76,
+        115.51,
+        115.13,
+        116.37,
+        116.75,
+        117.17,
+        115.16,
+        115.39,
+        115.39,
+        116.77,
+        117.07,
     ]
 
     start_time = datetime(2026, 3, 27, 9, 30)
@@ -276,7 +312,9 @@ def main() -> None:
     logger.info(f"BarEvent 订阅者数量: {event_bus.get_subscriber_count(BarEvent)}")
     logger.info(f"TickEvent 订阅者数量: {event_bus.get_subscriber_count(TickEvent)}")
     logger.info(f"TimerEvent 订阅者数量: {event_bus.get_subscriber_count(TimerEvent)}")
-    logger.info(f"SignalEvent 订阅者数量: {event_bus.get_subscriber_count(SignalEvent)}")
+    logger.info(
+        f"SignalEvent 订阅者数量: {event_bus.get_subscriber_count(SignalEvent)}"
+    )
     logger.info(f"保持存活的触发器数量: {len(triggers)}")
 
     logger.info("\n" + "=" * 80)

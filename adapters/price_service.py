@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # 全局行情缓存（由 Redis 订阅线程持续填充）
 # ---------------------------------------------------------------------------
 
-_tick_cache: dict[str, TickEvent] = {}   # symbol -> 最新 TickEvent
+_tick_cache: dict[str, TickEvent] = {}  # symbol -> 最新 TickEvent
 _tick_cache_lock = threading.Lock()
 _subscriber_thread: threading.Thread | None = None
 
@@ -43,9 +43,9 @@ def _redis_subscriber_loop(redis_url: str, channel: str):
     tick_count = 0
     try:
         for message in pubsub.listen():
-            if message['type'] == 'message':
+            if message["type"] == "message":
                 try:
-                    event = pickle.loads(message['data'])
+                    event = pickle.loads(message["data"])
                     if isinstance(event, TickEvent):
                         _on_tick(event)
                         tick_count += 1
@@ -141,13 +141,14 @@ def get_tick_cache_detail() -> dict:
                 "bid1": tick.bid_prices[0] if tick.bid_prices else 0,
                 "ask1_vol": tick.ask_volumes[0] if tick.ask_volumes else 0,
                 "bid1_vol": tick.bid_volumes[0] if tick.bid_volumes else 0,
-                "volume": getattr(tick, 'volume', 0),
-                "update_time": getattr(tick, 'update_time', ''),
-                "trading_day": getattr(tick, 'trading_day', ''),
+                "volume": getattr(tick, "volume", 0),
+                "update_time": getattr(tick, "update_time", ""),
+                "trading_day": getattr(tick, "trading_day", ""),
             }
 
     return {
-        "subscriber_alive": _subscriber_thread is not None and _subscriber_thread.is_alive(),
+        "subscriber_alive": _subscriber_thread is not None
+        and _subscriber_thread.is_alive(),
         "cached_count": len(symbols),
         "symbols": symbols,
     }

@@ -16,7 +16,17 @@ def _write_csv(csv_path, rows: list[dict[str, object]]) -> None:
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=["date", "open", "high", "low", "close", "volume", "money", "open_interest", "symbol"],
+            fieldnames=[
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "money",
+                "open_interest",
+                "symbol",
+            ],
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -95,7 +105,9 @@ def test_adjusted_main_contract_csv_queries(tmp_path) -> None:
     assert merged[-1].symbol == "AU9999.XSGE"
 
 
-def test_adjusted_main_contract_csv_uses_lru_memory_cache(tmp_path, monkeypatch) -> None:
+def test_adjusted_main_contract_csv_uses_lru_memory_cache(
+    tmp_path, monkeypatch
+) -> None:
     adjusted_main_contract_csv._ADJUSTED_MAIN_CONTRACT_BAR_CACHE.clear()
     source_dir = tmp_path / "adjusted_main_contract"
     source_dir.mkdir()

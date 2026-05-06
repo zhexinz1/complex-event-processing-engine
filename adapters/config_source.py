@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 # 抽象基类
 # ---------------------------------------------------------------------------
 
+
 class ConfigSource(ABC):
     """
     配置数据源抽象基类。
@@ -50,11 +51,7 @@ class ConfigSource(ABC):
         pass
 
     @abstractmethod
-    def save_target_weights(
-        self,
-        strategy_id: str,
-        weights: dict[str, float]
-    ) -> bool:
+    def save_target_weights(self, strategy_id: str, weights: dict[str, float]) -> bool:
         """
         保存目标权重配置。
 
@@ -84,6 +81,7 @@ class ConfigSource(ABC):
 # ---------------------------------------------------------------------------
 # 数据库配置源
 # ---------------------------------------------------------------------------
+
 
 class DatabaseConfigSource(ConfigSource):
     """
@@ -120,7 +118,7 @@ class DatabaseConfigSource(ConfigSource):
         database: str,
         user: str,
         password: str,
-        db_type: str = "mysql"
+        db_type: str = "mysql",
     ):
         """
         初始化数据库配置源。
@@ -148,7 +146,9 @@ class DatabaseConfigSource(ConfigSource):
         #     import psycopg2
         #     self.conn = psycopg2.connect(...)
 
-        logger.info(f"DatabaseConfigSource initialized: {db_type}://{host}:{port}/{database}")
+        logger.info(
+            f"DatabaseConfigSource initialized: {db_type}://{host}:{port}/{database}"
+        )
 
     def load_target_weights(self, strategy_id: str) -> dict[str, float]:
         """
@@ -170,14 +170,12 @@ class DatabaseConfigSource(ConfigSource):
         # rows = cursor.fetchall()
         # return {row['symbol']: row['weight'] for row in rows}
 
-        logger.warning(f"Database query not implemented, returning empty weights for {strategy_id}")
+        logger.warning(
+            f"Database query not implemented, returning empty weights for {strategy_id}"
+        )
         return {}
 
-    def save_target_weights(
-        self,
-        strategy_id: str,
-        weights: dict[str, float]
-    ) -> bool:
+    def save_target_weights(self, strategy_id: str, weights: dict[str, float]) -> bool:
         """
         保存目标权重配置到数据库。
 
@@ -228,6 +226,7 @@ class DatabaseConfigSource(ConfigSource):
 # ---------------------------------------------------------------------------
 # 文件配置源
 # ---------------------------------------------------------------------------
+
 
 class FileConfigSource(ConfigSource):
     """
@@ -286,7 +285,9 @@ class FileConfigSource(ConfigSource):
                     # self._config_data = yaml.safe_load(f)
                     raise NotImplementedError("YAML support not implemented yet")
                 else:
-                    raise ValueError(f"Unsupported file format: {self.config_file.suffix}")
+                    raise ValueError(
+                        f"Unsupported file format: {self.config_file.suffix}"
+                    )
 
             logger.info(f"Config file loaded: {self.config_file}")
 
@@ -308,11 +309,7 @@ class FileConfigSource(ConfigSource):
         logger.info(f"Loaded target weights for {strategy_id}: {weights}")
         return weights
 
-    def save_target_weights(
-        self,
-        strategy_id: str,
-        weights: dict[str, float]
-    ) -> bool:
+    def save_target_weights(self, strategy_id: str, weights: dict[str, float]) -> bool:
         """
         保存目标权重配置到文件。
 
@@ -366,6 +363,7 @@ class FileConfigSource(ConfigSource):
 # MySQL 配置源（连接阿里云 FOF 数据库）
 # ---------------------------------------------------------------------------
 
+
 class MySQLConfigSource(ConfigSource):
     """
     MySQL 配置源，读取 target_allocations 表中的目标仓位配置。
@@ -396,9 +394,15 @@ class MySQLConfigSource(ConfigSource):
 
     def __init__(self) -> None:
         import pymysql
+
         self._pymysql = pymysql
         self._ensure_table()
-        logger.info("MySQLConfigSource initialized: %s:%s/%s", self.DB_HOST, self.DB_PORT, self.DB_NAME)
+        logger.info(
+            "MySQLConfigSource initialized: %s:%s/%s",
+            self.DB_HOST,
+            self.DB_PORT,
+            self.DB_NAME,
+        )
 
     def _connect(self):
         return self._pymysql.connect(
@@ -454,6 +458,7 @@ class MySQLConfigSource(ConfigSource):
         将权重字典以今日日期写入 target_allocations（冲突则覆盖）。
         """
         from datetime import date
+
         today = date.today().isoformat()
         sql = """
             INSERT INTO target_allocations (target_date, product_name, asset_code, weight_ratio)

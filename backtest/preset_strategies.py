@@ -20,24 +20,112 @@ from .models import BacktestResult
 
 
 PBX_MA_PRESET_CLOSES = [
-    100.0, 99.0, 98.0, 97.0, 96.0, 95.0, 94.0, 93.0, 92.0, 91.0,
-    90.0, 89.0, 88.0, 87.0, 86.0, 85.0, 86.0, 87.0, 88.0, 90.0,
-    93.0, 96.0, 100.0, 104.0, 108.0, 111.0, 113.0, 115.0, 116.0,
-    115.0, 113.0, 110.0, 107.0, 104.0, 100.0, 96.0, 93.0, 91.0,
+    100.0,
+    99.0,
+    98.0,
+    97.0,
+    96.0,
+    95.0,
+    94.0,
+    93.0,
+    92.0,
+    91.0,
+    90.0,
+    89.0,
+    88.0,
+    87.0,
+    86.0,
+    85.0,
+    86.0,
+    87.0,
+    88.0,
+    90.0,
+    93.0,
+    96.0,
+    100.0,
+    104.0,
+    108.0,
+    111.0,
+    113.0,
+    115.0,
+    116.0,
+    115.0,
+    113.0,
+    110.0,
+    107.0,
+    104.0,
+    100.0,
+    96.0,
+    93.0,
+    91.0,
 ]
 
 CROSS_SECTION_MOMENTUM_CLOSES = {
     "000001.SZ": [
-        10.0, 10.1, 10.0, 10.2, 10.1, 10.3, 10.5, 10.7, 11.0, 11.4,
-        11.8, 12.1, 12.4, 12.8, 13.1, 13.3, 13.2, 13.1, 13.0, 12.9,
+        10.0,
+        10.1,
+        10.0,
+        10.2,
+        10.1,
+        10.3,
+        10.5,
+        10.7,
+        11.0,
+        11.4,
+        11.8,
+        12.1,
+        12.4,
+        12.8,
+        13.1,
+        13.3,
+        13.2,
+        13.1,
+        13.0,
+        12.9,
     ],
     "600000.SH": [
-        9.8, 9.9, 10.0, 10.1, 10.2, 10.3, 10.2, 10.1, 10.0, 9.9,
-        9.8, 9.9, 10.0, 10.2, 10.5, 10.9, 11.4, 12.0, 12.5, 13.0,
+        9.8,
+        9.9,
+        10.0,
+        10.1,
+        10.2,
+        10.3,
+        10.2,
+        10.1,
+        10.0,
+        9.9,
+        9.8,
+        9.9,
+        10.0,
+        10.2,
+        10.5,
+        10.9,
+        11.4,
+        12.0,
+        12.5,
+        13.0,
     ],
     "300750.SZ": [
-        20.0, 19.8, 19.7, 19.6, 19.5, 19.4, 19.6, 19.8, 20.1, 20.3,
-        20.4, 20.5, 20.4, 20.3, 20.2, 20.1, 20.0, 19.9, 19.8, 19.7,
+        20.0,
+        19.8,
+        19.7,
+        19.6,
+        19.5,
+        19.4,
+        19.6,
+        19.8,
+        20.1,
+        20.3,
+        20.4,
+        20.5,
+        20.4,
+        20.3,
+        20.2,
+        20.1,
+        20.0,
+        19.9,
+        19.8,
+        19.7,
     ],
 }
 
@@ -108,7 +196,9 @@ def make_mock_bars(symbol: str, closes: list[float]) -> list[BarEvent]:
     return bars
 
 
-def make_cross_section_mock_bars(symbol_closes: dict[str, list[float]]) -> list[BarEvent]:
+def make_cross_section_mock_bars(
+    symbol_closes: dict[str, list[float]],
+) -> list[BarEvent]:
     """Generate synchronized multi-symbol bars for cross-sectional strategies."""
     start = datetime(2026, 4, 1, 9, 30)
     bars: list[BarEvent] = []
@@ -141,7 +231,9 @@ def symbol_order(symbol_closes: dict[str, list[float]], symbol: str) -> int:
     return list(symbol_closes).index(symbol)
 
 
-def normalize_symbol_group(raw_symbols: Any, *, use_tushare_format: bool = True) -> list[str]:
+def normalize_symbol_group(
+    raw_symbols: Any, *, use_tushare_format: bool = True
+) -> list[str]:
     """Normalize a dynamic symbol universe for cross-sectional backtests."""
     if raw_symbols is None:
         raise ValueError("横截面动量策略需要 symbols / ts_codes 股票池")
@@ -158,7 +250,9 @@ def normalize_symbol_group(raw_symbols: Any, *, use_tushare_format: bool = True)
     for candidate in candidates:
         if not candidate:
             continue
-        symbol = normalize_ts_code(candidate) if use_tushare_format else candidate.upper()
+        symbol = (
+            normalize_ts_code(candidate) if use_tushare_format else candidate.upper()
+        )
         if symbol in seen:
             continue
         seen.add(symbol)
@@ -339,7 +433,10 @@ class CrossSectionMomentumTrigger(BaseTrigger):
             return
 
         scores = {
-            symbol: (self._closes[symbol][-1] / self._closes[symbol][-(self.lookback + 1)]) - 1.0
+            symbol: (
+                self._closes[symbol][-1] / self._closes[symbol][-(self.lookback + 1)]
+            )
+            - 1.0
             for symbol in self.symbols
         }
         winner = max(scores, key=lambda symbol: scores[symbol])
@@ -479,15 +576,21 @@ def run_preset_backtest(
             bar_freq = "1m"
         elif data_source == "adjusted_main_contract":
             if not start_date or not end_date:
-                raise ValueError("adjusted_main_contract 横截面回测需要 start_date、end_date")
+                raise ValueError(
+                    "adjusted_main_contract 横截面回测需要 start_date、end_date"
+                )
             selected_symbols = normalize_symbol_group(symbols, use_tushare_format=False)
-            bars = fetch_adjusted_main_contract_bars_multi(selected_symbols, start_date, end_date)
+            bars = fetch_adjusted_main_contract_bars_multi(
+                selected_symbols, start_date, end_date
+            )
             bar_freq = "1m"
         elif data_source == "tushare":
             if not start_date or not end_date:
                 raise ValueError("Tushare 横截面回测需要 start_date、end_date")
             selected_symbols = normalize_symbol_group(symbols)
-            bars = fetch_cross_section_tushare_bars(selected_symbols, start_date, end_date)
+            bars = fetch_cross_section_tushare_bars(
+                selected_symbols, start_date, end_date
+            )
             bar_freq = "1d"
         else:
             raise ValueError(f"Unsupported backtest data source: {data_source}")
@@ -508,8 +611,21 @@ def run_preset_backtest(
         bars = make_mock_bars(symbol, PBX_MA_PRESET_CLOSES)
     elif data_source == "adjusted_main_contract":
         if not start_date or not end_date:
-            raise ValueError("adjusted_main_contract 回测需要 symbol/ts_code、start_date、end_date")
-        symbol = str(ts_code or (symbols[0] if isinstance(symbols, list) and symbols else symbols or "")).strip().upper()
+            raise ValueError(
+                "adjusted_main_contract 回测需要 symbol/ts_code、start_date、end_date"
+            )
+        symbol = (
+            str(
+                ts_code
+                or (
+                    symbols[0]
+                    if isinstance(symbols, list) and symbols
+                    else symbols or ""
+                )
+            )
+            .strip()
+            .upper()
+        )
         if not symbol:
             raise ValueError("adjusted_main_contract 回测需要 symbol/ts_code")
         bars = fetch_adjusted_main_contract_bars(symbol, start_date, end_date)
@@ -715,4 +831,3 @@ def serialize_backtest_result(
             for snapshot in snapshots
         ],
     }
-

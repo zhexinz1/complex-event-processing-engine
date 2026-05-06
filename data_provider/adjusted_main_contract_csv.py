@@ -14,7 +14,9 @@ DATA_PROVIDER_DIR = Path(__file__).parent
 PROJECT_ROOT = DATA_PROVIDER_DIR.parent
 DEFAULT_SOURCE_DIR = PROJECT_ROOT / "adjusted_main_contract"
 CSV_CACHE_SIZE = 5
-_ADJUSTED_MAIN_CONTRACT_BAR_CACHE: OrderedDict[Path, tuple[BarEvent, ...]] = OrderedDict()
+_ADJUSTED_MAIN_CONTRACT_BAR_CACHE: OrderedDict[Path, tuple[BarEvent, ...]] = (
+    OrderedDict()
+)
 
 
 def list_adjusted_main_contract_symbols(
@@ -43,7 +45,9 @@ def fetch_adjusted_main_contract_bars(
 
     csv_path = source_dir / f"{normalized_symbol}.csv"
     if not csv_path.exists():
-        raise ValueError(f"adjusted_main_contract 中未找到标的文件: {normalized_symbol}")
+        raise ValueError(
+            f"adjusted_main_contract 中未找到标的文件: {normalized_symbol}"
+        )
 
     start_ts = _normalize_datetime_boundary(start_date, is_end=False)
     end_ts = _normalize_datetime_boundary(end_date, is_end=True)
@@ -82,7 +86,11 @@ def fetch_adjusted_main_contract_bars_multi(
     ordering = {symbol: index for index, symbol in enumerate(normalized_symbols)}
     bars: list[BarEvent] = []
     for symbol in normalized_symbols:
-        bars.extend(fetch_adjusted_main_contract_bars(symbol, start_date, end_date, source_dir=source_dir))
+        bars.extend(
+            fetch_adjusted_main_contract_bars(
+                symbol, start_date, end_date, source_dir=source_dir
+            )
+        )
 
     bars.sort(key=lambda bar: (bar.timestamp, ordering[bar.symbol]))
     return bars

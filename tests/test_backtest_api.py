@@ -19,7 +19,9 @@ def test_backtest_api_runs_pbx_ma_preset() -> None:
     assert presets_payload["success"] is True
     assert presets_payload["data"][0]["id"] == "pbx_ma"
 
-    run_response = client.post("/api/backtests/run", json={"strategy_id": "pbx_ma", "write_trade_log": False})
+    run_response = client.post(
+        "/api/backtests/run", json={"strategy_id": "pbx_ma", "write_trade_log": False}
+    )
     assert run_response.status_code == 200
     run_payload = run_response.get_json()
     assert run_payload["success"] is True
@@ -83,8 +85,12 @@ def test_backtest_api_runs_pbx_ma_with_tushare_source(monkeypatch) -> None:
     assert payload["data"]["signals"][0]["symbol"] == "000001.SZ"
 
 
-def test_backtest_api_runs_pbx_ma_with_adjusted_main_contract_source(monkeypatch) -> None:
-    def fake_fetch_adjusted_main_contract_bars(symbol: str, start_date: str, end_date: str):
+def test_backtest_api_runs_pbx_ma_with_adjusted_main_contract_source(
+    monkeypatch,
+) -> None:
+    def fake_fetch_adjusted_main_contract_bars(
+        symbol: str, start_date: str, end_date: str
+    ):
         assert symbol == "AU9999.XSGE"
         assert start_date == "20250601"
         assert end_date == "20250630"
@@ -154,7 +160,9 @@ def test_backtest_api_passes_write_trade_log_flag(monkeypatch) -> None:
             },
         )()
 
-    monkeypatch.setattr("adapters.flask_app.run_preset_backtest", fake_run_preset_backtest)
+    monkeypatch.setattr(
+        "adapters.flask_app.run_preset_backtest", fake_run_preset_backtest
+    )
 
     app = create_app()
     client = app.test_client()
@@ -195,11 +203,15 @@ def test_backtest_api_defaults_write_trade_log_for_real_requests(monkeypatch) ->
             },
         )()
 
-    monkeypatch.setattr("adapters.flask_app.run_preset_backtest", fake_run_preset_backtest)
+    monkeypatch.setattr(
+        "adapters.flask_app.run_preset_backtest", fake_run_preset_backtest
+    )
 
     app = create_app()
     client = app.test_client()
-    response = client.post("/api/backtests/run", json={"strategy_id": "pbx_ma", "data_source": "mock"})
+    response = client.post(
+        "/api/backtests/run", json={"strategy_id": "pbx_ma", "data_source": "mock"}
+    )
 
     assert response.status_code == 200
     assert captured["write_trade_log"] is True
@@ -211,7 +223,11 @@ def test_backtest_api_runs_cross_section_momentum_preset() -> None:
 
     response = client.post(
         "/api/backtests/run",
-        json={"strategy_id": "cross_section_momentum", "data_source": "mock", "write_trade_log": False},
+        json={
+            "strategy_id": "cross_section_momentum",
+            "data_source": "mock",
+            "write_trade_log": False,
+        },
     )
 
     assert response.status_code == 200
@@ -223,18 +239,51 @@ def test_backtest_api_runs_cross_section_momentum_preset() -> None:
     assert data["signals"]
     assert data["trades"]
     assert data["signals"][0]["payload"]["side"] == "BUY"
-    assert {signal["symbol"] for signal in data["signals"]} >= {"000001.SZ", "600000.SH"}
+    assert {signal["symbol"] for signal in data["signals"]} >= {
+        "000001.SZ",
+        "600000.SH",
+    }
 
 
-def test_backtest_api_runs_cross_section_momentum_with_tushare_source(monkeypatch) -> None:
+def test_backtest_api_runs_cross_section_momentum_with_tushare_source(
+    monkeypatch,
+) -> None:
     close_map = {
         "000001.SZ": [
-            10.0, 10.1, 10.0, 10.2, 10.1, 10.3, 10.5, 10.7, 11.0, 11.4,
-            11.8, 12.1, 12.4, 12.8, 13.1, 13.3,
+            10.0,
+            10.1,
+            10.0,
+            10.2,
+            10.1,
+            10.3,
+            10.5,
+            10.7,
+            11.0,
+            11.4,
+            11.8,
+            12.1,
+            12.4,
+            12.8,
+            13.1,
+            13.3,
         ],
         "600000.SH": [
-            9.8, 9.9, 10.0, 10.1, 10.2, 10.3, 10.2, 10.1, 10.0, 9.9,
-            9.8, 9.9, 10.0, 10.2, 10.5, 10.9,
+            9.8,
+            9.9,
+            10.0,
+            10.1,
+            10.2,
+            10.3,
+            10.2,
+            10.1,
+            10.0,
+            9.9,
+            9.8,
+            9.9,
+            10.0,
+            10.2,
+            10.5,
+            10.9,
         ],
     }
 
@@ -319,11 +368,18 @@ def test_backtest_history_api_returns_json_logs(monkeypatch, tmp_path) -> None:
                 "realized_pnl": 500.0,
                 "unrealized_pnl": 0.0,
                 "positions": [{"symbol": "AU9999.XSGE", "quantity": 1}],
-                "signals": [{"timestamp": "2026-05-02T01:00:00", "symbol": "AU9999.XSGE"}],
+                "signals": [
+                    {"timestamp": "2026-05-02T01:00:00", "symbol": "AU9999.XSGE"}
+                ],
                 "orders": [],
-                "trades": [{"timestamp": "2026-05-02T01:01:00", "symbol": "AU9999.XSGE"}],
+                "trades": [
+                    {"timestamp": "2026-05-02T01:01:00", "symbol": "AU9999.XSGE"}
+                ],
                 "equity_curve": [
-                    {"timestamp": f"2026-05-02T01:{index:02d}:00", "equity": 1_000_000.0 + index}
+                    {
+                        "timestamp": f"2026-05-02T01:{index:02d}:00",
+                        "equity": 1_000_000.0 + index,
+                    }
                     for index in range(60)
                 ],
             }
@@ -338,7 +394,9 @@ def test_backtest_history_api_returns_json_logs(monkeypatch, tmp_path) -> None:
     )
     monkeypatch.setattr(
         "adapters.flask_app.read_backtest_trade_log",
-        lambda log_id, equity_points=48: read_backtest_trade_log(log_id, tmp_path, equity_points),
+        lambda log_id, equity_points=48: read_backtest_trade_log(
+            log_id, tmp_path, equity_points
+        ),
     )
 
     app = create_app()
@@ -391,7 +449,9 @@ def test_backtest_trade_log_rejects_invalid_log_ids(tmp_path, log_id: str) -> No
 
 def test_backtest_trade_log_accepts_whitelisted_log_id(tmp_path) -> None:
     log_id = "backtest-20260502T010203-deadbeef.v1"
-    (tmp_path / f"{log_id}.json").write_text(json.dumps({"equity_curve": []}), encoding="utf-8")
+    (tmp_path / f"{log_id}.json").write_text(
+        json.dumps({"equity_curve": []}), encoding="utf-8"
+    )
 
     payload = read_backtest_trade_log(log_id, tmp_path)
 
@@ -417,7 +477,9 @@ def test_stock_search_api_returns_indexed_matches(monkeypatch) -> None:
     app = create_app()
     client = app.test_client()
 
-    response = client.get("/api/stocks/search", query_string={"q": "600000", "limit": "5"})
+    response = client.get(
+        "/api/stocks/search", query_string={"q": "600000", "limit": "5"}
+    )
 
     assert response.status_code == 200
     payload = response.get_json()

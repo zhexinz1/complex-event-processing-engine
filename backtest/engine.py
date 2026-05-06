@@ -144,10 +144,17 @@ class BacktestEngine:
                 last_timestamp = event.timestamp
                 if market_events_processed % 50_000 == 0:
                     elapsed = time.monotonic() - t0
-                    pct = market_events_processed / total_events * 100 if total_events else 0
+                    pct = (
+                        market_events_processed / total_events * 100
+                        if total_events
+                        else 0
+                    )
                     _logger.info(
                         "BacktestEngine progress: %d/%d events (%.1f%%) elapsed=%.1fs",
-                        market_events_processed, total_events, pct, elapsed,
+                        market_events_processed,
+                        total_events,
+                        pct,
+                        elapsed,
                     )
 
         self.aggregator.flush()

@@ -70,7 +70,7 @@ class EventQueue:
             self._ordered.clear()
             self._ordered_index = 0
             return
-        for event in self._ordered[self._ordered_index:]:
+        for event in self._ordered[self._ordered_index :]:
             heapq.heappush(self._heap, (event.timestamp, self._sequence, event))
             self._sequence += 1
         self._ordered.clear()

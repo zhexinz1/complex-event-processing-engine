@@ -47,9 +47,9 @@ logger = logging.getLogger("ctp_deviation_example")
 # SimNow 仿真账户配置
 # ---------------------------------------------------------------------------
 FRONT_ADDR = "tcp://182.254.243.31:30011"
-BROKER_ID  = "9999"
-USER_ID    = "259563"
-PASSWORD   = "ZZXgoUSA@2018"
+BROKER_ID = "9999"
+USER_ID = "259563"
+PASSWORD = "ZZXgoUSA@2018"
 
 # 订阅的主力合约
 SYMBOLS = ["au2604", "rb2605", "hc2605", "IC2606"]
@@ -57,6 +57,7 @@ SYMBOLS = ["au2604", "rb2605", "hc2605", "IC2606"]
 # ---------------------------------------------------------------------------
 # 主程序
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     logger.info("=" * 80)
@@ -96,20 +97,15 @@ def main() -> None:
     # 初始化账户（1000万）
     initial_nav = 10_000_000.0
     portfolio_ctx.update_account(
-        total_nav=initial_nav,
-        available_cash=initial_nav,
-        margin_used=0.0
+        total_nav=initial_nav, available_cash=initial_nav, margin_used=0.0
     )
     logger.info(f"初始资金: {initial_nav:,.0f} 元")
 
     # 初始化持仓（空仓）
     for symbol in SYMBOLS:
-        portfolio_ctx.update_position(Position(
-            symbol=symbol,
-            quantity=0.0,
-            avg_price=0.0,
-            market_value=0.0
-        ))
+        portfolio_ctx.update_position(
+            Position(symbol=symbol, quantity=0.0, avg_price=0.0, market_value=0.0)
+        )
 
     # -----------------------------------------------------------------------
     # 3. 创建再平衡处理器
@@ -126,7 +122,7 @@ def main() -> None:
         trigger_id="portfolio_deviation",
         portfolio_ctx=portfolio_ctx,
         threshold=0.05,  # 5% 偏离阈值
-        cooldown=60.0,   # 60 秒冷却期
+        cooldown=60.0,  # 60 秒冷却期
     )
     deviation_trigger.register()
 

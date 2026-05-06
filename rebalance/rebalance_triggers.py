@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # 资金申赎触发器
 # ---------------------------------------------------------------------------
 
+
 class FundFlowTrigger(BaseTrigger):
     """
     资金申赎触发器。
@@ -83,7 +84,7 @@ class FundFlowTrigger(BaseTrigger):
         current_nav: float,
         pnl: float,
         operator: str,
-        remark: str = ""
+        remark: str = "",
     ) -> None:
         """
         由 FundFlowManager 调用，触发资金变动再平衡。
@@ -131,6 +132,7 @@ class FundFlowTrigger(BaseTrigger):
 # ---------------------------------------------------------------------------
 # 月初定期触发器
 # ---------------------------------------------------------------------------
+
 
 class MonthlyRebalanceTrigger(BaseTrigger):
     """
@@ -209,6 +211,7 @@ class MonthlyRebalanceTrigger(BaseTrigger):
 # ---------------------------------------------------------------------------
 # 组合偏离触发器
 # ---------------------------------------------------------------------------
+
 
 class PortfolioDeviationTrigger(BaseTrigger):
     """

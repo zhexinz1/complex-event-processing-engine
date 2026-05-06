@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 # 数据类定义
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ContractInfo:
     """
@@ -40,6 +41,7 @@ class ContractInfo:
         min_tick:       最小变动价位（如 0.05）
         margin_rate:    保证金率（如 0.08 表示 8%）
     """
+
     symbol: str
     multiplier: float = 1.0
     min_tick: float = 0.01
@@ -57,6 +59,7 @@ class Position:
         avg_price:      持仓均价
         market_value:   当前市值（quantity * latest_price * multiplier）
     """
+
     symbol: str
     quantity: float
     avg_price: float
@@ -66,6 +69,7 @@ class Position:
 # ---------------------------------------------------------------------------
 # 组合上下文
 # ---------------------------------------------------------------------------
+
 
 class PortfolioContext:
     """
@@ -105,9 +109,9 @@ class PortfolioContext:
         self._latest_prices: dict[str, float] = {}
 
         # 账户信息
-        self._total_nav: float = 0.0          # 总净值
-        self._available_cash: float = 0.0     # 可用资金
-        self._margin_used: float = 0.0        # 已用保证金
+        self._total_nav: float = 0.0  # 总净值
+        self._available_cash: float = 0.0  # 可用资金
+        self._margin_used: float = 0.0  # 已用保证金
 
         # 持仓数据源（用于从外部系统同步持仓）
         self._position_source = position_source
@@ -174,9 +178,9 @@ class PortfolioContext:
 
             # 同步账户信息
             account_info = self._position_source.fetch_account_info()
-            self._total_nav = account_info.get('total_nav', 0.0)
-            self._available_cash = account_info.get('available_cash', 0.0)
-            self._margin_used = account_info.get('margin_used', 0.0)
+            self._total_nav = account_info.get("total_nav", 0.0)
+            self._available_cash = account_info.get("available_cash", 0.0)
+            self._margin_used = account_info.get("margin_used", 0.0)
             logger.info(
                 f"Synced account info: NAV={self._total_nav:,.2f}, "
                 f"Available={self._available_cash:,.2f}, Margin={self._margin_used:,.2f}"
@@ -218,7 +222,9 @@ class PortfolioContext:
             contract: 合约信息对象
         """
         self._contract_info[contract.symbol] = contract
-        logger.debug(f"Contract registered: {contract.symbol}, multiplier={contract.multiplier}")
+        logger.debug(
+            f"Contract registered: {contract.symbol}, multiplier={contract.multiplier}"
+        )
 
     def get_contract_info(self, symbol: str) -> Optional[ContractInfo]:
         """获取指定合约的基础信息。"""
@@ -248,10 +254,7 @@ class PortfolioContext:
     # -----------------------------------------------------------------------
 
     def update_account(
-        self,
-        total_nav: float,
-        available_cash: float,
-        margin_used: float
+        self, total_nav: float, available_cash: float, margin_used: float
     ) -> None:
         """
         更新账户信息。
