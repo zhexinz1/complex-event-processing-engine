@@ -59,6 +59,11 @@ class EventQueue:
         """是否为空。"""
         return self._ordered_index >= len(self._ordered) and not self._heap
 
+    def __len__(self) -> int:
+        """剩余未消费事件数量。"""
+        remaining_ordered = len(self._ordered) - self._ordered_index
+        return remaining_ordered + len(self._heap)
+
     def _materialize_ordered_into_heap(self) -> None:
         """当顺序流和 heap 混用时，将剩余顺序事件转入 heap。"""
         if self._ordered_index >= len(self._ordered):

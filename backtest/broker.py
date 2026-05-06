@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -21,6 +22,7 @@ from cep.core.events import (
     TradeEvent,
 )
 from .portfolio import PortfolioLedger
+from .rules import get_margin_rate, calculate_commission
 
 ExecutionTiming = Literal["current_bar", "next_bar"]
 
@@ -191,9 +193,30 @@ class SimulatedBroker:
             return
 
         multiplier = self.contract_multipliers.get(signal.symbol, 1.0)
-        estimated_commission = price * quantity * self.commission_rate
-        trade_value = quantity * price * multiplier
-        if side == OrderSide.BUY and self.portfolio.cash + 1e-9 < trade_value + estimated_commission:
+        margin_rate = get_margin_rate(signal.symbol)
+        trade_notional = quantity * price * multiplier
+        estimated_commission = calculate_commission(
+            signal.symbol, price, quantity, multiplier, self.commission_rate
+        )
+
+        position = self.portfolio.positions.get(signal.symbol)
+        current_qty = position.quantity if position is not None else 0.0
+
+        if side == OrderSide.BUY:
+            if current_qty < 0:
+                opening_qty = max(0.0, quantity - abs(current_qty))
+            else:
+                opening_qty = quantity
+        else:
+            if current_qty > 0:
+                opening_qty = max(0.0, quantity - current_qty)
+            else:
+                opening_qty = quantity
+
+        required_new_margin = opening_qty * price * multiplier * margin_rate
+        required_funds = required_new_margin + estimated_commission
+
+        if self.portfolio.available_funds + 1e-9 < required_funds:
             self._publish_rejected_order(
                 order_id=order_id,
                 signal=signal,
@@ -202,16 +225,15 @@ class SimulatedBroker:
                 price=price,
                 reason="insufficient_cash",
                 details={
-                    "required_cash": trade_value + estimated_commission,
-                    "available_cash": self.portfolio.cash,
-                    "multiplier": multiplier,
+                    "required_funds": required_funds,
+                    "available_funds": self.portfolio.available_funds,
+                    "margin_rate": margin_rate,
                 },
             )
             return
 
-        position = self.portfolio.positions.get(signal.symbol)
-        available_quantity = position.quantity if position is not None else 0.0
-        if side == OrderSide.SELL and quantity > available_quantity + 1e-9:
+        is_stock = signal.symbol.endswith((".SH", ".SZ", ".BJ"))
+        if side == OrderSide.SELL and is_stock and quantity > current_qty + 1e-9:
             self._publish_rejected_order(
                 order_id=order_id,
                 signal=signal,
@@ -220,7 +242,7 @@ class SimulatedBroker:
                 price=price,
                 reason="insufficient_position",
                 details={
-                    "available_quantity": available_quantity,
+                    "available_quantity": current_qty,
                     "requested_quantity": quantity,
                 },
             )

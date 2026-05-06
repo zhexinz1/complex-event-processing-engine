@@ -651,6 +651,15 @@ def serialize_backtest_result(
         indices.update(int(i * step) for i in range(max_equity_points))
         snapshots = [snapshots[i] for i in sorted(indices)]
 
+    # Cap signals and trades to keep the HTTP response small.
+    # The front-end only needs them for display; full details live in the
+    # trade-log file when write_trade_log is enabled.
+    MAX_SIGNAL_ITEMS = 500
+    MAX_TRADE_ITEMS = 500
+
+    capped_signals = result.signals[:MAX_SIGNAL_ITEMS]
+    capped_trades = result.trades[:MAX_TRADE_ITEMS]
+
     return {
         "market_events_processed": result.market_events_processed,
         "initial_cash": round(initial_cash, 2),
@@ -661,6 +670,8 @@ def serialize_backtest_result(
         "unrealized_pnl": round(unrealized_pnl, 2),
         "trade_log_path": result.trade_log_path,
         "equity_curve_count": total_snapshots,
+        "total_signals": len(result.signals),
+        "total_trades": len(result.trades),
         "performance": _compute_performance_metrics(result),
         "signals": [
             {
@@ -671,7 +682,7 @@ def serialize_backtest_result(
                 "signal_type": signal.signal_type.value,
                 "payload": signal.payload,
             }
-            for signal in result.signals
+            for signal in capped_signals
         ],
         "trades": [
             {
@@ -682,7 +693,7 @@ def serialize_backtest_result(
                 "price": trade.price,
                 "commission": round(trade.commission, 2),
             }
-            for trade in result.trades
+            for trade in capped_trades
         ],
         "positions": [
             {

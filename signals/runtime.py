@@ -415,8 +415,10 @@ def run_user_signal_backtest(
     start_date: str | None = None,
     end_date: str | None = None,
     initial_cash: float = 1_000_000.0,
+    commission_rate: float = 0.0,
     write_trade_log: bool = False,
     execution_timing: ExecutionTiming = "next_bar",
+    backtest_freq: str | None = None,
 ) -> dict[str, Any]:
     """Run a user-authored Signal class through BacktestEngine."""
 
@@ -431,7 +433,8 @@ def run_user_signal_backtest(
     )
     signal_class, diagnostics = load_signal_class(source_code)
     signal_symbols = list(getattr(signal_class, "symbols"))
-    bar_freq = str(getattr(signal_class, "bar_freq"))
+    # 优先使用前端传入的 backtest_freq，其次是类定义的 bar_freq
+    bar_freq = backtest_freq or str(getattr(signal_class, "bar_freq"))
 
     if data_source == "mock":
         symbol = signal_symbols[0]
@@ -460,7 +463,7 @@ def run_user_signal_backtest(
         raise ValueError(f"Unsupported backtest data source: {data_source}")
 
     logger.info(
-        "Prepared user signal backtest data: bars=%s run_symbols=%s effective_freq=%s signal_bar_freq=%s",
+        "Prepared user signal backtest data: bars=%s run_symbols=%s effective_freq=%s target_bar_freq=%s",
         len(bars),
         run_symbols,
         effective_freq,
@@ -471,9 +474,14 @@ def run_user_signal_backtest(
         symbol: float(get_contract_multiplier(symbol))
         for symbol in multiplier_symbols
     }
+    
+    aggregate_freqs = [bar_freq] if bar_freq != effective_freq else None
+
     engine = BacktestEngine(
         initial_cash=initial_cash,
+        commission_rate=commission_rate,
         base_bar_freq=effective_freq,
+        aggregate_freqs=aggregate_freqs,
         contract_multipliers=contract_multipliers,
         write_trade_log=write_trade_log,
         execution_timing=execution_timing,
@@ -483,21 +491,31 @@ def run_user_signal_backtest(
         trigger_id=f"USER_SIGNAL_{getattr(signal_class, 'name', 'Signal')}",
         signal_class=signal_class,
         symbols=run_symbols,
-        bar_freq=effective_freq if data_source != "mock" else bar_freq,
+        bar_freq=bar_freq,
     )
     trigger.register()
     engine.register_component(trigger)
     engine.ingest_bars(bars, assume_sorted=True)
+
+    import time as _time
+    t_engine_start = _time.monotonic()
     result = engine.run()
+    t_engine_end = _time.monotonic()
+
     payload = serialize_backtest_result(result)
+    t_serialize_end = _time.monotonic()
+
     payload["diagnostics"] = [item.to_dict() for item in [*diagnostics, *trigger.diagnostics]]
     logger.info(
-        "Finished user signal backtest: market_events=%s signals=%s trades=%s diagnostics=%s final_equity=%.2f",
+        "Finished user signal backtest: market_events=%s signals=%s trades=%s diagnostics=%s "
+        "final_equity=%.2f engine=%.1fs serialize=%.1fs",
         payload["market_events_processed"],
-        len(payload["signals"]),
-        len(payload["trades"]),
+        payload.get("total_signals", len(payload["signals"])),
+        payload.get("total_trades", len(payload["trades"])),
         len(payload["diagnostics"]),
         payload["final_equity"],
+        t_engine_end - t_engine_start,
+        t_serialize_end - t_engine_end,
     )
     return payload
 

@@ -1942,11 +1942,13 @@ def create_app() -> Flask:
             data = run_user_signal_backtest(
                 source_code=source_code,
                 data_source=str(body.get("data_source", "mock")).strip().lower(),
+                backtest_freq=body.get("backtest_freq"),
                 ts_code=body.get("ts_code"),
                 symbols=body.get("symbols", body.get("ts_codes")),
                 start_date=body.get("start_date"),
                 end_date=body.get("end_date"),
                 initial_cash=float(body.get("initial_cash", 1_000_000.0)),
+                commission_rate=float(body.get("commission_rate", 0.0)),
                 write_trade_log=_parse_bool_arg(body.get("write_trade_log"), True),
                 execution_timing=_parse_execution_timing(body.get("execution_timing"), "next_bar"),
             )
