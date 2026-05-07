@@ -60,6 +60,7 @@ AGENTS.md
 
 # Tracked native CTP bundle
 !ctp_package/*.so
+!ctp_prod_package/*.so
 
 # Legacy
 run_server.py
