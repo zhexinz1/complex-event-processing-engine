@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _tick_cache: dict[str, TickEvent] = {}  # symbol -> 最新 TickEvent
+_cum_volume_cache: dict[str, int] = {}  # symbol -> 累计成交量（用于显示）
 _tick_cache_lock = threading.Lock()
 _subscriber_thread: threading.Thread | None = None
 
@@ -28,6 +29,9 @@ def _on_tick(event: TickEvent) -> None:
     """更新 Tick 缓存（统一存储为原始大小写）"""
     with _tick_cache_lock:
         _tick_cache[event.symbol] = event
+
+        # CTP 和迅投现在都统一推送当日累计成交量，直接覆盖即可
+        _cum_volume_cache[event.symbol] = event.volume
 
 
 def _redis_subscriber_loop(redis_url: str, channel: str):
@@ -90,7 +94,10 @@ def get_latest_price(asset_code: str) -> Decimal:
     asset_code 可以带交易所后缀（如 "au2609.SHFE"），会自动去掉后缀查找。
     如果缓存里没有数据，抛出 ValueError 拒绝计算，避免用虚假价格生成真实订单。
     """
-    symbol = asset_code.split(".")[0]
+    # 对于期货，去掉后缀查找；对于股票（.SH/.SZ），保留后缀
+    symbol = asset_code
+    if not (asset_code.endswith(".SH") or asset_code.endswith(".SZ")):
+        symbol = asset_code.split(".")[0]
 
     with _tick_cache_lock:
         tick = _tick_cache.get(symbol)
@@ -135,15 +142,22 @@ def get_tick_cache_detail() -> dict:
     with _tick_cache_lock:
         symbols = {}
         for sym, tick in _tick_cache.items():
+            # 从 TickEvent 的 timestamp 提取 update_time 和 trading_day
+            update_time = ""
+            trading_day = ""
+            if tick.timestamp:
+                update_time = tick.timestamp.strftime("%H:%M:%S")
+                trading_day = tick.timestamp.strftime("%Y%m%d")
+
             symbols[sym] = {
                 "last_price": tick.last_price,
                 "ask1": tick.ask_prices[0] if tick.ask_prices else 0,
                 "bid1": tick.bid_prices[0] if tick.bid_prices else 0,
                 "ask1_vol": tick.ask_volumes[0] if tick.ask_volumes else 0,
                 "bid1_vol": tick.bid_volumes[0] if tick.bid_volumes else 0,
-                "volume": getattr(tick, "volume", 0),
-                "update_time": getattr(tick, "update_time", ""),
-                "trading_day": getattr(tick, "trading_day", ""),
+                "volume": _cum_volume_cache.get(sym, 0),
+                "update_time": update_time,
+                "trading_day": trading_day,
             }
 
     return {

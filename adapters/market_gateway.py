@@ -517,8 +517,8 @@ class CTPMarketGateway(MarketGateway):
             bid_volumes=bid_volumes,
             ask_prices=ask_prices,
             ask_volumes=ask_volumes,
-            volume=delta_vol,
-            turnover=delta_to,
+            volume=cum_vol,
+            turnover=d.Turnover,
             timestamp=tick_time,
         )
         self._publish_tick(tick)
