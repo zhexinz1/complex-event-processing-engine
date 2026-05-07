@@ -18,9 +18,10 @@ if "xt_sdk" in _inherited_ld:
     )
     _clean_paths = [p for p in _inherited_ld.split(":") if "xt_sdk" not in p]
     os.environ["LD_LIBRARY_PATH"] = ":".join(_clean_paths)
-    os.execlp(sys.executable, sys.executable, "-m", "services.run_market_node")
+    os.execlp(sys.executable, sys.executable, "-m", "services.run_market_node", *sys.argv[1:])
 
 import time
+import argparse
 from pathlib import Path
 import logging
 
@@ -44,9 +45,17 @@ logger = logging.getLogger(__name__)
 
 
 def main():
+    parser = argparse.ArgumentParser(description="CTP 行情接入微服务节点")
+    parser.add_argument("--front", default="tcp://218.17.194.115:41413", help="CTP 行情前置地址")
+    parser.add_argument("--broker", default="8060", help="经纪商 BrokerID")
+    parser.add_argument("--user", default="99683265", help="投资者账号 UserID")
+    parser.add_argument("--password", default="456123", help="密码 Password")
+    args = parser.parse_args()
 
     logger.info("=" * 60)
     logger.info("[Market Node] 正在启动独立行情微服务...")
+    logger.info(f"[Market Node] 接入地址: {args.front}")
+    logger.info(f"[Market Node] 经纪商ID: {args.broker}")
     logger.info("=" * 60)
 
     # 1. 初始化纯内存的 EventBus
@@ -63,10 +72,10 @@ def main():
     # 3. 初始化并连接 CTP 行情网关
     gateway = CTPMarketGateway(
         event_bus=local_bus,
-        front_addr="tcp://218.17.194.115:41413",
-        broker_id="8060",
-        user_id="99683265",
-        password="456123",
+        front_addr=args.front,
+        broker_id=args.broker,
+        user_id=args.user,
+        password=args.password,
         flow_path="./ctp_flow/",
     )
 
