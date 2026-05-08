@@ -28,18 +28,20 @@ utility = [
 venvPath = "."
 venv = ".venv"
 include = ["adapters", "backtest", "cep", "data_provider", "examples", "nlp", "rebalance", "scripts", "tests"]
+exclude = ["lib"]
 extraPaths = ["."]
 stubPath = "typings"
 pythonVersion = "3.12"
 reportMissingModuleSource = "none"
 
 [tool.ruff]
-exclude = ["archive"]
+exclude = ["archive", "examples/market_data_demo.py"]
 
 [tool.ruff.lint.per-file-ignores]
 "services/run_market_node.py" = ["E402"]
 "services/run_trading_node.py" = ["E402"]
 "services/run_web_node.py" = ["E402"]
+"services/run_xuntou_market_node.py" = ["E402"]
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
