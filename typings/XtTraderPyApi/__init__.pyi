@@ -36,3 +36,14 @@ class EOperationType:
     OPT_CLOSE_LONG_TODAY: int
     OPT_OPEN_SHORT: int
     OPT_CLOSE_SHORT_TODAY: int
+
+class CSubscribData:
+    m_nPlatformID: int
+    m_strExchangeID: str
+    m_strInstrumentID: str
+    m_eOfferStatus: int
+    def __setattr__(self, name: str, value: Any) -> None: ...
+    def __getattr__(self, name: str) -> Any: ...
+
+class EXTOfferStatus:
+    XT_OFFER_STATUS_SP: int
