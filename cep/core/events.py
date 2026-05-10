@@ -88,8 +88,8 @@ class TickEvent(BaseEvent):
         bid_volumes: 五档买量 (对应 bid_prices 的挂单量，单位：手)。
         ask_prices:  五档卖价 (ask_prices[0] 是卖一价，最优卖价)。
         ask_volumes: 五档卖量 (对应 ask_prices 的挂单量，单位：手)。
-        volume:      本 Tick 成交量（手）。
-        turnover:    本 Tick 成交额（元）。
+        volume:      当日累计成交量（手）。
+        turnover:    当日累计成交额（元）。
 
     向后兼容：
         可通过 .bid 和 .ask 属性访问买一价和卖一价（等价于 bid_prices[0] 和 ask_prices[0]）。

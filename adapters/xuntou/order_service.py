@@ -6,6 +6,7 @@ xt_order_service.py — 迅投下单服务
 """
 # pyright: reportAssignmentType=false
 
+import os
 import sys
 import logging
 import time
@@ -13,7 +14,9 @@ from typing import Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-sys.path.insert(0, "/home/ubuntu/xt_sdk")
+_xt_sdk_path = os.environ.get("XT_SDK_PATH", os.path.expanduser("~/xt_sdk"))
+if _xt_sdk_path not in sys.path:
+    sys.path.insert(0, _xt_sdk_path)
 
 try:
     from XtTraderPyApi import (

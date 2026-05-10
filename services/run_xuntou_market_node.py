@@ -5,34 +5,18 @@ run_xuntou_market_node.py - 微服务化：独立股票行情接入节点
 该进程独立于 CTP 行情进程，避免 C++ 库冲突。
 
 用法：
+  source scripts/setup_env.sh
   uv run -m services.run_xuntou_market_node
   uv run -m services.run_xuntou_market_node --server 175.25.41.106:65300 --user api3 --password @a1234567
 """
 
 import sys
 import os
-
-# --- 强制环境变量注入跳板 (XunTou C++ 防爆盾) ---
-_ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
-if "/home/ubuntu/xt_sdk" not in _ld_lib_path:
-    print("⚠️ [Xt Market Node] 探测到纯净环境，正在为您打入迅投依赖药剂兵无缝重启...")
-    os.environ["LD_LIBRARY_PATH"] = "/home/ubuntu/xt_sdk:" + _ld_lib_path
-    # 保留用户传入的全部命令行参数
-    os.execlp(sys.executable, sys.executable, "-m", "services.run_xuntou_market_node", *sys.argv[1:])
-
 import argparse
 import time
-from pathlib import Path
 import logging
 
-# 加载 .env 环境变量（在读取任何配置之前）
-_env_file = Path(__file__).resolve().parent.parent / ".env"
-if _env_file.exists():
-    for line in _env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, val = line.partition("=")
-            os.environ.setdefault(key.strip(), val.strip())
+from dotenv import load_dotenv
 
 from cep.core.event_bus import EventBus
 from cep.core.events import TickEvent
@@ -42,6 +26,16 @@ from database.dao import DatabaseDAO
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _ensure_xt_env() -> None:
+    """确保 LD_LIBRARY_PATH 包含迅投 SDK 路径，否则 re-exec。"""
+    xt_sdk_path = os.environ.get("XT_SDK_PATH", os.path.expanduser("~/xt_sdk"))
+    ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
+    if xt_sdk_path not in ld_lib_path:
+        logger.info("[Xt Market Node] LD_LIBRARY_PATH 缺少迅投 SDK，正在重启进程注入...")
+        os.environ["LD_LIBRARY_PATH"] = xt_sdk_path + ":" + ld_lib_path
+        os.execlp(sys.executable, sys.executable, "-m", "services.run_xuntou_market_node", *sys.argv[1:])
 
 
 def parse_args():
@@ -83,8 +77,10 @@ def sync_symbols(dao: DatabaseDAO, gateway: XtMarketService, subscribed: set) ->
         new_symbols = set(stock_targets) - subscribed
         if new_symbols:
             logger.info("[Xt Market Node] 发现并订阅新股票合约: %s", list(new_symbols))
-            gateway.subscribe(list(new_symbols))
-            subscribed.update(new_symbols)
+            if gateway.subscribe(list(new_symbols)):
+                subscribed.update(new_symbols)
+            else:
+                logger.warning("[Xt Market Node] 订阅请求失败，将在下次同步时重试: %s", list(new_symbols))
         else:
             logger.info("[Xt Market Node] sync_symbols: DB返回 %d 个股票合约, 已订阅 %d 个, 无新增", len(stock_targets), len(subscribed))
     except Exception as e:
@@ -143,4 +139,6 @@ def main():
 
 
 if __name__ == "__main__":
+    load_dotenv()
+    _ensure_xt_env()
     main()

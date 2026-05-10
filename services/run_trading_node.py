@@ -1,25 +1,22 @@
 """
 run_trading_node.py - 微服务化：独立引擎及交易节点
 
-此进程充当整个系统的“大脑”与最后执行方：
-1. 包含倒置的跳板函数，自启动时强行注入 XunTou SDK 所需的环境变量。
-2. 从 Redis 接收 Market Node 推送来的高频 Tick/Bar 行情。
-3. 把这些外部事件当成本地网络事件触发 ECA 引擎的执行。
-4. 如遇触发，调用由该进程独占的 XunTou 网关完成发单落袋。
+此进程充当整个系统的"大脑"与最后执行方：
+1. 从 Redis 接收 Market Node 推送来的高频 Tick/Bar 行情。
+2. 把这些外部事件当成本地网络事件触发 ECA 引擎的执行。
+3. 如遇触发，调用由该进程独占的 XunTou 网关完成发单落袋。
+
+用法：
+  source scripts/setup_env.sh
+  uv run -m services.run_trading_node
 """
 
 import sys
 import os
-
-# --- 强制环境变量注入跳板 (XunTou C++ 防爆盾) ---
-_ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
-if "/home/ubuntu/xt_sdk" not in _ld_lib_path:
-    print("⚠️ [Trading Node] 探测到纯净环境，正在为您打入迅投依赖药剂兵无缝重启...")
-    os.environ["LD_LIBRARY_PATH"] = "/home/ubuntu/xt_sdk:" + _ld_lib_path
-    os.execlp(sys.executable, sys.executable, "-m", "services.run_trading_node")
-
 import time
 import logging
+
+from dotenv import load_dotenv
 
 from cep.core.event_bus import EventBus
 from cep.core.remote_bus import RedisEventBridge
@@ -33,7 +30,16 @@ XT_SERVER_ADDR = "8.166.130.204:65300"
 XT_USERNAME = "system_trade"
 XT_PASSWORD = "my123456@"
 XT_TARGET_ACCT = "90102870"
-XT_CONFIG_PATH = "/home/ubuntu/xt_sdk/config"
+
+
+def _ensure_xt_env() -> None:
+    """确保 LD_LIBRARY_PATH 包含迅投 SDK 路径，否则 re-exec。"""
+    xt_sdk_path = os.environ.get("XT_SDK_PATH", os.path.expanduser("~/xt_sdk"))
+    ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
+    if xt_sdk_path not in ld_lib_path:
+        logger.info("[Trading Node] LD_LIBRARY_PATH 缺少迅投 SDK，正在重启进程注入...")
+        os.environ["LD_LIBRARY_PATH"] = xt_sdk_path + ":" + ld_lib_path
+        os.execlp(sys.executable, sys.executable, "-m", "services.run_trading_node", *sys.argv[1:])
 
 
 def main():
@@ -112,4 +118,6 @@ def main():
 
 
 if __name__ == "__main__":
+    load_dotenv()
+    _ensure_xt_env()
     main()
