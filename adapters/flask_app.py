@@ -368,13 +368,14 @@ def create_app() -> Flask:
         if missing:
             return jsonify({"success": False, "message": f"缺少字段: {missing}"}), 400
 
-        # 校验合约代码格式：不允许带交易所后缀
+        # 校验合约代码格式：不允许带交易所后缀（股票 .SH / .SZ 除外）
         asset_code = (body["asset_code"] or "").strip()
-        if "." in asset_code:
+        is_stock = asset_code.endswith(".SH") or asset_code.endswith(".SZ")
+        if not is_stock and "." in asset_code:
             return jsonify(
                 {
                     "success": False,
-                    "message": f"合约代码不应包含交易所后缀，请输入纯合约代码 (如 {asset_code.split('.')[0]})",
+                    "message": f"期货合约代码不应包含交易所后缀，请输入纯合约代码 (如 {asset_code.split('.')[0]})",
                 }
             ), 400
 
@@ -613,26 +614,28 @@ def create_app() -> Flask:
             return jsonify({"success": False, "message": "asset_code 不能为空"}), 400
 
         # 校验：合约代码不能带交易所后缀（如 ".SHFE"）
-        # CTP InstrumentID 只接受纯合约代码（如 ag2606），带后缀会导致行情订阅静默失败
-        # 交易所后缀由 normalize_asset_code() 在下单时动态计算
-        if "." in asset_code:
-            return jsonify(
-                {
-                    "success": False,
-                    "message": f"合约代码不应包含交易所后缀 (如 .SHFE)，请输入纯合约代码 (如 {asset_code.split('.')[0]})",
-                }
-            ), 400
+        # 但如果是股票，则必须带 .SH 或 .SZ 后缀
+        is_stock = asset_code.endswith(".SH") or asset_code.endswith(".SZ")
+        
+        if not is_stock:
+            if "." in asset_code:
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": f"期货合约代码不应包含交易所后缀 (如 .SHFE)，请输入纯合约代码 (如 {asset_code.split('.')[0]})",
+                    }
+                ), 400
 
-        # 校验：合约代码应为字母+数字格式
-        import re
+            # 校验：期货合约代码应为字母+数字格式
+            import re
 
-        if not re.match(r"^[a-zA-Z]+\d+$", asset_code):
-            return jsonify(
-                {
-                    "success": False,
-                    "message": f"合约代码格式不正确: {asset_code}，应为品种+月份格式（如 ag2606、rb2510）",
-                }
-            ), 400
+            if not re.match(r"^[a-zA-Z]+\d+$", asset_code):
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": f"期货合约代码格式不正确: {asset_code}，应为品种+月份格式（如 ag2606、rb2510）",
+                    }
+                ), 400
 
         try:
             with get_conn() as conn:
@@ -1367,8 +1370,11 @@ def create_app() -> Flask:
                     cursor.execute("SELECT DISTINCT asset_code FROM target_allocations")
                     rows = cursor.fetchall()
                     for row in rows:
-                        # asset_code 可能带后缀，如 ag2606.SHFE，取前缀
-                        code = row["asset_code"].split(".")[0]
+                        # 期货 asset_code 可能带后缀，如 ag2606.SHFE，取前缀
+                        # 股票 asset_code 必须保留后缀，如 563360.SH
+                        code = row["asset_code"]
+                        if not (code.endswith(".SH") or code.endswith(".SZ")):
+                            code = code.split(".")[0]
                         expected_symbols.add(code)
                 conn.close()
             except Exception as e:

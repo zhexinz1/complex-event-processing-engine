@@ -7,44 +7,40 @@ run_market_node.py - 微服务化：独立行情接入节点
 
 import sys
 import os
-
-# ---- 强制环境变量隔离跳板 ----
-# 为了彻底阻断带有 `LD_LIBRARY_PATH=/home/ubuntu/xt_sdk` 环境继承导致的 139 段错误
-# 这里务必使用 exec 级别的逃生舱，干净重启 Python 进程底层链接。
-_inherited_ld = os.environ.get("LD_LIBRARY_PATH", "")
-if "xt_sdk" in _inherited_ld:
-    print(
-        f"⚠️ 探测到终端环境变量继承污染 ({_inherited_ld})\n⚠️ 正通过操作系统级 exec 重生纯净 Python 进程..."
-    )
-    _clean_paths = [p for p in _inherited_ld.split(":") if "xt_sdk" not in p]
-    os.environ["LD_LIBRARY_PATH"] = ":".join(_clean_paths)
-    os.execlp(sys.executable, sys.executable, "-m", "services.run_market_node", *sys.argv[1:])
-
 import time
 import argparse
-from pathlib import Path
 import logging
 
-# 加载 .env 环境变量（在读取任何配置之前）
-_env_file = Path(__file__).resolve().parent.parent / ".env"
-if _env_file.exists():
-    for line in _env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, val = line.partition("=")
-            os.environ.setdefault(key.strip(), val.strip())
-
-from cep.core.event_bus import EventBus
-from cep.core.events import TickEvent, BarEvent
-from cep.core.remote_bus import RedisEventBridge
-from adapters.market_gateway import CTPMarketGateway
-from database.dao import DatabaseDAO
+from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def main():
+def _ensure_clean_env() -> None:
+    """确保 LD_LIBRARY_PATH 不含迅投 SDK 路径（CTP 与迅投 C++ 库冲突），否则 re-exec。
+
+    必须在任何非标准库 import 之前调用：动态链接器在进程启动时读取 LD_LIBRARY_PATH，
+    之后修改 os.environ 对已加载的 .so 无效。re-exec 会替换进程镜像，让新进程在
+    干净的环境中重新初始化链接器。
+    """
+    inherited_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    if "xt_sdk" in inherited_ld:
+        logger.info("[Market Node] 探测到环境变量继承污染，正在 re-exec 纯净进程...")
+        clean_paths = [p for p in inherited_ld.split(":") if "xt_sdk" not in p]
+        os.environ["LD_LIBRARY_PATH"] = ":".join(clean_paths)
+        os.execlp(sys.executable, sys.executable, "-m", "services.run_market_node", *sys.argv[1:])
+
+
+def main() -> None:
+    # 所有非标准库 import 放在 main() 内部，确保在 _ensure_clean_env() re-exec 之后
+    # 才由新进程（干净链接器环境）执行这些 import。
+    from cep.core.event_bus import EventBus
+    from cep.core.events import TickEvent, BarEvent
+    from cep.core.remote_bus import RedisEventBridge
+    from adapters.market_gateway import CTPMarketGateway
+    from database.dao import DatabaseDAO
+
     parser = argparse.ArgumentParser(description="CTP 行情接入微服务节点")
     parser.add_argument("--front", default="tcp://218.17.194.115:41413", help="CTP 行情前置地址")
     parser.add_argument("--broker", default="8060", help="经纪商 BrokerID")
@@ -137,4 +133,6 @@ def main():
 
 
 if __name__ == "__main__":
+    load_dotenv()
+    _ensure_clean_env()
     main()

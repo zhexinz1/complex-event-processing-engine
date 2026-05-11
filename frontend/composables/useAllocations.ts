@@ -73,10 +73,18 @@ export function useAllocations(api: CepApiClient, showToast: ShowToast) {
 
   async function fetchProducts() {
     try {
-      const json = await api.fetchProducts();
-      products.value = json.data || [];
+      const json = await api.fetchProductList();
+      if (json.success && json.products) {
+        products.value = json.products.map(p => p.product_name);
+      } else {
+        // Fallback to fetchProducts if fetchProductList fails or returns no products
+        const res = await api.fetchProducts();
+        products.value = res.data || [];
+      }
     } catch {
-      products.value = [];
+      // Last resort fallback
+      const res = await api.fetchProducts().catch(() => ({ data: [] }));
+      products.value = res.data || [];
     }
   }
 

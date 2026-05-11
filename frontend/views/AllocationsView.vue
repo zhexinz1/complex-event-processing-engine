@@ -21,6 +21,7 @@
       :editing-row="editingRow"
       :form="form"
       :allowed-assets="allowedAssets"
+      :products="products"
       :total-warning="totalWarning"
       :total-pct="totalPct"
       :saving="saving"

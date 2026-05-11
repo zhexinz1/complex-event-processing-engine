@@ -11,6 +11,7 @@ adapters.xuntou — 迅投交易服务包
     from adapters.xuntou import get_xt_connection_manager
     from adapters.xuntou import XtOrderService, OrderRequest, OrderDirection
     from adapters.xuntou import XtQueryService, OrderDetail
+    from adapters.xuntou import XtMarketService
 """
 
 from adapters.xuntou.base_service import XtBaseService
@@ -27,6 +28,7 @@ from adapters.xuntou.query_service import (
     ProductInfo,
     AccountDetail,
 )
+from adapters.xuntou.market_service import XtMarketService
 from adapters.xuntou.connection_manager import (
     XtConnectionManager,
     get_xt_connection_manager,
@@ -45,4 +47,5 @@ __all__ = [
     "AccountDetail",
     "XtConnectionManager",
     "get_xt_connection_manager",
+    "XtMarketService",
 ]

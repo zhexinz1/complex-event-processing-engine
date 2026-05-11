@@ -6,12 +6,15 @@ XtOrderService 和 XtQueryService 均继承此基类。
 """
 # pyright: reportAssignmentType=false
 
+import os
 import sys
 import threading
 import logging
 from typing import Optional, Dict, Any
 
-sys.path.insert(0, "/home/ubuntu/xt_sdk")
+_xt_sdk_path = os.environ.get("XT_SDK_PATH", os.path.expanduser("~/xt_sdk"))
+if _xt_sdk_path not in sys.path:
+    sys.path.insert(0, _xt_sdk_path)
 
 try:
     from XtTraderPyApi import (
@@ -159,7 +162,7 @@ class XtBaseService:
         self.server_addr = "8.166.130.204:65300"
         self.username = username or "system_trade"
         self.password = password or "my123456@"
-        self.config_path = "/home/ubuntu/xt_sdk/config"
+        self.config_path = os.path.join(_xt_sdk_path, "config")
         self.app_id = "xt_api_2.0"
         self.auth_code = "7f3c92e678f9ec77"
 

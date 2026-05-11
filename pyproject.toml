@@ -37,10 +37,6 @@ reportMissingModuleSource = "none"
 exclude = ["archive"]
 
 [tool.ruff.lint.per-file-ignores]
-"services/run_market_node.py" = ["E402"]
-"services/run_trading_node.py" = ["E402"]
-"services/run_web_node.py" = ["E402"]
-
-[[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-default = true
+"adapters/xuntou/base_service.py" = ["E402"]
+"adapters/xuntou/order_service.py" = ["E402"]
+"adapters/xuntou/market_service.py" = ["E402"]

@@ -27,13 +27,6 @@ from cep.core.events import TickEvent, BarEvent
 
 logger = logging.getLogger(__name__)
 
-# ---- 终极环境保护垫片 ----
-# 防御从外部终端或守护进程错误继承了含毒的 LD_LIBRARY_PATH (尤其是 xt_sdk)
-_inherited_ld = os.environ.get("LD_LIBRARY_PATH", "")
-if "xt_sdk" in _inherited_ld:
-    _clean_paths = [p for p in _inherited_ld.split(":") if "xt_sdk" not in p]
-    os.environ["LD_LIBRARY_PATH"] = ":".join(_clean_paths)
-    logger.info("CTP 网关启动探测到全局 C++ 环境污染，已主动完成局部净化。")
 
 mdapi: Any = None
 _CTP_AVAILABLE = False
@@ -517,8 +510,8 @@ class CTPMarketGateway(MarketGateway):
             bid_volumes=bid_volumes,
             ask_prices=ask_prices,
             ask_volumes=ask_volumes,
-            volume=delta_vol,
-            turnover=delta_to,
+            volume=cum_vol,
+            turnover=d.Turnover,
             timestamp=tick_time,
         )
         self._publish_tick(tick)

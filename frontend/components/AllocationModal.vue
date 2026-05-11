@@ -26,9 +26,7 @@
               style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">产品组合名称</label>
             <select v-model="form.product_name" class="inp">
               <option value="" disabled>请选择产品组合</option>
-              <option value="明钺全天候1号">明钺全天候1号</option>
-              <option value="明钺多资产1号">明钺多资产1号</option>
-              <option value="明钺多资产2号">明钺多资产2号</option>
+              <option v-for="p in products" :key="p" :value="p">{{ p }}</option>
             </select>
           </div>
           <div>
@@ -98,6 +96,7 @@ defineProps<{
   editingRow: AllocationRow | null;
   form: AllocationForm;
   allowedAssets: Asset[];
+  products: string[];
   totalWarning: boolean;
   totalPct: number;
   saving: boolean;
