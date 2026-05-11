@@ -184,8 +184,8 @@ uv run -m services.run_market_node
 uv run -m services.run_market_node \
     --front "tcp://140.206.80.228:41213" \
     --broker "8060" \
-    --user "你的生产账号" \
-    --password "你的生产密码"
+    --user "1234567" \
+    --password "a1234567"
 ```
 
 | 参数 | 说明 | 默认值 (仿真) |
@@ -408,7 +408,7 @@ uv run -m services.run_market_node
 
 # 终端 2：启动迅投股票行情节点（可选，如需股票行情）
 source scripts/setup_env.sh
-uv run -m services.run_xuntou_market_node
+uv run -m services.run_xuntou_market_node --server 175.25.41.106:65300 --user api3 --password @a1234567
 
 # 终端 3：启动 Web 节点（行情通过 Redis 接收）
 source scripts/setup_env.sh

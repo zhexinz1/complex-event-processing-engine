@@ -40,6 +40,3 @@ exclude = ["archive"]
 "adapters/xuntou/base_service.py" = ["E402"]
 "adapters/xuntou/order_service.py" = ["E402"]
 "adapters/xuntou/market_service.py" = ["E402"]
-
-[[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"

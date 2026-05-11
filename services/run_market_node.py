@@ -13,18 +13,17 @@ import logging
 
 from dotenv import load_dotenv
 
-from cep.core.event_bus import EventBus
-from cep.core.events import TickEvent, BarEvent
-from cep.core.remote_bus import RedisEventBridge
-from adapters.market_gateway import CTPMarketGateway
-from database.dao import DatabaseDAO
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def _ensure_clean_env() -> None:
-    """确保 LD_LIBRARY_PATH 不含迅投 SDK 路径（CTP 与迅投 C++ 库冲突），否则 re-exec。"""
+    """确保 LD_LIBRARY_PATH 不含迅投 SDK 路径（CTP 与迅投 C++ 库冲突），否则 re-exec。
+
+    必须在任何非标准库 import 之前调用：动态链接器在进程启动时读取 LD_LIBRARY_PATH，
+    之后修改 os.environ 对已加载的 .so 无效。re-exec 会替换进程镜像，让新进程在
+    干净的环境中重新初始化链接器。
+    """
     inherited_ld = os.environ.get("LD_LIBRARY_PATH", "")
     if "xt_sdk" in inherited_ld:
         logger.info("[Market Node] 探测到环境变量继承污染，正在 re-exec 纯净进程...")
@@ -33,7 +32,15 @@ def _ensure_clean_env() -> None:
         os.execlp(sys.executable, sys.executable, "-m", "services.run_market_node", *sys.argv[1:])
 
 
-def main():
+def main() -> None:
+    # 所有非标准库 import 放在 main() 内部，确保在 _ensure_clean_env() re-exec 之后
+    # 才由新进程（干净链接器环境）执行这些 import。
+    from cep.core.event_bus import EventBus
+    from cep.core.events import TickEvent, BarEvent
+    from cep.core.remote_bus import RedisEventBridge
+    from adapters.market_gateway import CTPMarketGateway
+    from database.dao import DatabaseDAO
+
     parser = argparse.ArgumentParser(description="CTP 行情接入微服务节点")
     parser.add_argument("--front", default="tcp://218.17.194.115:41413", help="CTP 行情前置地址")
     parser.add_argument("--broker", default="8060", help="经纪商 BrokerID")
