@@ -4,7 +4,3 @@ declare module '*.vue' {
   const component: DefineComponent<object, object, unknown>;
   export default component;
 }
-
-interface ImportMetaEnv {
-  readonly VITE_SHOW_BACKTEST?: string;
-}

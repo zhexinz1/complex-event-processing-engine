@@ -1,4 +1,4 @@
-import type { BacktestPreset, BacktestSignal } from './types';
+import type { BacktestSignal } from './types';
 
 export function weightBarStyle(ratio: number): { width: string; background: string } {
   const pct = Math.min(ratio * 100, 100);
@@ -13,20 +13,6 @@ export function formatMoney(value: number | string | null | undefined): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-export function formatPresetSymbols(preset: BacktestPreset | null): string {
-  if (!preset) return '';
-  if (Array.isArray(preset.symbols)) return preset.symbols.join(', ');
-  return preset.symbol || '';
-}
-
-export function presetSupportsDataSource(
-  preset: BacktestPreset | null,
-  dataSource: string,
-): boolean {
-  if (!preset || !Array.isArray(preset.data_sources)) return true;
-  return preset.data_sources.includes(dataSource);
 }
 
 export function signalPrice(signal: BacktestSignal): string {

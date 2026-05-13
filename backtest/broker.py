@@ -32,7 +32,8 @@ class PendingSignalExecution:
 
     signal: SignalEvent
     side: OrderSide
-    quantity: float
+    quantity: float | None
+    target_position_pct: float | None = None
 
 
 def _validate_execution_timing(execution_timing: str) -> ExecutionTiming:
@@ -55,6 +56,7 @@ class SimulatedBroker:
         commission_rate: float = 0.0,
         contract_multipliers: dict[str, float] | None = None,
         execution_timing: ExecutionTiming = "next_bar",
+        target_asset_size: float | None = None,
     ) -> None:
         self.event_bus = event_bus
         self.portfolio = portfolio
@@ -62,6 +64,7 @@ class SimulatedBroker:
         self.commission_rate = commission_rate
         self.contract_multipliers = contract_multipliers or {}
         self.execution_timing = _validate_execution_timing(execution_timing)
+        self.target_asset_size = target_asset_size
         self._latest_prices: dict[str, float] = {}
         self._pending_signals: dict[str, list[PendingSignalExecution]] = {}
 
@@ -101,8 +104,17 @@ class SimulatedBroker:
             return
 
         side = OrderSide(side_text)
-        quantity = float(signal.payload.get("quantity", self.default_quantity))
-        if not math.isfinite(quantity) or quantity <= 0:
+        has_target_position_pct = "target_position_pct" in signal.payload
+        target_position_pct = self._parse_target_position_pct(signal)
+        if has_target_position_pct and target_position_pct is None:
+            return
+
+        if not has_target_position_pct:
+            quantity = float(signal.payload.get("quantity", self.default_quantity))
+        else:
+            quantity = None
+
+        if quantity is not None and (not math.isfinite(quantity) or quantity <= 0):
             self._publish_rejected_order(
                 order_id=order_id,
                 signal=signal,
@@ -115,7 +127,10 @@ class SimulatedBroker:
 
         if self.execution_timing == "next_bar":
             pending = PendingSignalExecution(
-                signal=signal, side=side, quantity=quantity
+                signal=signal,
+                side=side,
+                quantity=quantity,
+                target_position_pct=target_position_pct,
             )
             self._pending_signals.setdefault(signal.symbol, []).append(pending)
             return
@@ -126,7 +141,13 @@ class SimulatedBroker:
             if signal_price is not None
             else self._latest_prices.get(signal.symbol, 0.0)
         )
-        self._execute_signal(signal=signal, side=side, quantity=quantity, price=price)
+        self._execute_signal(
+            signal=signal,
+            side=side,
+            quantity=quantity,
+            target_position_pct=target_position_pct,
+            price=price,
+        )
 
     def finalize(self) -> None:
         """Reject queued next-bar signals that never received a later bar."""
@@ -136,7 +157,7 @@ class SimulatedBroker:
                     order_id=str(uuid.uuid4()),
                     signal=pending.signal,
                     side=pending.side,
-                    quantity=pending.quantity,
+                    quantity=pending.quantity or 0.0,
                     price=0.0,
                     reason="no_next_bar",
                 )
@@ -173,6 +194,7 @@ class SimulatedBroker:
                 signal=pending.signal,
                 side=pending.side,
                 quantity=pending.quantity,
+                target_position_pct=pending.target_position_pct,
                 price=execution_price,
                 execution_timestamp=event.timestamp,
             )
@@ -182,7 +204,8 @@ class SimulatedBroker:
         *,
         signal: SignalEvent,
         side: OrderSide,
-        quantity: float,
+        quantity: float | None,
+        target_position_pct: float | None,
         price: float,
         execution_timestamp: datetime | None = None,
     ) -> None:
@@ -193,11 +216,22 @@ class SimulatedBroker:
                 order_id=order_id,
                 signal=signal,
                 side=side,
-                quantity=quantity,
+                quantity=quantity or 0.0,
                 price=price,
                 reason="invalid_quantity_or_price",
             )
             return
+
+        resolved = self._resolve_order_quantity(
+            signal=signal,
+            side=side,
+            requested_quantity=quantity,
+            target_position_pct=target_position_pct,
+            price=price,
+        )
+        if resolved is None:
+            return
+        side, quantity, sizing_payload = resolved
 
         multiplier = self.contract_multipliers.get(signal.symbol, 1.0)
         margin_rate = get_margin_rate(signal.symbol)
@@ -270,6 +304,7 @@ class SimulatedBroker:
                     "rule_id": signal.rule_id,
                     "signal_source": signal.source,
                     "execution_timing": self.execution_timing,
+                    **sizing_payload,
                 },
             )
         )
@@ -292,6 +327,7 @@ class SimulatedBroker:
                     "rule_id": signal.rule_id,
                     "signal_source": signal.source,
                     "execution_timing": self.execution_timing,
+                    **sizing_payload,
                 },
             )
         )
@@ -311,9 +347,86 @@ class SimulatedBroker:
                 payload={
                     "trade_id": trade_id,
                     "execution_timing": self.execution_timing,
+                    **sizing_payload,
                 },
             )
         )
+
+    def _parse_target_position_pct(self, signal: SignalEvent) -> float | None:
+        raw_value = signal.payload.get("target_position_pct")
+        if raw_value is None:
+            return None
+        target_position_pct = float(raw_value)
+        if (
+            not math.isfinite(target_position_pct)
+            or target_position_pct < 0
+            or target_position_pct > 1
+        ):
+            self._publish_rejected_order(
+                order_id=str(uuid.uuid4()),
+                signal=signal,
+                side=OrderSide.BUY,
+                quantity=0.0,
+                price=0.0,
+                reason="invalid_target_position_pct",
+                details={"target_position_pct": str(raw_value)},
+            )
+            return None
+        return target_position_pct
+
+    def _resolve_order_quantity(
+        self,
+        *,
+        signal: SignalEvent,
+        side: OrderSide,
+        requested_quantity: float | None,
+        target_position_pct: float | None,
+        price: float,
+    ) -> tuple[OrderSide, float, dict[str, float | str]] | None:
+        if target_position_pct is None:
+            if requested_quantity is None:
+                return side, self.default_quantity, {}
+            return side, requested_quantity, {}
+
+        multiplier = self.contract_multipliers.get(signal.symbol, 1.0)
+        margin_rate = get_margin_rate(signal.symbol)
+        asset_size = self.target_asset_size or self.portfolio.equity
+        raw_target_quantity = asset_size * target_position_pct / (
+            price * multiplier * margin_rate
+        )
+        lot_size = self._lot_size(signal.symbol)
+        target_quantity = self._round_down_to_lot(raw_target_quantity, lot_size)
+
+        position = self.portfolio.positions.get(signal.symbol)
+        current_quantity = position.quantity if position is not None else 0.0
+        if side == OrderSide.BUY:
+            desired_quantity = max(current_quantity, target_quantity)
+        else:
+            desired_quantity = min(max(current_quantity, 0.0), target_quantity)
+
+        delta_quantity = desired_quantity - current_quantity
+        if abs(delta_quantity) <= 1e-9:
+            return None
+
+        resolved_side = OrderSide.BUY if delta_quantity > 0 else OrderSide.SELL
+        sizing_payload: dict[str, float | str] = {
+            "target_position_pct": target_position_pct,
+            "target_asset_size": asset_size,
+            "target_quantity": target_quantity,
+            "previous_quantity": current_quantity,
+            "lot_size": lot_size,
+        }
+        return resolved_side, abs(delta_quantity), sizing_payload
+
+    def _lot_size(self, symbol: str) -> float:
+        if symbol.endswith((".SH", ".SZ", ".BJ")):
+            return 100.0
+        return 1.0
+
+    def _round_down_to_lot(self, quantity: float, lot_size: float) -> float:
+        if lot_size <= 0:
+            return quantity
+        return math.floor(quantity / lot_size) * lot_size
 
     def _publish_rejected_order(
         self,

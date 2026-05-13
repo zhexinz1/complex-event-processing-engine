@@ -2,14 +2,9 @@ import type {
   ApiResponse,
   Asset,
   AllocationRow,
-  BacktestHistoryDetail,
-  BacktestRequest,
-  BacktestHistoryItem,
   BacktestResult,
   CepApiClient,
   SaveWeightPayload,
-  StockSearchResult,
-  BacktestPreset,
   UserSignalBacktestRequest,
   UserSignalDefinition,
   SignalDiagnostic,
@@ -62,33 +57,6 @@ export const CepApi: CepApiClient = {
 
   deleteWeight(recordId: number): Promise<ApiResponse> {
     return this.requestJson(`/api/weights/${recordId}`, { method: 'DELETE' });
-  },
-
-  fetchBacktestPresets(): Promise<ApiResponse<BacktestPreset[]>> {
-    return this.requestJson('/api/backtests/presets');
-  },
-
-  fetchBacktestHistory(limit = 100): Promise<ApiResponse<BacktestHistoryItem[]>> {
-    const params = new URLSearchParams({ limit: String(limit) });
-    return this.requestJson(`/api/backtests/history?${params.toString()}`);
-  },
-
-  fetchBacktestHistoryDetail(id: string, equityPoints = 48): Promise<ApiResponse<BacktestHistoryDetail>> {
-    const params = new URLSearchParams({ equity_points: String(equityPoints) });
-    return this.requestJson(`/api/backtests/history/${encodeURIComponent(id)}?${params.toString()}`);
-  },
-
-  searchStocks(keyword: string, limit = 20): Promise<ApiResponse<StockSearchResult[]>> {
-    const params = new URLSearchParams({ q: keyword, limit: String(limit) });
-    return this.requestJson(`/api/stocks/search?${params.toString()}`);
-  },
-
-  runBacktest(payload: BacktestRequest): Promise<ApiResponse<BacktestResult>> {
-    return this.requestJson('/api/backtests/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
   },
 
   fetchUserSignals(): Promise<ApiResponse<UserSignalDefinition[]>> {

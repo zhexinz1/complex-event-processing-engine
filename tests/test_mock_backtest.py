@@ -3,6 +3,9 @@ import json
 import weakref
 from datetime import datetime, timedelta
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backtest import BacktestEngine
 from backtest.trade_log import write_backtest_trade_log
@@ -343,6 +346,75 @@ def test_backtest_engine_rejects_sell_signal_without_position() -> None:
     assert rejected_orders[0].payload["reason"] == "insufficient_position"
     assert result.trades == []
     assert symbol not in result.positions
+
+
+def test_backtest_engine_scales_target_position_pct_to_stock_lots() -> None:
+    symbol = "000680.SZ"
+    bars = _make_bars(symbol, [10.0, 10.0, 10.0, 10.0])
+
+    class TargetPctTrigger:
+        def __init__(self, event_bus):
+            self.event_bus = event_bus
+            self.index = 0
+
+        def register(self):
+            from cep.core.events import BarEvent, SignalEvent
+
+            targets = [
+                (OrderSide.BUY, 0.5),
+                (OrderSide.BUY, 1.0),
+                (OrderSide.SELL, 0.5),
+                (OrderSide.SELL, 0.0),
+            ]
+
+            def on_bar(event: BarEvent) -> None:
+                side, target_pct = targets[self.index]
+                self.index += 1
+                self.event_bus.publish(
+                    SignalEvent(
+                        source="TARGET_PCT",
+                        symbol=event.symbol,
+                        signal_type=SignalType.TRADE_OPPORTUNITY,
+                        timestamp=event.timestamp,
+                        payload={
+                            "side": side.value,
+                            "target_position_pct": target_pct,
+                            "price": event.close,
+                        },
+                    )
+                )
+
+            self.event_bus.subscribe(BarEvent, on_bar, symbol=symbol)
+            self._handler = on_bar
+
+    engine = BacktestEngine(
+        initial_cash=1_000_000.0,
+        target_asset_size=1_000_000.0,
+        execution_timing="current_bar",
+    )
+    trigger = TargetPctTrigger(engine.event_bus)
+    trigger.register()
+    engine._components.append(trigger)
+    engine.ingest_bars(bars)
+
+    result = engine.run()
+
+    assert [trade.side for trade in result.trades] == [
+        OrderSide.BUY,
+        OrderSide.BUY,
+        OrderSide.SELL,
+        OrderSide.SELL,
+    ]
+    assert [trade.quantity for trade in result.trades] == [
+        50_000.0,
+        50_000.0,
+        50_000.0,
+        50_000.0,
+    ]
+    assert result.positions[symbol].quantity == 0.0
+    assert result.orders[0].payload["target_position_pct"] == 0.5
+    assert result.orders[0].payload["target_quantity"] == 50_000.0
+    assert result.orders[0].payload["lot_size"] == 100.0
 
 
 def test_backtest_engine_can_skip_trade_log(monkeypatch) -> None:

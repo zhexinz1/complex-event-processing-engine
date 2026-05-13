@@ -1,18 +1,13 @@
 import { spawn } from 'node:child_process';
 
 const args = process.argv.slice(2);
-const showBacktest = args.includes('--show-backtest');
-const viteArgs = args.filter((arg) => arg !== '--show-backtest');
 const viteBin = process.platform === 'win32' ? 'vite.cmd' : 'vite';
 
 const child = spawn(
   viteBin,
-  ['build', '--config', 'frontend/vite.config.ts', ...viteArgs],
+  ['build', '--config', 'frontend/vite.config.ts', ...args],
   {
-    env: {
-      ...process.env,
-      VITE_SHOW_BACKTEST: showBacktest ? 'true' : 'false',
-    },
+    env: process.env,
     stdio: 'inherit',
     shell: process.platform === 'win32',
   },

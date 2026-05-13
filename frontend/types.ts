@@ -44,23 +44,6 @@ export interface SaveWeightPayload {
   algo_type: string;
 }
 
-export interface PresetParameter {
-  label: string;
-  value: unknown;
-}
-
-export interface BacktestPreset {
-  id: string;
-  name: string;
-  description: string;
-  dataset: string;
-  symbol?: string;
-  symbols?: string[];
-  data_sources?: string[];
-  parameter_summary?: PresetParameter[];
-  parameters?: Record<string, unknown>;
-}
-
 export interface EquityPoint {
   timestamp?: string;
   equity: number;
@@ -124,55 +107,6 @@ export interface BacktestResult {
   total_trades?: number;
 }
 
-export interface BacktestHistoryItem {
-  id: string;
-  filename: string;
-  created_at: string;
-  modified_at: string;
-  path: string;
-  market_events_processed: number;
-  initial_cash: number;
-  final_cash: number;
-  final_market_value: number;
-  final_equity: number;
-  realized_pnl: number;
-  unrealized_pnl: number;
-  signal_count: number;
-  order_count: number;
-  trade_count: number;
-  position_count: number;
-  symbols: string[];
-  equity_curve_count?: number;
-  first_timestamp?: string | null;
-  last_timestamp?: string | null;
-}
-
-export interface BacktestHistoryDetail extends BacktestHistoryItem {
-  data: BacktestResult & {
-    orders?: Record<string, unknown>[];
-    positions?: BacktestPosition[];
-  };
-}
-
-export interface StockSearchResult {
-  ts_code: string;
-  name: string;
-  exchange?: string;
-  board?: string;
-  industry?: string;
-  full_name?: string;
-  english_name?: string;
-}
-
-export interface BacktestRequest {
-  strategy_id: string;
-  data_source: string;
-  ts_code?: string;
-  start_date?: string;
-  end_date?: string;
-  write_trade_log?: boolean;
-}
-
 export interface SignalDiagnostic {
   level: string;
   message: string;
@@ -203,6 +137,7 @@ export interface UserSignalBacktestRequest {
   start_date?: string;
   end_date?: string;
   initial_cash?: number;
+  target_asset_size?: number;
   commission_rate?: number;
   write_trade_log?: boolean;
   execution_timing?: 'current_bar' | 'next_bar';
@@ -326,11 +261,6 @@ export interface CepApiClient {
   deleteAsset(assetCode: string): Promise<ApiResponse>;
   saveWeight(payload: SaveWeightPayload): Promise<ApiResponse>;
   deleteWeight(recordId: number): Promise<ApiResponse>;
-  fetchBacktestPresets(): Promise<ApiResponse<BacktestPreset[]>>;
-  fetchBacktestHistory(limit?: number): Promise<ApiResponse<BacktestHistoryItem[]>>;
-  fetchBacktestHistoryDetail(id: string, equityPoints?: number): Promise<ApiResponse<BacktestHistoryDetail>>;
-  searchStocks(keyword: string, limit?: number): Promise<ApiResponse<StockSearchResult[]>>;
-  runBacktest(payload: BacktestRequest): Promise<ApiResponse<BacktestResult>>;
   fetchUserSignals(): Promise<ApiResponse<UserSignalDefinition[]>>;
   createUserSignal(payload: UserSignalDefinition): Promise<ApiResponse<UserSignalDefinition>>;
   updateUserSignal(signalId: number, payload: UserSignalDefinition): Promise<ApiResponse<UserSignalDefinition>>;

@@ -9,7 +9,7 @@
             {{ schema?.summary || '用户信号里的 self.ctx 是 LocalContext。' }}
           </p>
         </div>
-        <router-link to="/signals" class="btn btn-default">返回信号研究</router-link>
+        <router-link to="/signals" class="btn btn-default">返回信号与回测</router-link>
       </div>
 
       <section class="card ctx-guide-section">
