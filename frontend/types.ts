@@ -238,8 +238,11 @@ export interface SignalCtxSchema {
 
 export interface ProductInfo {
   product_name: string;
-  leverage_ratio: string;
-  account_id: string;
+  leverage_ratio: string | number;
+  fund_account: string;
+  xt_username?: string;
+  xt_password?: string;
+  status?: string;
 }
 
 export interface FundInflow {
@@ -341,6 +344,8 @@ export interface CepApiClient {
   fetchSignalCtxSchema(): Promise<ApiResponse<SignalCtxSchema>>;
   // Fund Inflow
   fetchProductList(): Promise<ApiResponse & { products: ProductInfo[] }>;
+  addProduct(payload: any): Promise<ApiResponse>;
+  updateProduct(payload: any): Promise<ApiResponse>;
   submitFundInflow(payload: { product_name: string; net_inflow: number; input_by: string }): Promise<ApiResponse & { batch_id: string }>;
   fetchFundInflows(): Promise<ApiResponse & { inflows: FundInflow[] }>;
   // Orders

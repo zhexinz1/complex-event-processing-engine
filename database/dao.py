@@ -4,6 +4,7 @@
 """
 
 import pymysql
+from dbutils.pooled_db import PooledDB
 import json
 from decimal import Decimal
 from typing import List, Optional
@@ -20,7 +21,12 @@ from database.models import (
     UserSignalDefinition,
     UserSignalStatus,
 )
-from database.config import DB_CONFIG
+from database.config import (
+    DB_CONFIG,
+    CONNECT_TIMEOUT_SECONDS,
+    READ_TIMEOUT_SECONDS,
+    WRITE_TIMEOUT_SECONDS,
+)
 
 
 class DatabaseDAO:
@@ -42,11 +48,28 @@ class DatabaseDAO:
             "database": database or DB_CONFIG.database,
             "charset": DB_CONFIG.charset,
             "cursorclass": pymysql.cursors.DictCursor,
+            "connect_timeout": CONNECT_TIMEOUT_SECONDS,
+            "read_timeout": READ_TIMEOUT_SECONDS,
+            "write_timeout": WRITE_TIMEOUT_SECONDS,
         }
+        
+        # 初始化连接池
+        self.pool = PooledDB(
+            creator=pymysql,
+            maxconnections=20,     # 最大允许连接数
+            mincached=2,           # 初始化时，连接池中至少创建的空闲连接
+            maxcached=10,          # 连接池中最多闲置的连接
+            maxshared=0,           # 连接池中最多共享的连接数 (PyMySQL不需要)
+            blocking=True,         # 连接池中没有可用连接时，是否阻塞等待
+            maxusage=1000,         # 单个连接最多被重复使用的次数
+            setsession=[],         # 可选，连接建立后的初始化命令
+            ping=1,                # ping MySQL服务端，检查连接是否可用
+            **self.connection_params
+        )
 
     def _get_connection(self):
-        """获取数据库连接"""
-        return pymysql.connect(**self.connection_params)
+        """获取数据库连接（从连接池）"""
+        return self.pool.connection()
 
     # ==================== 产品管理 ====================
 
@@ -63,8 +86,7 @@ class DatabaseDAO:
                         id=row["id"],
                         product_name=row["product_name"],
                         leverage_ratio=row["leverage_ratio"],
-                        account_id=row["account_id"],
-                        fund_account=row.get("fund_account"),
+                        fund_account=row["fund_account"],
                         xt_username=row.get("xt_username"),
                         xt_password=row.get("xt_password"),
                         status=ProductStatus(row["status"]),
@@ -88,8 +110,7 @@ class DatabaseDAO:
                         id=row["id"],
                         product_name=row["product_name"],
                         leverage_ratio=row["leverage_ratio"],
-                        account_id=row["account_id"],
-                        fund_account=row.get("fund_account"),
+                        fund_account=row["fund_account"],
                         xt_username=row.get("xt_username"),
                         xt_password=row.get("xt_password"),
                         status=ProductStatus(row["status"]),
@@ -367,6 +388,17 @@ class DatabaseDAO:
             with conn.cursor() as cursor:
                 sql = "UPDATE pending_orders SET final_quantity = %s WHERE id = %s"
                 cursor.execute(sql, (final_quantity, order_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def update_order_final_quantity_and_price(self, order_id: int, final_quantity: int, price: float):
+        """更新订单的最终手数和自定义限价（交易员手动调整）"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = "UPDATE pending_orders SET final_quantity = %s, price = %s WHERE id = %s"
+                cursor.execute(sql, (final_quantity, price, order_id))
             conn.commit()
         finally:
             conn.close()

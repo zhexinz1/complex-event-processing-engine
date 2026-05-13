@@ -16,6 +16,7 @@ dependencies = [
     "redis>=7.4.0",
     "tushare>=1.4.29",
     "python-dotenv>=1.2.2",
+    "dbutils>=3.1.2",
 ]
 
 [dependency-groups]

@@ -148,10 +148,7 @@ onUnmounted(stopTimer);
 
 <style scoped>
 .health-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
-.h-card { padding: 20px; border-left: 4px solid var(--border); }
-.h-card.ok { border-left-color: #10b981; }
-.h-card.warn { border-left-color: #f59e0b; }
-.h-card.err { border-left-color: #ef4444; }
+.h-card { padding: 20px; }
 .h-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
 .h-value { font-size: 28px; font-weight: 700; }
 .h-value.ok { color: #059669; }

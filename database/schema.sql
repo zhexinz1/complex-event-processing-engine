@@ -6,15 +6,13 @@ CREATE TABLE IF NOT EXISTS products (
     id INT PRIMARY KEY AUTO_INCREMENT,
     product_name VARCHAR(100) NOT NULL UNIQUE COMMENT '产品名称',
     leverage_ratio DECIMAL(5, 2) NOT NULL COMMENT '杠杆倍数（如 2.00 表示2倍杠杆）',
-    account_id VARCHAR(50) NOT NULL COMMENT '关联的交易账号ID',
-    fund_account VARCHAR(50) COMMENT '资金账号（真实资金账号ID，用于下单）',
+    fund_account VARCHAR(50) NOT NULL COMMENT '底仓资金账号（真实资金账号ID，用于下单）',
     xt_username VARCHAR(100) COMMENT '迅投登录用户名',
     xt_password VARCHAR(200) COMMENT '迅投登录密码（加密存储）',
     status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '产品状态',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_product_name (product_name),
-    INDEX idx_account_id (account_id)
+    INDEX idx_product_name (product_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='产品配置表';
 
 -- 留白数据表（合约维度的小数部分累积）
@@ -78,7 +76,7 @@ CREATE TABLE IF NOT EXISTS fund_inflows (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='净入金记录表';
 
 -- 插入示例产品数据
-INSERT INTO products (product_name, leverage_ratio, account_id, status) VALUES
+INSERT INTO products (product_name, leverage_ratio, fund_account, status) VALUES
 ('产品A', 2.00, 'XT_ACCOUNT_001', 'active'),
 ('产品B', 4.00, 'XT_ACCOUNT_002', 'active')
 ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP;

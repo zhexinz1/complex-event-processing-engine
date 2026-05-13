@@ -168,12 +168,24 @@ def frontend_setup_response() -> Any:
     return jsonify(message), 503
 
 
+# 全局 DAO 实例
+dao = None
+
 def get_conn() -> Any:
+    global dao
+    if dao is not None:
+        return dao._get_connection()
     return pymysql.connect(**DB_CONFIG)
 
 
 def init_db() -> None:
     """建表（幂等），应用启动时调用一次。"""
+    # 初始化 DAO，这样 get_conn 就能利用连接池
+    global dao
+    if dao is None:
+        dao = DatabaseDAO()
+        logger.info("DatabaseDAO initialized.")
+
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(CREATE_TABLE_SQL)
@@ -183,11 +195,6 @@ def init_db() -> None:
     logger.info(
         "DB tables target_allocations, allowed_assets and user_signal_definitions ready."
     )
-
-    # 初始化 DAO
-    global dao
-    dao = DatabaseDAO()
-    logger.info("DatabaseDAO initialized.")
 
 
 def _serialize_user_signal(signal: UserSignalDefinition) -> dict[str, Any]:
@@ -460,8 +467,9 @@ def create_app() -> Flask:
                         {
                             "product_name": p.product_name,
                             "leverage_ratio": float(p.leverage_ratio),
-                            "account_id": p.account_id,
                             "fund_account": p.fund_account,
+                            "xt_username": p.xt_username,
+                            "xt_password": p.xt_password,
                             "status": p.status.value,
                         }
                         for p in products
@@ -482,12 +490,11 @@ def create_app() -> Flask:
         data = request.get_json()
         product_name = data.get("product_name", "").strip()
         leverage_ratio = data.get("leverage_ratio")
-        account_id = data.get("account_id", "").strip()
-        fund_account = data.get("fund_account", "").strip() or None
+        fund_account = data.get("fund_account", "").strip()
         xt_username = data.get("xt_username", "").strip() or None
         xt_password = data.get("xt_password", "").strip() or None
 
-        if not product_name or not leverage_ratio or not account_id:
+        if not product_name or not leverage_ratio or not fund_account:
             return jsonify({"success": False, "message": "参数不完整"}), 400
 
         try:
@@ -503,13 +510,12 @@ def create_app() -> Flask:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
-                        INSERT INTO products (product_name, leverage_ratio, account_id, fund_account, xt_username, xt_password, status)
-                        VALUES (%s, %s, %s, %s, %s, %s, 'active')
+                        INSERT INTO products (product_name, leverage_ratio, fund_account, xt_username, xt_password, status)
+                        VALUES (%s, %s, %s, %s, %s, 'active')
                         """,
                         (
                             product_name,
                             leverage_ratio,
-                            account_id,
                             fund_account,
                             xt_username,
                             xt_password,
@@ -544,13 +550,9 @@ def create_app() -> Flask:
                 updates.append("leverage_ratio = %s")
                 params.append(data["leverage_ratio"])
 
-            if "account_id" in data:
-                updates.append("account_id = %s")
-                params.append(data["account_id"])
-
             if "fund_account" in data:
                 updates.append("fund_account = %s")
-                params.append(data["fund_account"] if data["fund_account"] else None)
+                params.append(data["fund_account"])
 
             if "xt_username" in data:
                 updates.append("xt_username = %s")
@@ -769,7 +771,7 @@ def create_app() -> Flask:
         {
             "product_name": "产品A",
             "net_inflow": 1000000.00,
-            "input_by": "张三"
+            "input_by": "周哲鑫"
         }
 
         返回:
@@ -1069,6 +1071,14 @@ def create_app() -> Flask:
             # 查询批次的净入金汇总信息
             inflow_info = dao.get_fund_inflow_by_batch(batch_id) if batch_id else None
 
+            # 批次已确认执行后，过滤掉手数为0的订单（无需展示）
+            batch_confirmed = (
+                inflow_info is not None
+                and inflow_info.status == FundInflowStatus.CONFIRMED
+            )
+            if batch_confirmed:
+                orders = [o for o in orders if o.final_quantity != 0]
+
             resp: dict = {
                 "success": True,
                 "orders": [
@@ -1086,6 +1096,12 @@ def create_app() -> Flask:
                         "previous_fractional": 0.0,
                         "final_quantity": o.final_quantity,
                         "status": o.status.value,
+                        "xt_order_id": o.xt_order_id,
+                        "xt_status": o.xt_status,
+                        "xt_error_msg": o.xt_error_msg,
+                        "xt_traded_volume": o.xt_traded_volume,
+                        "xt_traded_price": float(o.xt_traded_price) if o.xt_traded_price else 0.0,
+                        "order_price_type": o.order_price_type,
                         "created_at": o.created_at.isoformat()
                         if o.created_at
                         else None,
@@ -1104,6 +1120,7 @@ def create_app() -> Flask:
                 resp["input_at"] = (
                     inflow_info.input_at.isoformat() if inflow_info.input_at else ""
                 )
+                resp["status"] = inflow_info.status.value
 
             return jsonify(resp)
 
@@ -1118,27 +1135,32 @@ def create_app() -> Flask:
     @app.route("/api/orders/update", methods=["POST"])
     def update_order_quantity():
         """
-        更新订单的最终数量（交易员手动调整）。
+        更新订单的最终数量和价格（交易员手动调整）。
 
         请求体:
         {
             "order_id": 123,
-            "final_quantity": 2
+            "final_quantity": 2,
+            "price": 37000.00
         }
         """
         data = request.get_json()
         order_id = data.get("order_id")
         final_quantity = data.get("final_quantity")
+        price = data.get("price")
 
         if order_id is None or final_quantity is None:
             return jsonify({"success": False, "message": "参数错误"}), 400
 
         try:
-            dao.update_order_final_quantity(order_id, final_quantity)
-            return jsonify({"success": True, "message": "订单数量已更新"})
+            if price is not None:
+                dao.update_order_final_quantity_and_price(order_id, final_quantity, float(price))
+            else:
+                dao.update_order_final_quantity(order_id, final_quantity)
+            return jsonify({"success": True, "message": "订单已更新"})
 
         except Exception as e:
-            logger.exception("更新订单数量失败")
+            logger.exception("更新订单失败")
             return jsonify({"success": False, "message": f"服务器错误: {str(e)}"}), 500
 
     # -----------------------------------------------------------------------
@@ -1236,7 +1258,6 @@ def create_app() -> Flask:
                     xt_service = xt_manager.get_connection(
                         username=product.xt_username,
                         password=product.xt_password,
-                        account_id=product.account_id,
                         timeout=30.0,
                         dao=dao,
                     )
@@ -1282,21 +1303,19 @@ def create_app() -> Flask:
                         )
                         quantity = abs(order.final_quantity)
 
-                    # 获取最新实时价格（而不是录入时的快照价格）
-                    try:
-                        live_price = float(get_latest_price(order.asset_code))
-                    except ValueError:
+                    # 对于限价单，直接使用数据库中保存的 price（用户可能在前端修改了）
+                    # 对于市价单等，获取最新实时价格作为参考价格
+                    if selected_price_type == OrderPriceType.LIMIT:
                         live_price = float(order.price) if order.price else 0.0
+                    else:
+                        try:
+                            live_price = float(get_latest_price(order.asset_code))
+                        except ValueError:
+                            live_price = float(order.price) if order.price else 0.0
 
                     # 构造下单请求
-                    # 注意：account_id 应该使用 fund_account（真实账号ID），而不是 product.account_id（可能是用户名）
-                    actual_account_id = (
-                        product.fund_account
-                        if product.fund_account
-                        else product.account_id
-                    )
                     order_req = OrderRequest(
-                        account_id=actual_account_id,
+                        account_id=product.fund_account,
                         asset_code=normalized_code,  # 使用标准化后的代码
                         direction=direction,
                         quantity=quantity,
@@ -1500,7 +1519,6 @@ def create_app() -> Flask:
             xt_service = xt_manager.get_connection(
                 username=product.xt_username,
                 password=product.xt_password,
-                account_id=product.account_id,
                 timeout=30.0,
                 dao=dao,
             )
@@ -1512,16 +1530,12 @@ def create_app() -> Flask:
                     }
                 ), 500
 
-            actual_account_id = (
-                product.fund_account if product.fund_account else product.account_id
-            )
-
             # 1. 拉取迅投当日全部指令
-            instructions = xt_service.query_instructions(account_id=actual_account_id)
+            instructions = xt_service.query_instructions(account_id=product.fund_account)
             logger.info(
                 "对账: 迅投返回 %d 条指令 (account_id=%s)",
                 len(instructions),
-                actual_account_id,
+                product.fund_account,
             )
 
             # 构建 order_id → instruction 索引
@@ -1591,7 +1605,7 @@ def create_app() -> Flask:
                         "already_ok": already_ok,
                         "not_found": not_found,
                     },
-                    "account_id": actual_account_id,
+                    "account_id": product.fund_account,
                     "product_name": product_name,
                 }
             )
@@ -1628,7 +1642,6 @@ def create_app() -> Flask:
             xt_service = xt_manager.get_connection(
                 username=product.xt_username,
                 password=product.xt_password,
-                account_id=product.account_id,
                 timeout=30.0,
             )
             if not xt_service:
@@ -1645,13 +1658,10 @@ def create_app() -> Flask:
 
             xt_api = xt_service._api
 
-            actual_account_id = (
-                product.fund_account if product.fund_account else product.account_id
-            )
-            account_key = xt_service._account_ready.get(actual_account_id)
+            account_key = xt_service._account_ready.get(product.fund_account)
 
             result = {
-                "account_id": actual_account_id,
+                "account_id": product.fund_account,
                 "account_key": account_key[:30] + "..." if account_key else None,
                 "logined": xt_service._logined,
                 "account_ready_keys": list(xt_service._account_ready.keys()),
@@ -1661,7 +1671,7 @@ def create_app() -> Flask:
             try:
                 error = _XtError(0, "")
                 orders = xt_api.reqOrderDetailSync(
-                    actual_account_id, error, account_key
+                    product.fund_account, error, account_key
                 )
                 result["method1_reqOrderDetailSync"] = {
                     "isSuccess": error.isSuccess(),
@@ -1686,7 +1696,7 @@ def create_app() -> Flask:
                 try:
                     error2 = _XtError(0, "")
                     orders2 = xt_api.reqOrderDetailSyncByOrderID(
-                        actual_account_id, error2, target_order_id, account_key
+                        product.fund_account, error2, target_order_id, account_key
                     )
                     result["method2_reqByOrderID"] = {
                         "order_id": target_order_id,
@@ -1709,7 +1719,7 @@ def create_app() -> Flask:
             # 方法3: reqDealDetailSync (成交明细)
             try:
                 error3 = _XtError(0, "")
-                deals = xt_api.reqDealDetailSync(actual_account_id, error3, account_key)
+                deals = xt_api.reqDealDetailSync(product.fund_account, error3, account_key)
                 result["method3_reqDealDetail"] = {
                     "isSuccess": error3.isSuccess(),
                     "errorMsg": error3.errorMsg(),

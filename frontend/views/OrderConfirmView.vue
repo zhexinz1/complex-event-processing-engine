@@ -59,7 +59,38 @@
           <span style="font-size:12px; color:var(--text-muted); margin-left:auto; font-style:italic;">{{ priceTypeHint }}</span>
         </div>
 
-        <table>
+        <table v-if="batchInfo.status === 'confirmed'">
+          <thead>
+            <tr>
+              <th>合约代码</th><th>订单类型</th><th>数量</th><th>价格</th>
+              <th>目标市值</th><th>迅投指令ID</th><th>迅投状态</th><th>创建时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="order in orders" :key="order.id">
+              <td><strong>{{ order.asset_code }}</strong></td>
+              <td>{{ renderPriceType(order.order_price_type) }}</td>
+              <td>{{ order.final_quantity }}</td>
+              <td>{{ priceDisplay(order) }}</td>
+              <td>{{ fmtNum(order.target_market_value) }}</td>
+              <td>
+                <code v-if="order.xt_order_id">{{ order.xt_order_id }}</code>
+                <span v-else style="color:#9ca3af;">—</span>
+              </td>
+              <td>
+                <span :class="['status-badge', xtStatusClass(order)]">{{ xtStatusText(order) }}</span>
+                <br v-if="order.xt_error_msg"><small v-if="order.xt_error_msg" style="color:#ef4444; font-size:11px;">{{ order.xt_error_msg }}</small>
+                <br v-if="order.xt_traded_volume > 0">
+                <small v-if="order.xt_traded_volume > 0" style="color:#059669; font-size:11px;">
+                  成交: {{ order.xt_traded_volume }}手 @ {{ parseFloat(order.xt_traded_price || 0).toFixed(2) }}
+                </small>
+              </td>
+              <td><small>{{ order.created_at ? order.created_at.replace('T', ' ') : '—' }}</small></td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <table v-else>
           <thead>
             <tr><th>合约代码</th><th>目标市值（元）</th><th>实时价格</th><th>合约乘数</th><th>理论手数</th><th>四舍五入</th><th>留白</th><th>最终手数</th></tr>
           </thead>
@@ -68,12 +99,16 @@
               <td><strong>{{ order.asset_code }}</strong></td>
               <td>{{ fmtNum(order.target_market_value) }}</td>
               <td>
-                <div style="font-family:monospace; font-weight:700; font-size:15px;" :style="{ color: priceColor(order) }">
-                  {{ parseFloat(order.price).toFixed(2) }}
+                <div v-if="batchInfo.status !== 'confirmed' && priceType === 'limit'">
+                  <input type="number" class="inp" style="width:90px; text-align:center; font-family:monospace; font-weight:700;"
+                    v-model.number="order.user_limit_price" step="0.01" />
                 </div>
-                <div v-if="livePrices[order.asset_code]" style="font-size:11px; color:var(--text-muted);">
-                  <span style="color:#dc2626;">买1: {{ livePrices[order.asset_code].bid1 > 0 ? livePrices[order.asset_code].bid1.toFixed(2) : '—' }}</span> /
-                  <span style="color:#059669;">卖1: {{ livePrices[order.asset_code].ask1 > 0 ? livePrices[order.asset_code].ask1.toFixed(2) : '—' }}</span>
+                <div v-else style="font-family:monospace; font-weight:700; font-size:15px;" :style="{ color: priceColor(order) }">
+                  {{ parseFloat(priceType === 'limit' && order.user_limit_price ? order.user_limit_price : order.price).toFixed(2) }}
+                </div>
+                <div v-if="livePrices[order.asset_code]" style="font-size:11px; color:var(--text-muted); margin-top: 4px;">
+                  <span style="color:#dc2626; cursor:pointer;" title="点击填入买1价" @click="priceType === 'limit' && (order.user_limit_price = livePrices[order.asset_code].bid1)">买1: {{ livePrices[order.asset_code].bid1 > 0 ? livePrices[order.asset_code].bid1.toFixed(2) : '—' }}</span> /
+                  <span style="color:#059669; cursor:pointer;" title="点击填入卖1价" @click="priceType === 'limit' && (order.user_limit_price = livePrices[order.asset_code].ask1)">卖1: {{ livePrices[order.asset_code].ask1 > 0 ? livePrices[order.asset_code].ask1.toFixed(2) : '—' }}</span>
                 </div>
               </td>
               <td>{{ order.contract_multiplier }}</td>
@@ -84,9 +119,8 @@
                 <small>(上次: {{ parseFloat(order.previous_fractional).toFixed(6) }})</small>
               </td>
               <td>
-                <input v-if="batchInfo.status !== 'confirmed'" type="number" class="inp" style="width:80px; text-align:center;"
+                <input type="number" class="inp" style="width:80px; text-align:center;"
                   v-model.number="order.final_quantity" min="0" step="1" />
-                <span v-else>{{ order.final_quantity }}</span>
               </td>
             </tr>
           </tbody>
@@ -151,19 +185,42 @@ function fmtTime(val: string) {
 function statusLabel(s: string) {
   return { pending: '待确认', confirmed: '已确认', cancelled: '已取消' }[s] || s;
 }
-function calcTheory(order: PendingOrder) {
-  const p = parseFloat(order.price);
+function calcTheory(order: any) {
+  const p = priceType.value === 'limit' && order.user_limit_price ? parseFloat(order.user_limit_price) : parseFloat(order.price);
   const tmv = parseFloat(order.target_market_value);
   const m = parseInt(order.contract_multiplier);
   return p > 0 && m > 0 ? tmv / (p * m) : 0;
 }
-function priceColor(order: PendingOrder) {
+function priceColor(order: any) {
   const live = livePrices.value[order.asset_code];
   if (!live) return '#059669';
-  return live.last_price > parseFloat(order.price) ? '#059669' : '#dc2626';
+  const p = priceType.value === 'limit' && order.user_limit_price ? parseFloat(order.user_limit_price) : parseFloat(order.price);
+  return live.last_price > p ? '#059669' : '#dc2626';
 }
 function goToBatch(id: string) {
   router.push({ path: '/order-confirm', query: { batch_id: id } });
+}
+
+const statusConfig: Record<string, { cls: string; text: string }> = {
+  not_sent: { cls: 'st-gray', text: '未发送' },
+  send_failed: { cls: 'st-red', text: '发送失败' },
+  sent: { cls: 'st-blue', text: '已发送' },
+  running: { cls: 'st-blue', text: '运行中' },
+  rejected: { cls: 'st-red', text: '已驳回' },
+  filled: { cls: 'st-green', text: '已完成' },
+  partial: { cls: 'st-yellow', text: '部分成交' },
+  cancelled: { cls: 'st-gray', text: '已撤单' },
+  stopped: { cls: 'st-red', text: '已停止' },
+};
+function xtStatusClass(order: any) { return (statusConfig[order.xt_status] || { cls: 'st-gray' }).cls; }
+function xtStatusText(order: any) { return (statusConfig[order.xt_status] || { text: order.xt_status || '未发送' }).text; }
+
+function renderPriceType(type: string) {
+  return { limit: '限价', market: '市价', best: '最优价', twap: 'TWAP', vwap: 'VWAP' }[type] || type || '限价';
+}
+function priceDisplay(order: any) {
+  const pt = order.order_price_type || 'limit';
+  return (pt === 'market' || pt === 'best') ? '-1' : parseFloat(order.price).toFixed(2);
 }
 
 async function loadBatchList() {
@@ -181,6 +238,10 @@ async function loadDetail() {
     const data = await CepApi.fetchPendingOrders(batchId.value);
     if (data.success) {
       batchInfo.value = data;
+      // Initialize user_limit_price
+      for (const o of data.orders) {
+        o.user_limit_price = parseFloat(o.price);
+      }
       orders.value = data.orders;
       if (data.status !== 'confirmed') startPricePolling();
     }
@@ -218,15 +279,19 @@ async function confirmAll() {
   if (priceTimer) { clearInterval(priceTimer); priceTimer = null; }
 
   try {
-    // update quantities first
+    // update quantities and prices first
     for (const order of orders.value) {
-      await CepApi.updateOrder(order.id, order.final_quantity);
+      const priceToSave = priceType.value === 'limit' && order.user_limit_price ? order.user_limit_price : parseFloat(order.price);
+      await CepApi.updateOrder(order.id, order.final_quantity, priceToSave);
     }
     const data = await CepApi.confirmOrders(batchId.value, '交易员', priceType.value);
     if (data.success) {
       alertMsg.value = `订单执行成功！（${priceTypeLabels[priceType.value]}）`;
       alertType.value = 'success';
-      if (batchInfo.value) batchInfo.value.status = 'confirmed';
+      if (batchInfo.value) {
+        batchInfo.value.status = 'confirmed';
+      }
+      confirming.value = false;
     } else {
       alertMsg.value = '订单执行失败: ' + (data.message || '');
       alertType.value = 'error';
@@ -261,6 +326,11 @@ onUnmounted(() => { if (priceTimer) clearInterval(priceTimer); });
 .status-pending { background: #fff3cd; color: #856404; }
 .status-confirmed { background: #d4edda; color: #155724; }
 .status-cancelled { background: #e2e3e5; color: #383d41; }
+.st-green { background: #d4edda; color: #155724; }
+.st-blue { background: #dbeafe; color: #1d4ed8; }
+.st-yellow { background: #fef3c7; color: #92400e; }
+.st-red { background: #fee2e2; color: #991b1b; }
+.st-gray { background: #f3f4f6; color: #6b7280; }
 .price-type-bar { background: #f0f4ff; border: 1px solid #dbe4ff; border-radius: 8px; padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .price-type-options { display: flex; gap: 6px; }
 .price-type-options label { padding: 8px 18px; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; border: 2px solid #dbe4ff; color: #1e40af; background: white; transition: all 0.15s; }

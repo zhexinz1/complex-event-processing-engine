@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import logging
+import pickle
 import queue
 import threading
 import time
@@ -623,8 +624,11 @@ def serialize_bar_event(bar: BarEvent) -> dict[str, Any]:
     }
 
 
-def deserialize_bar_event_payload(raw_payload: bytes | str) -> BarEvent:
-    """Decode a JSON Redis payload into a BarEvent."""
+def deserialize_bar_event_payload(raw_payload: bytes | str) -> BaseEvent:
+    """Decode a Redis payload into an Event (supports both JSON and Pickle)."""
+
+    if isinstance(raw_payload, bytes) and raw_payload.startswith(b"\x80"):
+        return pickle.loads(raw_payload)
 
     if isinstance(raw_payload, bytes):
         raw_payload = raw_payload.decode("utf-8")
@@ -708,7 +712,7 @@ class LiveSignalMonitor:
                         }
                     )
 
-    def publish_bar(self, bar: BarEvent) -> None:
+    def publish_bar(self, bar: BaseEvent) -> None:
         self.event_bus.publish(bar)
 
     def start_redis_subscriber(

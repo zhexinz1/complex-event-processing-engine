@@ -16,7 +16,7 @@
 
         <div v-if="selectedProductInfo" class="info-panel" style="margin:16px 0;">
           <p><strong>杠杆倍数:</strong> {{ selectedProductInfo.leverage_ratio }}倍</p>
-          <p><strong>关联账号:</strong> {{ selectedProductInfo.account_id }}</p>
+          <p><strong>迅投用户名:</strong> {{ selectedProductInfo.xt_username }}</p>
         </div>
 
         <div class="form-row">
@@ -26,7 +26,7 @@
 
         <div class="form-row">
           <label>录入人</label>
-          <input v-model="inputBy" type="text" class="inp" placeholder="例如: 张三" maxlength="50" />
+          <input v-model="inputBy" type="text" class="inp" placeholder="例如: 周哲鑫" maxlength="50" />
         </div>
 
         <button type="submit" class="btn btn-primary" style="width:100%; margin-top:12px;" :disabled="submitting">

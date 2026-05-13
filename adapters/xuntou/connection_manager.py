@@ -63,7 +63,6 @@ class XtConnectionManager:
         self,
         username: str,
         password: str,
-        account_id: str,
         timeout: float = 30.0,
         dao: object = None,
     ) -> Optional[_XtFullService]:
@@ -73,7 +72,6 @@ class XtConnectionManager:
         Args:
             username: 迅投用户名
             password: 迅投密码
-            account_id: 资金账号ID
             timeout: 连接超时时间
             dao: 数据库访问层（可选，传入后回调会写 DB）
 
@@ -87,6 +85,9 @@ class XtConnectionManager:
                     # 更新 DAO（可能首次连接时没传）
                     if dao and service._dao is None:
                         service._dao = dao
+                        # 同步更新回调对象中的 _dao，确保订单/成交回报能写入 DB
+                        if service._callback is not None:
+                            service._callback._dao = dao
                     logger.info("复用已有连接: %s", username)
                     return service
                 else:

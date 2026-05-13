@@ -165,46 +165,52 @@ class _OrderCallback(_XtBaseCallback):
         self._dao = kwargs.pop("dao", None)
         super().__init__(**kwargs)
 
-    def onOrderEvent(self, order_event, error):
-        """订单回报 → 更新 DB 中的 xt_status"""
-        order_id = order_event.m_nOrderID
-        raw_status = order_event.m_nOrderStatus
+    def onRtnOrder(self, order_detail):
+        """订单状态变更推送 → 更新 DB 中的 xt_status"""
+        try:
+            order_id = getattr(order_detail, "m_nOrderID", 0)
 
-        # 解析状态值
-        status_val = raw_status
-        if hasattr(status_val, "value"):
-            status_val = status_val.value
+            raw_status = getattr(order_detail, "m_eOrderStatus", None)
+            status_val = raw_status
+            if hasattr(status_val, "value"):
+                status_val = status_val.value
 
-        xt_status = self._STATUS_MAP.get(status_val, "sent")
-        error_msg = error.errorMsg() if not error.isSuccess() else ""
-
-        logger.info(
-            "订单回报: order_id=%s, raw_status=%s → xt_status=%s, error=%s",
-            order_id,
-            raw_status,
-            xt_status,
-            error_msg,
-        )
-
-        if self._dao and order_id:
-            try:
-                self._dao.update_order_xt_status(
-                    xt_order_id=order_id,
-                    xt_status=xt_status,
-                    xt_error_msg=error_msg,
-                )
-            except Exception as e:
-                logger.error("回调写入 DB 失败 (onOrderEvent): %s", e)
-
-    def onTradeEvent(self, trade_event, error):
-        """成交回报 → 更新 DB 中的成交量/成交价"""
-        if error.isSuccess():
-            order_id = trade_event.m_nOrderID
-            volume = trade_event.m_nTradeVolume
-            price = trade_event.m_dTradePrice
+            xt_status = self._STATUS_MAP.get(status_val, "sent")
+            error_msg = getattr(order_detail, "m_strMsg", "") or ""
 
             logger.info(
-                "成交回报: order_id=%s, volume=%d, price=%.2f",
+                "订单回报(onRtnOrder): order_id=%s, raw_status=%s → xt_status=%s, msg=%s",
+                order_id,
+                raw_status,
+                xt_status,
+                error_msg,
+            )
+
+            if self._dao and order_id:
+                try:
+                    self._dao.update_order_xt_status(
+                        xt_order_id=order_id,
+                        xt_status=xt_status,
+                        xt_error_msg=error_msg,
+                    )
+                except Exception as e:
+                    logger.error("回调写入 DB 失败 (onRtnOrder): %s", e)
+            elif not self._dao:
+                logger.warning("onRtnOrder: _dao 为 None，无法写入 DB")
+        except Exception as e:
+            logger.exception("onRtnOrder 处理异常: %s", e)
+
+    def onRtnDealDetail(self, deal_detail):
+        """成交回报推送 → 更新 DB 中的成交量/成交价"""
+        try:
+            order_id = getattr(deal_detail, "m_nOrderID", 0)
+            volume = getattr(deal_detail, "m_nTradeVolume",
+                             getattr(deal_detail, "m_nTradedVolume", 0))
+            price = getattr(deal_detail, "m_dTradePrice",
+                            getattr(deal_detail, "m_dAveragePrice", 0.0))
+
+            logger.info(
+                "成交回报(onRtnDealDetail): order_id=%s, volume=%s, price=%s",
                 order_id,
                 volume,
                 price,
@@ -218,9 +224,36 @@ class _OrderCallback(_XtBaseCallback):
                         traded_price=price,
                     )
                 except Exception as e:
-                    logger.error("回调写入 DB 失败 (onTradeEvent): %s", e)
-        else:
-            logger.error("成交回报错误: %s", error.errorMsg())
+                    logger.error("回调写入 DB 失败 (onRtnDealDetail): %s", e)
+            elif not self._dao:
+                logger.warning("onRtnDealDetail: _dao 为 None，无法写入 DB")
+        except Exception as e:
+            logger.exception("onRtnDealDetail 处理异常: %s", e)
+
+    def onRtnOrderError(self, order_error):
+        """订单错误回报 → 更新 DB"""
+        try:
+            order_id = getattr(order_error, "m_nOrderID", 0)
+            error_msg = getattr(order_error, "m_strMsg",
+                                getattr(order_error, "m_strErrorMsg", "未知错误"))
+
+            logger.error(
+                "订单错误回报(onRtnOrderError): order_id=%s, error=%s",
+                order_id,
+                error_msg,
+            )
+
+            if self._dao and order_id:
+                try:
+                    self._dao.update_order_xt_status(
+                        xt_order_id=order_id,
+                        xt_status="rejected",
+                        xt_error_msg=error_msg or "订单被拒绝",
+                    )
+                except Exception as e:
+                    logger.error("回调写入 DB 失败 (onRtnOrderError): %s", e)
+        except Exception as e:
+            logger.exception("onRtnOrderError 处理异常: %s", e)
 
 
 # ---------------------------------------------------------------------------

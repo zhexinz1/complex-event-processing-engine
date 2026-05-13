@@ -149,6 +149,22 @@ export const CepApi: CepApiClient = {
     return this.requestJson('/api/products/list');
   },
 
+  addProduct(payload: any): Promise<ApiResponse> {
+    return this.requestJson('/api/products/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateProduct(payload: any): Promise<ApiResponse> {
+    return this.requestJson('/api/products/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
   submitFundInflow(payload: { product_name: string; net_inflow: number; input_by: string }): Promise<ApiResponse & { batch_id: string }> {
     return this.requestJson('/api/fund/inflow', {
       method: 'POST',
@@ -172,11 +188,11 @@ export const CepApi: CepApiClient = {
     return this.requestJson(`/api/orders/all${qs}`);
   },
 
-  updateOrder(orderId: number, finalQuantity: number): Promise<ApiResponse> {
+  updateOrder(orderId: number, finalQuantity: number, price?: number): Promise<ApiResponse> {
     return this.requestJson('/api/orders/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: orderId, final_quantity: finalQuantity }),
+      body: JSON.stringify({ order_id: orderId, final_quantity: finalQuantity, price: price }),
     });
   },
 
