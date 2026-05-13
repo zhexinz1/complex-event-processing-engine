@@ -413,6 +413,8 @@ uv run -m services.run_xuntou_market_node --server 175.25.41.106:65300 --user ap
 # 终端 3：启动 Web 节点（行情通过 Redis 接收）
 source scripts/setup_env.sh
 uv run -m services.run_web_node
+# 如需避开默认 5000 端口：
+uv run -m services.run_web_node --port 5001
 ```
 
 > **Trading Node** (`run_trading_node.py`) 是独立交易引擎节点，目前 Web Node 已整合了交易功能，日常运行中不需要单独启动。

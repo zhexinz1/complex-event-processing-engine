@@ -31,7 +31,7 @@ const router = createRouter({
     {
       path: '/backtest',
       name: 'backtest',
-      component: () => import('./views/BacktestView.vue'),
+      redirect: '/signals',
     },
     {
       path: '/signals',

@@ -472,6 +472,7 @@ def run_user_signal_backtest(
     start_date: str | None = None,
     end_date: str | None = None,
     initial_cash: float = 1_000_000.0,
+    target_asset_size: float | None = None,
     commission_rate: float = 0.0,
     write_trade_log: bool = False,
     execution_timing: ExecutionTiming = "next_bar",
@@ -553,6 +554,7 @@ def run_user_signal_backtest(
         contract_multipliers=contract_multipliers,
         write_trade_log=write_trade_log,
         execution_timing=execution_timing,
+        target_asset_size=target_asset_size or initial_cash,
     )
     trigger = UserSignalTrigger(
         event_bus=engine.event_bus,

@@ -5,7 +5,7 @@
         <div class="panel-head">
           <div>
             <h2>信号定义</h2>
-            <p>{{ signals.length }} 个研究员信号</p>
+            <p>{{ signals.length }} 个信号</p>
           </div>
           <button class="btn btn-default" @click="newSignal">新建</button>
         </div>
@@ -17,7 +17,9 @@
           @click="selectSignal(signal)"
         >
           <span class="signal-title">{{ signal.name }}</span>
-          <span class="signal-meta">{{ signal.symbols.join(', ') }} · {{ signal.bar_freq }}</span>
+          <span class="signal-meta">
+            {{ signal.symbols.join(', ') }} · {{ signal.bar_freq }} · {{ signal.created_by === 'preset' ? 'preset' : signal.created_by }}
+          </span>
           <span class="badge" :class="signal.status === 'enabled' ? 'badge-vwap' : 'badge-twap'">
             {{ signal.status === 'enabled' ? '监控中' : '已停用' }}
           </span>
@@ -91,25 +93,26 @@
           </div>
         </div>
 
-        <div class="card backtest-panel">
+        <div class="card user-backtest-panel">
           <div class="panel-head">
             <div>
               <h2>回测验证</h2>
               <p>{{ activeTab?.backtestResult ? `${activeTab.backtestResult.total_signals ?? activeTab.backtestResult.signals.length} 个信号` : '使用 mock、Tushare 或主连历史库验证' }}</p>
             </div>
-            <button class="btn btn-primary" :disabled="busy || !activeTab" @click="runBacktest">运行回测</button>
+            <button class="btn btn-primary" :disabled="busy || !activeTab" @click="runUserSignalBacktest">运行回测</button>
           </div>
           <div class="form-grid compact">
             <label>
               <span>数据源</span>
-              <select v-model="backtestDataSource" class="inp">
+              <select v-model="signalBacktestDataSource" class="inp">
                 <option value="mock">mock</option>
+                <option value="tushare">Tushare A股日线</option>
                 <option value="adjusted_main_contract">adjusted_main_contract</option>
               </select>
             </label>
             <label>
               <span>回测频率</span>
-              <select v-model="backtestFreq" class="inp">
+              <select v-model="signalBacktestFreq" class="inp">
                 <option value="1m">1m</option>
                 <option value="5m">5m</option>
                 <option value="15m">15m</option>
@@ -120,11 +123,15 @@
             </label>
             <label>
               <span>开始日期</span>
-              <input v-model="backtestStartDate" type="date" class="inp" />
+              <input v-model="signalBacktestStartDate" type="date" class="inp" />
             </label>
             <label>
               <span>结束日期</span>
-              <input v-model="backtestEndDate" type="date" class="inp" />
+              <input v-model="signalBacktestEndDate" type="date" class="inp" />
+            </label>
+            <label>
+              <span>资产规模</span>
+              <input v-model.number="targetAssetSize" type="number" min="0" step="10000" class="inp" />
             </label>
             <label>
               <span>手续费率</span>
@@ -225,7 +232,7 @@
                 v-for="point in sampledEquity"
                 :key="point.timestamp || String(point.equity)"
                 class="chart-bar"
-                :style="{ height: `${equityBarHeight(point.equity)}%` }"
+                :style="{ height: `${signalEquityBarHeight(point.equity)}%` }"
                 :title="`${point.timestamp?.slice(0, 10) || ''}\n权益: ${point.equity.toLocaleString()}`"
               />
             </div>
@@ -276,7 +283,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, markRaw } from 'vue';
+import { computed, onMounted, onUnmounted, ref, markRaw, watch } from 'vue';
 import { Codemirror } from 'vue-codemirror';
 import { python } from '@codemirror/lang-python';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -316,10 +323,11 @@ const signals = ref<UserSignalDefinition[]>([]);
 const liveSignals = ref<LiveSignal[]>([]);
 const liveConnected = ref(false);
 const busy = ref(false);
-const backtestDataSource = ref('adjusted_main_contract');
-const backtestFreq = ref('1m');
-const backtestStartDate = ref('2024-01-01');
-const backtestEndDate = ref(new Date().toISOString().slice(0, 10));
+const signalBacktestDataSource = ref('adjusted_main_contract');
+const signalBacktestFreq = ref('1m');
+const signalBacktestStartDate = ref('2024-01-01');
+const signalBacktestEndDate = ref(new Date().toISOString().slice(0, 10));
+const targetAssetSize = ref(1_000_000);
 const commissionRate = ref(-1.0);
 let eventSource: EventSource | null = null;
 
@@ -380,7 +388,7 @@ const sampledEquity = computed(() => {
   return points.filter((_, index) => index % step === 0 || index === points.length - 1);
 });
 
-function equityBarHeight(equity: number) {
+function signalEquityBarHeight(equity: number) {
   const points: EquityPoint[] = sampledEquity.value;
   if (!points.length) return 4;
   const values = points.map((point) => point.equity);
@@ -397,6 +405,12 @@ const equityRangeLabel = computed(() => {
   const min = Math.min(...values);
   const max = Math.max(...values);
   return `${min.toLocaleString(undefined, { maximumFractionDigits: 0 })} ~ ${max.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+});
+
+watch(signalBacktestDataSource, (dataSource) => {
+  if (dataSource === 'tushare') {
+    signalBacktestFreq.value = '1d';
+  }
 });
 
 function metricValue(value: number | null | undefined) {
@@ -568,7 +582,7 @@ async function toggleSignal() {
   }
 }
 
-async function runBacktest() {
+async function runUserSignalBacktest() {
   if (!activeTab.value) return;
   const tab = activeTab.value;
   busy.value = true;
@@ -580,11 +594,13 @@ async function runBacktest() {
     const json = await CepApi.runUserSignalBacktest({
       signal_id: tab.draft.id,
       source_code: tab.draft.source_code,
-      data_source: backtestDataSource.value,
-      backtest_freq: backtestFreq.value,
+      data_source: signalBacktestDataSource.value,
+      backtest_freq: signalBacktestFreq.value,
       symbols: derivedConfig.symbols,
-      start_date: toTushareDate(backtestStartDate.value),
-      end_date: toTushareDate(backtestEndDate.value),
+      start_date: toTushareDate(signalBacktestStartDate.value),
+      end_date: toTushareDate(signalBacktestEndDate.value),
+      initial_cash: targetAssetSize.value,
+      target_asset_size: targetAssetSize.value,
       commission_rate: commissionRate.value,
     });
     if (json.success) {
@@ -654,7 +670,7 @@ onUnmounted(() => {
 
 .signal-list,
 .editor-panel,
-.backtest-panel,
+.user-backtest-panel,
 .live-panel {
   padding: 20px;
 }

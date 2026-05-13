@@ -60,7 +60,7 @@ def test_backtest_api_runs_pbx_ma_with_tushare_source(monkeypatch) -> None:
         ]
 
     monkeypatch.setattr(
-        "backtest.preset_strategies.fetch_tushare_daily_bars",
+        "backtest.presets.base.fetch_tushare_daily_bars",
         fake_fetch_tushare_daily_bars,
     )
 
@@ -113,7 +113,7 @@ def test_backtest_api_runs_pbx_ma_with_adjusted_main_contract_source(
         ]
 
     monkeypatch.setattr(
-        "backtest.preset_strategies.fetch_adjusted_main_contract_bars",
+        "backtest.presets.base.fetch_adjusted_main_contract_bars",
         fake_fetch_adjusted_main_contract_bars,
     )
 
@@ -309,7 +309,7 @@ def test_backtest_api_runs_cross_section_momentum_with_tushare_source(
         ]
 
     monkeypatch.setattr(
-        "backtest.preset_strategies.fetch_tushare_daily_bars",
+        "backtest.presets.base.fetch_tushare_daily_bars",
         fake_fetch_tushare_daily_bars,
     )
 

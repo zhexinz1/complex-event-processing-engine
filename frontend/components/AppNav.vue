@@ -19,8 +19,7 @@ const tabs = [
   { to: '/order-confirm', label: '订单确认' },
   { to: '/order-list', label: '订单列表' },
   { to: '/health', label: '行情健康检查' },
-  { to: '/backtest', label: '策略回测' },
-  { to: '/signals', label: '信号研究' },
+  { to: '/signals', label: '信号与回测' },
 ];
 </script>
 

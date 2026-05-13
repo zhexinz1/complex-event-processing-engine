@@ -81,6 +81,7 @@ from signals import (
     load_signal_class,
     run_user_signal_backtest,
 )
+from signals.preset_signal_definitions import seed_preset_user_signals
 from backtest.broker import ExecutionTiming
 
 logger = logging.getLogger(__name__)
@@ -187,6 +188,7 @@ def init_db() -> None:
     # 初始化 DAO
     global dao
     dao = DatabaseDAO()
+    seed_preset_user_signals(dao)
     logger.info("DatabaseDAO initialized.")
 
 
@@ -2149,6 +2151,9 @@ def create_app() -> Flask:
                 start_date=body.get("start_date"),
                 end_date=body.get("end_date"),
                 initial_cash=float(body.get("initial_cash", 1_000_000.0)),
+                target_asset_size=float(
+                    body.get("target_asset_size", body.get("initial_cash", 1_000_000.0))
+                ),
                 commission_rate=float(body.get("commission_rate", 0.0)),
                 write_trade_log=_parse_bool_arg(body.get("write_trade_log"), True),
                 execution_timing=_parse_execution_timing(

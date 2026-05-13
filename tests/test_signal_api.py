@@ -156,6 +156,7 @@ def test_run_user_signal_backtest_uses_runtime_result(client, monkeypatch) -> No
             "symbols": ["TEST"],
             "start_date": "20240101",
             "end_date": "20240131",
+            "target_asset_size": 2_000_000,
         },
     )
 
@@ -167,6 +168,7 @@ def test_run_user_signal_backtest_uses_runtime_result(client, monkeypatch) -> No
     assert captured["source_code"] == VALID_SIGNAL
     assert captured["data_source"] == "mock"
     assert captured["symbols"] == ["TEST"]
+    assert captured["target_asset_size"] == 2_000_000
 
 
 def test_run_user_signal_backtest_passes_write_trade_log_flag(

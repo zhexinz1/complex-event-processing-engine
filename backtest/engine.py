@@ -36,6 +36,7 @@ class BacktestEngine:
         commission_rate: float = 0.0,
         write_trade_log: bool = False,
         execution_timing: ExecutionTiming = "next_bar",
+        target_asset_size: float | None = None,
     ) -> None:
         execution_timing = _validate_execution_timing(execution_timing)
         self.initial_cash = initial_cash
@@ -56,6 +57,7 @@ class BacktestEngine:
             commission_rate=commission_rate,
             contract_multipliers=contract_multipliers,
             execution_timing=execution_timing,
+            target_asset_size=target_asset_size or initial_cash,
         )
         self.aggregator = MultiTimeframeBarAggregator(
             event_bus=self.event_bus,

@@ -1,6 +1,6 @@
 # Frontend
 
-This directory contains the Vue 3 + TypeScript UI for the target allocation and strategy backtest page. The app is built with Vite and served by Flask from the compiled `frontend/dist` directory.
+This directory contains the Vue 3 + TypeScript UI for target allocation and signal research/backtest workflows. The app is built with Vite and served by Flask from the compiled `frontend/dist` directory.
 
 ## Run
 
@@ -11,12 +11,6 @@ npm install
 npm run frontend:check
 npm run frontend:build
 uv run -m examples.run_ui_server
-```
-
-The backtest tab is hidden by default. To include it in the production frontend bundle, pass the build flag through npm:
-
-```bash
-npm run frontend:build -- --show-backtest
 ```
 
 For local frontend development with Vite:
@@ -51,17 +45,15 @@ frontend/
 
 - `App.vue`: Owns tab state and connects composables to the UI modules.
 - `app.ts`: Imports global CSS and mounts `App.vue`.
-- `api.ts`: Wraps calls to `/api/weights`, `/api/assets`, `/api/backtests/*`, and `/api/stocks/search`.
+- `api.ts`: Wraps calls to `/api/weights`, `/api/assets`, `/api/signals/*`, and user-signal backtests.
 - `components/AppHeader.vue`: Renders the app title, DB connection state, clock, and asset dictionary entry point.
-- `components/AppNav.vue`: Renders the top-level allocation/backtest tabs.
+- `components/AppNav.vue`: Renders the top-level navigation tabs.
 - `components/AllocationToolbar.vue`: Renders allocation stats, filters, refresh, and add actions.
 - `components/AllocationTable.vue`: Renders allocation rows and row actions.
 - `components/AllocationModal.vue`: Renders the create/update allocation form.
 - `components/AssetDictionaryModal.vue`: Renders the allowed-asset dictionary editor.
-- `components/BacktestPanel.vue`: Renders preset selection, Tushare/main-contract inputs, run results, and the local JSON backtest history tab.
 - `components/ToastNotice.vue`: Renders request feedback.
 - `composables/useAllocations.ts`: Loads and edits target allocation rows, products, allowed assets, and allocation form state.
-- `composables/useBacktest.ts`: Loads preset strategies and persisted history, runs backtests, manages Tushare stock autocomplete, and shapes chart data.
 - `composables/useClock.ts`: Maintains the header clock.
 - `composables/useToast.ts`: Provides success/error notifications.
 - `types.ts`: Defines the API responses and UI data models used by the modules above.
@@ -71,8 +63,7 @@ frontend/
 - **Target allocation table**: Filters by date/product, displays weights with progress bars, and supports edit/delete actions.
 - **Allocation modal**: Handles create/update flow, required-field validation, and weight-total warnings.
 - **Asset dictionary modal**: Maintains the allowed asset list used by the allocation form.
-- **Backtest panel**: Runs preset strategies on mock, Tushare, or local adjusted-main-contract CSV data, displays metrics, signal rows, a compact equity chart, and historical logs from `backtest/logs/*.json`.
-- **Stock autocomplete**: Searches the local A-share stock index and normalizes selected symbols to Tushare `ts_code`.
+- **Signal research**: Edits researcher Python signals, includes seeded preset signals, validates the `Signal` contract, runs backtests on mock, Tushare, or local adjusted-main-contract data, and streams live signal events.
 - **Status and toast feedback**: Shows DB connection state and request outcomes without blocking the page.
 
 ## Build Contract
@@ -84,4 +75,4 @@ npm install
 npm run frontend:build
 ```
 
-The default build excludes the backtest tab from the UI. Use `npm run frontend:build -- --show-backtest` when a deployment should expose the backtest workflow.
+The `/backtest` route redirects to `/signals`, where user-authored and preset-seeded signals share one workflow surface.
