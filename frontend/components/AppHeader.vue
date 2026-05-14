@@ -6,8 +6,7 @@
         <img src="../logo.png" alt="Logo" style="width:100%; height:100%; object-fit:contain;" />
       </div>
       <div>
-        <h1 style="font-size:18px; font-weight:700; color:var(--text-main); margin:0;">目标仓位配置</h1>
-        <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Target Allocation Management</div>
+        <h1 style="font-size:22px; font-weight:700; color:var(--text-main); margin:0; letter-spacing: 1px;">全天候系统</h1>
       </div>
     </div>
     <div style="display:flex; align-items:center; gap:24px;">

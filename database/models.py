@@ -63,7 +63,8 @@ class Product:
     id: Optional[int]
     product_name: str
     leverage_ratio: Decimal  # 杠杆倍数
-    fund_account: str  # 底仓资金账号（用于下单）
+    fund_account: str  # 期货底仓资金账号（用于期货下单）
+    stock_fund_account: Optional[str] = None  # 证券底仓资金账号（用于股票下单）
     xt_username: Optional[str] = None  # 迅投登录用户名
     xt_password: Optional[str] = None  # 迅投登录密码（加密存储）
     status: ProductStatus = ProductStatus.ACTIVE

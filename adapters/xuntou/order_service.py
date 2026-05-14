@@ -182,24 +182,31 @@ class _OrderCallback(_XtBaseCallback):
                 status_val = status_val.value
 
             # EOrderCommandStatus 映射（根据实际回调观测到的枚举值）
-            # OCS_APPROVING = 0 → 审批中/待执行
-            # OCS_FINISHED  = 4 → 已完成
+            # OCS_APPROVING  = 0 → 审批中/待执行
+            # OCS_RUNNING    = 2 → 算法单/TWAP/VWAP 运行中
+            # OCS_FINISHED   = 4 → 已完成（包括母单正常结束）
+            # OCS_STOPPED    = 5 → 已停止（母单过期或手动停止）
             CMD_STATUS_MAP = {
                 0: "sent",      # OCS_APPROVING 审批中/待执行
-                1: "sent",      # 运行中（推测）
-                2: "sent",      # 运行中（推测）
-                3: "cancelled", # 已撤销（推测）
+                1: "running",   # 运行中
+                2: "running",   # OCS_RUNNING 算法单运行中（TWAP/VWAP 子单拆单期间）
+                3: "cancelled", # 已撤销
                 4: "filled",    # OCS_FINISHED 已完成
-                5: "stopped",   # 已停止（推测）
-                6: "send_failed",  # 失败（推测）
+                5: "stopped",   # OCS_STOPPED 已停止（母单过期）
+                6: "send_failed",  # 失败
             }
             xt_status = CMD_STATUS_MAP.get(status_val) if status_val is not None else None
 
-            # 如果 m_eStatus 读不到或值不在映射中，通过 msg 文本推断（保底）
+            # 对 OCS_RUNNING 状态做消息内容二次判断：
+            # TWAP 子单被拒（如跌停）时母单状态仍是 OCS_RUNNING，消息里会有"被拒绝"
+            # 此时不改变状态（保持 running），等母单自行完成或过期
+            # 如果 m_eStatus 读不到，通过 msg 文本推断（保底）
             if xt_status is None:
                 msg_lower = error_msg.lower()
                 if "完成" in error_msg or "finish" in msg_lower:
                     xt_status = "filled"
+                elif "过期" in error_msg or "expired" in msg_lower:
+                    xt_status = "stopped"
                 elif "撤" in error_msg or "cancel" in msg_lower:
                     xt_status = "cancelled"
                 elif "失败" in error_msg or "error" in msg_lower or "fail" in msg_lower:

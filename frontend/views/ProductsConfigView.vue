@@ -19,7 +19,8 @@
             <tr>
               <th>产品名称</th>
               <th>杠杆倍数</th>
-              <th>底仓资金账号</th>
+              <th>期货底仓账号</th>
+              <th>证券底仓账号</th>
               <th>状态</th>
               <th style="width:120px; text-align:center;">操作</th>
             </tr>
@@ -28,7 +29,8 @@
             <tr v-for="product in products" :key="product.product_name">
               <td><strong>{{ product.product_name }}</strong></td>
               <td>{{ product.leverage_ratio }}</td>
-              <td><code>{{ product.fund_account || '—' }}</code></td>
+              <td><code>{{ product.fund_account || '-' }}</code></td>
+              <td><code>{{ product.stock_fund_account || '-' }}</code></td>
               <td>
                 <span :class="product.status === 'active' ? 'status-badge st-green' : 'status-badge st-gray'">
                   {{ product.status === 'active' ? '活跃' : '停用' }}
@@ -67,8 +69,13 @@
         </div>
         
         <div class="form-group">
-          <label>底仓资金账号 <span style="color:#ef4444">*</span></label>
-          <input v-model="form.fund_account" type="text" class="inp" placeholder="用于迅投SDK下单" />
+          <label>期货底仓资金账号 <span style="color:#ef4444">*</span></label>
+          <input v-model="form.fund_account" type="text" class="inp" placeholder="用于迅投期货下单" />
+        </div>
+
+        <div class="form-group">
+          <label>证券底仓资金账号</label>
+          <input v-model="form.stock_fund_account" type="text" class="inp" placeholder="选填，用于迅投股票下单（.SH/.SZ）" />
         </div>
         
         <div class="form-group">
@@ -111,6 +118,7 @@ const form = ref({
   product_name: '',
   leverage_ratio: 1,
   fund_account: '',
+  stock_fund_account: '',
   xt_username: '',
   xt_password: '',
 });
@@ -154,6 +162,7 @@ function openModal(product?: any) {
       product_name: product.product_name,
       leverage_ratio: parseFloat(product.leverage_ratio || '1'),
       fund_account: product.fund_account || '',
+      stock_fund_account: product.stock_fund_account || '',
       xt_username: product.xt_username || '',
       xt_password: product.xt_password || '',
     };
@@ -163,6 +172,7 @@ function openModal(product?: any) {
       product_name: '',
       leverage_ratio: 1,
       fund_account: '',
+      stock_fund_account: '',
       xt_username: '',
       xt_password: '',
     };

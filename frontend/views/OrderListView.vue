@@ -105,8 +105,9 @@ const alertType = ref<'success' | 'error'>('success');
 const filteredOrders = computed(() => {
   const f = assetFilter.value.toLowerCase();
   return allOrders.value.filter(o => {
-    // 如果订单已确认且最终数量为0，则不展示（视为跳过）
-    if (o.status === 'confirmed' && (o.final_quantity === 0 || o.final_quantity === '0')) {
+    // 如果该订单所属批次已确认（batch_status='confirmed'）且数量为0，则隐藏
+    const qty = parseInt(String(o.final_quantity), 10);
+    if (qty === 0 && o.batch_status === 'confirmed') {
       return false;
     }
     // 搜索过滤

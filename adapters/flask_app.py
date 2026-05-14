@@ -465,6 +465,7 @@ def create_app() -> Flask:
                             "product_name": p.product_name,
                             "leverage_ratio": float(p.leverage_ratio),
                             "fund_account": p.fund_account,
+                            "stock_fund_account": p.stock_fund_account or "",
                             "xt_username": p.xt_username,
                             "xt_password": p.xt_password,
                             "status": p.status.value,
@@ -488,6 +489,7 @@ def create_app() -> Flask:
         product_name = data.get("product_name", "").strip()
         leverage_ratio = data.get("leverage_ratio")
         fund_account = data.get("fund_account", "").strip()
+        stock_fund_account = data.get("stock_fund_account", "").strip() or None
         xt_username = data.get("xt_username", "").strip() or None
         xt_password = data.get("xt_password", "").strip() or None
 
@@ -507,13 +509,16 @@ def create_app() -> Flask:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
-                        INSERT INTO products (product_name, leverage_ratio, fund_account, xt_username, xt_password, status)
-                        VALUES (%s, %s, %s, %s, %s, 'active')
+                        INSERT INTO products
+                            (product_name, leverage_ratio, fund_account, stock_fund_account,
+                             xt_username, xt_password, status)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'active')
                         """,
                         (
                             product_name,
                             leverage_ratio,
                             fund_account,
+                            stock_fund_account,
                             xt_username,
                             xt_password,
                         ),
@@ -550,6 +555,10 @@ def create_app() -> Flask:
             if "fund_account" in data:
                 updates.append("fund_account = %s")
                 params.append(data["fund_account"])
+
+            if "stock_fund_account" in data:
+                updates.append("stock_fund_account = %s")
+                params.append(data["stock_fund_account"] if data["stock_fund_account"] else None)
 
             if "xt_username" in data:
                 updates.append("xt_username = %s")
@@ -992,11 +1001,14 @@ def create_app() -> Flask:
                     cursor.execute(count_sql, params)
                     total = cursor.fetchone()["total"]
 
-                    # 查询订单列表
+                    # 查询订单列表（JOIN fund_inflows 获取批次状态）
                     sql = f"""
-                        SELECT * FROM pending_orders
+                        SELECT po.*,
+                               fi.status AS batch_status
+                        FROM pending_orders po
+                        LEFT JOIN fund_inflows fi ON po.batch_id = fi.batch_id
                         {where_sql}
-                        ORDER BY created_at DESC
+                        ORDER BY po.created_at DESC
                         LIMIT %s OFFSET %s
                     """
                     cursor.execute(sql, params + [limit, offset])
@@ -1006,6 +1018,7 @@ def create_app() -> Flask:
                         {
                             "id": row["id"],
                             "batch_id": row["batch_id"],
+                            "batch_status": row.get("batch_status") or "",
                             "product_name": row["product_name"],
                             "asset_code": row["asset_code"],
                             "target_market_value": float(row["target_market_value"]),
@@ -1353,9 +1366,21 @@ def create_app() -> Flask:
                         except ValueError:
                             live_price = float(order.price) if order.price else 0.0
 
+                    # 根据资产类型选择资金账号：股票用证券账号，期货用期货账号
+                    if is_futures:
+                        account_id = product.fund_account
+                    else:
+                        account_id = product.stock_fund_account or product.fund_account
+                        if not product.stock_fund_account:
+                            logger.warning(
+                                "产品 %s 未配置证券资金账号，将使用期货账号 %s 下股票单（可能失败）",
+                                order.product_name,
+                                product.fund_account,
+                            )
+
                     # 构造下单请求
                     order_req = OrderRequest(
-                        account_id=product.fund_account,
+                        account_id=account_id,
                         asset_code=normalized_code,  # 使用标准化后的代码
                         direction=direction,
                         quantity=quantity,
@@ -1494,16 +1519,20 @@ def create_app() -> Flask:
         }
         """
         try:
-            xt_query = XtQueryService()
+            # 使用连接管理器复用已有连接，避免创建多个 SDK 实例导致 segfault
+            # XunTou 原生 C++ SDK 不支持同进程多实例并存
+            xt_manager = get_xt_connection_manager()
+            xt_service = xt_manager.get_connection(
+                username="system_trade",
+                password="my123456@",
+                timeout=30.0,
+            )
 
-            # 连接迅投服务器（单例模式，只连接一次）
-            if not xt_query.connect(timeout=30.0):
+            if not xt_service:
                 return jsonify({"success": False, "message": "连接迅投服务器失败"}), 500
 
             # 查询产品列表
-            products = xt_query.query_products()
-
-            # 不断开连接，保持复用
+            products = xt_service.query_products()
 
             # 转换为字典列表
             product_list = [
