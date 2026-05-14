@@ -385,7 +385,6 @@ class MySQLConfigSource(ConfigSource):
         product_name  VARCHAR(100) NOT NULL,
         asset_code    VARCHAR(50)  NOT NULL,
         weight_ratio  DECIMAL(12, 6) NOT NULL,
-        algo_type     VARCHAR(20)  NOT NULL DEFAULT 'TWAP',
         created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
         updated_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uk_date_product_asset (target_date, product_name, asset_code)

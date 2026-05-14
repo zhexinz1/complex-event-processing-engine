@@ -51,7 +51,13 @@
         
         <div class="form-group">
           <label>产品名称 <span style="color:#ef4444">*</span></label>
-          <input v-model="form.product_name" type="text" class="inp" :disabled="isEdit" placeholder="例如: 仿真产品" />
+          <select v-if="!isEdit" v-model="form.product_name" class="inp" :disabled="loadingXt">
+            <option value="" disabled>{{ loadingXt ? '正在加载迅投产品...' : '请选择产品' }}</option>
+            <option v-for="p in availableXtProducts" :key="p.product_id" :value="p.product_name">
+              {{ p.product_name }} ({{ p.product_code }})
+            </option>
+          </select>
+          <input v-else v-model="form.product_name" type="text" class="inp" disabled />
           <small v-if="isEdit" style="color:var(--text-muted); display:block; margin-top:4px;">产品名称作为唯一标识，不可修改</small>
         </div>
         
@@ -91,7 +97,9 @@ import { ref, onMounted } from 'vue';
 import { CepApi } from '../api';
 
 const products = ref<any[]>([]);
+const availableXtProducts = ref<any[]>([]);
 const loading = ref(true);
+const loadingXt = ref(false);
 const alertMsg = ref('');
 const alertType = ref<'success' | 'error'>('success');
 
@@ -124,7 +132,22 @@ async function loadProducts() {
   loading.value = false;
 }
 
+async function loadXtProducts() {
+  if (availableXtProducts.value.length > 0) return;
+  loadingXt.value = true;
+  try {
+    const data: any = await CepApi.fetchXtCache();
+    if (data.success) {
+      availableXtProducts.value = data.products || [];
+    }
+  } catch (e) {
+    console.error('加载迅投产品失败:', e);
+  }
+  loadingXt.value = false;
+}
+
 function openModal(product?: any) {
+  loadXtProducts();
   if (product) {
     isEdit.value = true;
     form.value = {

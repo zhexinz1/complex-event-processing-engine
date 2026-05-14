@@ -8,14 +8,13 @@
             <th>产品组合名称</th>
             <th style="width: 120px;">资产代码</th>
             <th style="width: 240px;">分配比例</th>
-            <th style="width: 120px;">执行算法</th>
             <th style="width: 160px;">最后更新</th>
             <th style="width: 140px; text-align:right;">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="7" style="text-align:center; padding:60px 0; color:var(--text-muted);">
+            <td colspan="6" style="text-align:center; padding:60px 0; color:var(--text-muted);">
               <svg class="animate-spin"
                 style="animation: spin 1s linear infinite; display:inline-block; margin-right:8px; vertical-align:middle; width:20px; height:20px; color:var(--primary);"
                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -28,7 +27,7 @@
             </td>
           </tr>
           <tr v-else-if="rows.length === 0">
-            <td colspan="7" style="text-align:center; padding:60px 0; color:var(--text-muted);">暂无匹配的数据记录</td>
+            <td colspan="6" style="text-align:center; padding:60px 0; color:var(--text-muted);">暂无匹配的数据记录</td>
           </tr>
           <tr v-for="row in rows" :key="row.id">
             <td style="color:#4b5563;">{{ row.target_date }}</td>
@@ -43,11 +42,6 @@
                   {{ (row.weight_ratio * 100).toFixed(2) }}%
                 </span>
               </div>
-            </td>
-            <td>
-              <span class="badge" :class="row.algo_type === 'VWAP' ? 'badge-vwap' : 'badge-twap'">
-                {{ row.algo_type }}
-              </span>
             </td>
             <td style="font-size:13px; color:var(--text-muted);">{{ row.updated_at ? row.updated_at.slice(0,16) : '-' }}</td>
             <td style="text-align:right;">

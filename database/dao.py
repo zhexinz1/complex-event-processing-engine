@@ -379,6 +379,7 @@ class DatabaseDAO:
             xt_traded_volume=row.get("xt_traded_volume", 0),
             xt_traded_price=row.get("xt_traded_price", 0.0),
             order_price_type=row.get("order_price_type", "limit"),
+            direction=row.get("direction") or "open_long",
         )
 
     def update_order_final_quantity(self, order_id: int, final_quantity: int):

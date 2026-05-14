@@ -166,22 +166,56 @@ class _OrderCallback(_XtBaseCallback):
         super().__init__(**kwargs)
 
     def onRtnOrder(self, order_detail):
-        """订单状态变更推送 → 更新 DB 中的 xt_status"""
+        """订单状态变更推送 → 更新 DB 中的 xt_status
+
+        注意：onRtnOrder 传入的是 COrderInfo，状态字段是 m_eStatus (EOrderCommandStatus)，
+        而非 COrderDetail 的 m_eOrderStatus (EEntrustStatus)。
+        """
         try:
             order_id = getattr(order_detail, "m_nOrderID", 0)
+            error_msg = getattr(order_detail, "m_strMsg", "") or ""
 
-            raw_status = getattr(order_detail, "m_eOrderStatus", None)
+            # COrderInfo 的状态字段是 m_eStatus，不是 m_eOrderStatus
+            raw_status = getattr(order_detail, "m_eStatus", None)
             status_val = raw_status
             if hasattr(status_val, "value"):
                 status_val = status_val.value
 
-            xt_status = self._STATUS_MAP.get(status_val, "sent")
-            error_msg = getattr(order_detail, "m_strMsg", "") or ""
+            # EOrderCommandStatus 映射（根据实际回调观测到的枚举值）
+            # OCS_APPROVING = 0 → 审批中/待执行
+            # OCS_FINISHED  = 4 → 已完成
+            CMD_STATUS_MAP = {
+                0: "sent",      # OCS_APPROVING 审批中/待执行
+                1: "sent",      # 运行中（推测）
+                2: "sent",      # 运行中（推测）
+                3: "cancelled", # 已撤销（推测）
+                4: "filled",    # OCS_FINISHED 已完成
+                5: "stopped",   # 已停止（推测）
+                6: "send_failed",  # 失败（推测）
+            }
+            xt_status = CMD_STATUS_MAP.get(status_val) if status_val is not None else None
+
+            # 如果 m_eStatus 读不到或值不在映射中，通过 msg 文本推断（保底）
+            if xt_status is None:
+                msg_lower = error_msg.lower()
+                if "完成" in error_msg or "finish" in msg_lower:
+                    xt_status = "filled"
+                elif "撤" in error_msg or "cancel" in msg_lower:
+                    xt_status = "cancelled"
+                elif "失败" in error_msg or "error" in msg_lower or "fail" in msg_lower:
+                    xt_status = "send_failed"
+                elif "驳回" in error_msg or "reject" in msg_lower:
+                    xt_status = "rejected"
+                elif "部分" in error_msg or "partial" in msg_lower:
+                    xt_status = "partial"
+                else:
+                    xt_status = "sent"
 
             logger.info(
-                "订单回报(onRtnOrder): order_id=%s, raw_status=%s → xt_status=%s, msg=%s",
+                "订单回报(onRtnOrder): order_id=%s, raw_status=%s(val=%s) → xt_status=%s, msg=%s",
                 order_id,
                 raw_status,
+                status_val,
                 xt_status,
                 error_msg,
             )

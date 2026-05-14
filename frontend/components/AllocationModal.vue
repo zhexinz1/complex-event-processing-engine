@@ -66,15 +66,6 @@
               提醒：当前产品合计比例已达 {{ totalPct.toFixed(2) }}%
             </div>
           </div>
-          <div>
-            <label
-              style="font-size:13px; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">执行算法</label>
-            <select v-model="form.algo_type" class="inp">
-              <option value="TWAP">TWAP (时间加权)</option>
-              <option value="VWAP">VWAP (成交量加权)</option>
-              <option value="MKT">MKT (市价即时)</option>
-            </select>
-          </div>
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:32px;">

@@ -357,6 +357,23 @@ class RebalanceEngine:
                 logger.warning(f"跳过 {asset_code}: 缺少价格或合约乘数")
                 continue
 
+            # 步骤3&4: 若价格为0（暂无行情），所有手数以0 placeholder填充
+            if price == 0:
+                order = IncrementalOrder(
+                    asset_code=asset_code,
+                    target_market_value=target_market_value,
+                    price=Decimal("0"),
+                    contract_multiplier=multiplier,
+                    theoretical_quantity=Decimal("0"),
+                    rounded_quantity=0,
+                    fractional_part=Decimal("0"),
+                    previous_fractional=previous_fractionals.get(asset_code, Decimal("0.0")),
+                    final_quantity=0,
+                )
+                orders.append(order)
+                logger.warning(f"{asset_code}: 暂无行情，手数以 0 placeholder 填充")
+                continue
+
             # 获取上次留白
             previous_fractional = previous_fractionals.get(asset_code, Decimal("0.0"))
 

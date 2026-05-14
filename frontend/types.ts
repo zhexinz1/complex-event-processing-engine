@@ -18,7 +18,6 @@ export interface AllocationRow {
   product_name: string;
   asset_code: string;
   weight_ratio: number;
-  algo_type: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -33,7 +32,6 @@ export interface AllocationForm {
   product_name: string;
   asset_code: string;
   weight_pct: string;
-  algo_type: string;
 }
 
 export interface SaveWeightPayload {
@@ -41,7 +39,6 @@ export interface SaveWeightPayload {
   product_name: string;
   asset_code: string;
   weight_ratio: number;
-  algo_type: string;
 }
 
 export interface PresetParameter {
@@ -276,7 +273,10 @@ export interface PendingOrder {
   xt_traded_volume: number;
   xt_traded_price: string;
   order_price_type: string;
+  xt_order_id?: number;
   created_at: string;
+  // 前端运行时临时字段（非数据库字段）
+  user_limit_price?: number;
 }
 
 export interface PendingOrdersResponse {

@@ -108,6 +108,7 @@ class PendingOrder:
     xt_traded_volume: int = 0  # 迅投回报的成交量
     xt_traded_price: float = 0.0  # 迅投回报的成交价
     order_price_type: str = "limit"  # 下单价格类型 (limit/market/best/twap/vwap)
+    direction: str = "open_long"  # 开平方向 (open_long/close_long/open_short/close_short/buy/sell)
 
 
 @dataclass

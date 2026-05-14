@@ -104,8 +104,17 @@ const alertType = ref<'success' | 'error'>('success');
 
 const filteredOrders = computed(() => {
   const f = assetFilter.value.toLowerCase();
-  if (!f) return allOrders.value;
-  return allOrders.value.filter(o => o.asset_code.toLowerCase().includes(f));
+  return allOrders.value.filter(o => {
+    // 如果订单已确认且最终数量为0，则不展示（视为跳过）
+    if (o.status === 'confirmed' && (o.final_quantity === 0 || o.final_quantity === '0')) {
+      return false;
+    }
+    // 搜索过滤
+    if (f && !o.asset_code.toLowerCase().includes(f)) {
+      return false;
+    }
+    return true;
+  });
 });
 
 function fmtNum(val: string | number) {

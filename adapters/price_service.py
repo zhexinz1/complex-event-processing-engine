@@ -100,7 +100,12 @@ def get_latest_price(asset_code: str) -> Decimal:
         symbol = asset_code.split(".")[0]
 
     with _tick_cache_lock:
-        tick = _tick_cache.get(symbol)
+        # 尝试精确匹配、小写、大写，以兼容 DB 与 Market Node 大小写不一致的情况
+        tick = (
+            _tick_cache.get(symbol)
+            or _tick_cache.get(symbol.lower())
+            or _tick_cache.get(symbol.upper())
+        )
 
     if tick is not None:
         price = tick.ask_prices[0] if tick.ask_prices[0] > 0 else tick.last_price

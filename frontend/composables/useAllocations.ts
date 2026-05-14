@@ -27,7 +27,6 @@ export function useAllocations(api: CepApiClient, showToast: ShowToast) {
     product_name: '',
     asset_code: '',
     weight_pct: '',
-    algo_type: 'TWAP',
   });
 
   const filteredRows = computed(() => {
@@ -100,7 +99,7 @@ export function useAllocations(api: CepApiClient, showToast: ShowToast) {
   }
 
   async function addAsset() {
-    const code = newAssetCode.value.trim().toUpperCase();
+    const code = newAssetCode.value.trim();
     if (!code) {
       showToast('请输入资产代码', 'error');
       return;
@@ -145,7 +144,6 @@ export function useAllocations(api: CepApiClient, showToast: ShowToast) {
         product_name: row.product_name,
         asset_code: row.asset_code,
         weight_pct: (row.weight_ratio * 100).toFixed(4),
-        algo_type: row.algo_type,
       };
     } else {
       const date = filterDate.value || latestDate.value || new Date().toISOString().slice(0, 10);
@@ -154,7 +152,6 @@ export function useAllocations(api: CepApiClient, showToast: ShowToast) {
         product_name: filterProduct.value,
         asset_code: '',
         weight_pct: '',
-        algo_type: 'TWAP',
       };
     }
     showModal.value = true;
@@ -166,7 +163,7 @@ export function useAllocations(api: CepApiClient, showToast: ShowToast) {
   }
 
   async function saveRow() {
-    const { target_date, product_name, asset_code, weight_pct, algo_type } = form.value;
+    const { target_date, product_name, asset_code, weight_pct } = form.value;
     if (!target_date || !product_name || !asset_code || weight_pct === '') {
       showToast('请将表单信息填写完整', 'error');
       return;
@@ -176,9 +173,8 @@ export function useAllocations(api: CepApiClient, showToast: ShowToast) {
       const json = await api.saveWeight({
         target_date,
         product_name,
-        asset_code: asset_code.toUpperCase(),
+        asset_code: asset_code,
         weight_ratio: parseFloat(weight_pct) / 100,
-        algo_type,
       });
       if (json.success) {
         showToast('成功更新仓位配置');

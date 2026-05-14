@@ -196,11 +196,16 @@ export const CepApi: CepApiClient = {
     });
   },
 
-  confirmOrders(batchId: string, confirmedBy: string, priceType: string): Promise<ApiResponse> {
+  confirmOrders(batchId: string, confirmedBy: string, priceType: string, orderDirections?: Record<string, string>): Promise<ApiResponse> {
     return this.requestJson('/api/orders/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batch_id: batchId, confirmed_by: confirmedBy, price_type: priceType }),
+      body: JSON.stringify({
+        batch_id: batchId,
+        confirmed_by: confirmedBy,
+        price_type: priceType,
+        order_directions: orderDirections || {},
+      }),
     });
   },
 

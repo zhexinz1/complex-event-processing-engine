@@ -110,7 +110,6 @@ CREATE TABLE IF NOT EXISTS target_allocations (
     product_name  VARCHAR(100)   NOT NULL,
     asset_code    VARCHAR(50)    NOT NULL,
     weight_ratio  DECIMAL(12, 6) NOT NULL,
-    algo_type     VARCHAR(20)    NOT NULL DEFAULT 'TWAP',
     created_at    TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_date_product_asset (target_date, product_name, asset_code)
@@ -337,7 +336,7 @@ def create_app() -> Flask:
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
         sql = f"""
             SELECT id, DATE_FORMAT(target_date, '%%Y-%%m-%%d') AS target_date,
-                   product_name, asset_code, weight_ratio, algo_type,
+                   product_name, asset_code, weight_ratio,
                    created_at, updated_at
             FROM target_allocations
             {where}
@@ -388,11 +387,10 @@ def create_app() -> Flask:
 
         sql = """
             INSERT INTO target_allocations
-                (target_date, product_name, asset_code, weight_ratio, algo_type)
-            VALUES (%s, %s, %s, %s, %s)
+                (target_date, product_name, asset_code, weight_ratio)
+            VALUES (%s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 weight_ratio = VALUES(weight_ratio),
-                algo_type    = VALUES(algo_type),
                 updated_at   = NOW()
         """
         params = (
@@ -400,7 +398,6 @@ def create_app() -> Flask:
             body["product_name"],
             body["asset_code"],
             body["weight_ratio"],
-            body.get("algo_type", "TWAP"),
         )
         try:
             with get_conn() as conn:
@@ -841,14 +838,26 @@ def create_app() -> Flask:
                 row["asset_code"]: Decimal(str(row["weight_ratio"])) for row in rows
             }
 
-            # 3. 从行情缓存获取市场价格和合约乘数（无缓存时用模拟价格）
+            # 3. 从行情缓存获取市场价格和合约乘数
+            # 若暂无行情，用 0 作为 placeholder；前端会通过实时行情轮询自动更新
             market_prices = {}
             contract_multipliers = {}
+            missing_prices = []
 
             for asset_code in target_weights.keys():
-                price = get_latest_price(asset_code)
+                try:
+                    price = get_latest_price(asset_code)
+                except ValueError:
+                    price = Decimal("0")
+                    missing_prices.append(asset_code)
                 market_prices[asset_code] = price
                 contract_multipliers[asset_code] = get_contract_multiplier(asset_code)
+
+            if missing_prices:
+                logger.warning(
+                    "以下合约暂无实时行情，手数将以 0 填充，待前端轮询刷新: %s",
+                    missing_prices,
+                )
 
             # 4. 获取留白数据
             previous_fractionals = {}
@@ -1015,6 +1024,7 @@ def create_app() -> Flask:
                                 row.get("xt_traded_price", 0) or 0
                             ),
                             "order_price_type": row.get("order_price_type", "limit"),
+                            "direction": row.get("direction") or "",
                             "created_at": row["created_at"].isoformat()
                             if row["created_at"]
                             else None,
@@ -1102,6 +1112,7 @@ def create_app() -> Flask:
                         "xt_traded_volume": o.xt_traded_volume,
                         "xt_traded_price": float(o.xt_traded_price) if o.xt_traded_price else 0.0,
                         "order_price_type": o.order_price_type,
+                        "direction": o.direction or "",
                         "created_at": o.created_at.isoformat()
                         if o.created_at
                         else None,
@@ -1189,6 +1200,8 @@ def create_app() -> Flask:
         batch_id = data.get("batch_id")
         confirmed_by = data.get("confirmed_by", "")
         price_type_str = data.get("price_type", "limit")  # 前端传来的价格类型
+        # 前端传来的每笔订单方向覆盖，格式: {order_id: direction_str}
+        order_directions: dict = data.get("order_directions", {})
 
         # 映射价格类型
         price_type_map = {
@@ -1199,6 +1212,16 @@ def create_app() -> Flask:
             "vwap": OrderPriceType.VWAP,
         }
         selected_price_type = price_type_map.get(price_type_str, OrderPriceType.LIMIT)
+
+        # 方向字符串 → OrderDirection 枚举映射
+        direction_map = {
+            "open_long": OrderDirection.OPEN_LONG,
+            "close_long": OrderDirection.CLOSE_LONG,
+            "open_short": OrderDirection.OPEN_SHORT,
+            "close_short": OrderDirection.CLOSE_SHORT,
+            "buy": OrderDirection.BUY,
+            "sell": OrderDirection.SELL,
+        }
 
         if not batch_id:
             return jsonify({"success": False, "message": "参数错误"}), 400
@@ -1286,22 +1309,39 @@ def create_app() -> Flask:
                         "INE",
                     ]
 
-                    if order.final_quantity > 0:
-                        # 正数：买入/开多
-                        direction = (
-                            OrderDirection.OPEN_LONG
-                            if is_futures
-                            else OrderDirection.BUY
-                        )
-                        quantity = order.final_quantity
+                    # 从前端传来的 order_directions 中获取方向，否则根据资产类型和数量符号推断默认值
+                    direction_str = order_directions.get(str(order_id))
+                    if direction_str and direction_str in direction_map:
+                        direction = direction_map[direction_str]
                     else:
-                        # 负数：卖出/平多
-                        direction = (
-                            OrderDirection.CLOSE_LONG
-                            if is_futures
-                            else OrderDirection.SELL
-                        )
-                        quantity = abs(order.final_quantity)
+                        # 默认逻辑：正数 → 开多/买入，负数 → 平多/卖出
+                        if order.final_quantity > 0:
+                            direction = (
+                                OrderDirection.OPEN_LONG
+                                if is_futures
+                                else OrderDirection.BUY
+                            )
+                        else:
+                            direction = (
+                                OrderDirection.CLOSE_LONG
+                                if is_futures
+                                else OrderDirection.SELL
+                            )
+
+                    quantity = abs(order.final_quantity)
+
+                    # 将最终使用的方向写入数据库
+                    try:
+                        conn_dir = dao._get_connection()
+                        with conn_dir.cursor() as cur_dir:
+                            cur_dir.execute(
+                                "UPDATE pending_orders SET direction = %s WHERE id = %s",
+                                (direction.value, order_id),
+                            )
+                        conn_dir.commit()
+                        conn_dir.close()
+                    except Exception:
+                        pass
 
                     # 对于限价单，直接使用数据库中保存的 price（用户可能在前端修改了）
                     # 对于市价单等，获取最新实时价格作为参考价格

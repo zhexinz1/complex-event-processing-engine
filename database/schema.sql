@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS pending_orders (
     xt_traded_volume INT DEFAULT 0 COMMENT '迅投回报的成交量',
     xt_traded_price DECIMAL(18, 4) DEFAULT 0.0000 COMMENT '迅投回报的成交均价',
     order_price_type VARCHAR(20) DEFAULT 'limit' COMMENT '下单价格类型（limit/market/best/twap/vwap）',
+    direction VARCHAR(20) DEFAULT 'open_long' COMMENT '下单方向（open_long/close_long/open_short/close_short/buy/sell）',
     INDEX idx_batch_id (batch_id),
     INDEX idx_product_name (product_name),
     INDEX idx_status (status),
