@@ -63,7 +63,7 @@
         <table v-if="batchInfo.status === 'confirmed'">
           <thead>
             <tr>
-              <th>合约代码</th><th>订单类型</th><th>方向</th><th>数量</th><th>价格</th>
+              <th>资产代码</th><th>订单类型</th><th>方向</th><th>数量(股/手)</th><th>价格</th>
               <th>目标市值</th><th>迅投指令ID</th><th>迅投状态</th><th>创建时间</th>
             </tr>
           </thead>
@@ -100,9 +100,9 @@
         <table v-else>
           <thead>
             <tr>
-              <th>合约代码</th><th>目标市值（元）</th><th>实时价格</th>
-              <th>合约乘数</th><th>理论手数</th><th>四舍五入</th><th>留白</th>
-              <th>开/平方向</th><th>最终手数</th>
+              <th>资产代码</th><th>目标市值（元）</th><th>实时价格</th>
+              <th>合约乘数</th><th>理论股数/手数</th><th>四舍五入</th><th>待调余量</th>
+              <th>开/平方向</th><th>最终股数/手数</th>
             </tr>
           </thead>
           <tbody>
@@ -128,12 +128,12 @@
                   </span>
                 </div>
               </td>
-              <td>{{ order.contract_multiplier }}</td>
+              <td>{{ isFuturesOrder(order) ? order.contract_multiplier : '-' }}</td>
               <td style="font-family:monospace; font-weight:600;">{{ calcTheory(order).toFixed(6) }}</td>
               <td>{{ Math.round(calcTheory(order)) }}</td>
               <td style="font-size:12px; color:#999;">
                 {{ (calcTheory(order) - Math.round(calcTheory(order))).toFixed(6) }}<br>
-                <small>(上次: {{ parseFloat(order.previous_fractional).toFixed(6) }})</small>
+                <small>(上次余量: {{ parseFloat(order.previous_fractional).toFixed(6) }})</small>
               </td>
               <td>
                 <select class="inp dir-select" v-model="orderDirections[order.id]"

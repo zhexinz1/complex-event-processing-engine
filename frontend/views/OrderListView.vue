@@ -40,8 +40,8 @@
 
       <!-- Filter -->
       <div style="margin:16px 0;">
-        <label style="font-size:12px; color:var(--text-muted);">合约代码筛选</label>
-        <input v-model="assetFilter" type="text" class="inp" style="width:220px;" placeholder="输入合约代码" />
+        <label style="font-size:12px; color:var(--text-muted);">资产代码筛选</label>
+        <input v-model="assetFilter" type="text" class="inp" style="width:220px;" placeholder="输入资产代码" />
       </div>
 
       <!-- Loading -->
@@ -53,7 +53,7 @@
         <table v-else>
           <thead>
             <tr>
-              <th>批次ID</th><th>产品</th><th>合约代码</th><th>订单类型</th><th>数量</th><th>价格</th>
+              <th>批次ID</th><th>产品</th><th>资产代码</th><th>订单类型</th><th>数量(股/手)</th><th>价格</th>
               <th>目标市值</th><th>迅投指令ID</th><th>迅投状态</th><th>创建时间</th>
             </tr>
           </thead>

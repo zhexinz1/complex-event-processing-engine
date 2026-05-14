@@ -868,7 +868,7 @@ def create_app() -> Flask:
                     missing_prices,
                 )
 
-            # 4. 获取留白数据
+            # 4. 获取待调余量数据
             previous_fractionals = {}
             for asset_code in target_weights.keys():
                 previous_fractionals[asset_code] = dao.get_fractional_share(
@@ -1403,7 +1403,7 @@ def create_app() -> Flask:
                         if result.order_id:
                             dao.update_order_xt_id(order_id, result.order_id)
 
-                        # 更新留白数据
+                        # 更新待调余量数据
                         dao.update_fractional_share(
                             order.product_name, order.asset_code, order.fractional_part
                         )

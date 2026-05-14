@@ -79,8 +79,8 @@ class IncrementalOrder:
         contract_multiplier:  合约乘数
         theoretical_quantity: 理论手数（未取整）
         rounded_quantity:     四舍五入后的手数
-        fractional_part:      留白部分（小数）
-        previous_fractional:  上次留白累积
+        fractional_part:      待调余量部分（小数）
+        previous_fractional:  上次待调余量累积
         final_quantity:       最终手数（rounded_quantity，可手动调整）
     """
 
@@ -326,16 +326,16 @@ class RebalanceEngine:
             target_weights: 目标权重字典 {asset_code: weight}
             market_prices: 市场价格字典 {asset_code: 卖1价}
             contract_multipliers: 合约乘数字典 {asset_code: multiplier}
-            previous_fractionals: 上次留白数据 {asset_code: fractional_amount}
+            previous_fractionals: 上次待调余量数据 {asset_code: fractional_amount}
 
         Returns:
             增量订单列表
 
         计算步骤：
-            1. 杠杆后市值 = 净入金 × 杠杆倍数
-            2. 标的分配市值 = 杠杆后市值 × 目标权重
-            3. 理论手数 = (标的分配市值 + 上次留白市值) / (卖1价 × 合约乘数)
-            4. 四舍五入 + 留白存储
+            1. 目标分配市值 = 净入金 × 目标权重 (权重已含杠杆)
+            2. 总目标市值 = 目标分配市值 + 上次待调余量市值
+            3. 理论股数/手数 = (标的分配市值 + 上次待调余量市值) / (卖1价 × 合约乘数)
+            4. 四舍五入 + 待调余量存储
         """
         logger.info(f"开始计算增量买入订单: 净入金={net_inflow} (杠杆已包含在权重中)")
 
@@ -371,28 +371,28 @@ class RebalanceEngine:
                 logger.warning(f"{asset_code}: 暂无行情，手数以 0 placeholder 填充")
                 continue
 
-            # 获取上次留白
+            # 获取上个批次的待调余量
             previous_fractional = previous_fractionals.get(asset_code, Decimal("0.0"))
 
-            # 步骤3: 计算理论手数（包含上次留白）
-            # 上次留白对应的市值
+            # 步骤2: 计算理论股数/手数（包含上次待调余量）
+            # 上次待调余量对应的市值
             previous_fractional_value = (
                 previous_fractional * price * Decimal(multiplier)
             )
 
-            # 总目标市值 = 本次分配市值 + 上次留白市值
+            # 总目标市值 = 本次分配市值 + 上次待调余量市值
             total_target_value = target_market_value + previous_fractional_value
 
-            # 理论手数
+            # 理论股数/手数
             theoretical_quantity = total_target_value / (price * Decimal(multiplier))
 
-            # 步骤4: 四舍五入
+            # 步骤3: 四舍五入
             rounded_quantity = int(round(theoretical_quantity))
 
-            # 留白部分 = 理论手数 - 四舍五入后的手数
+            # 待调余量部分 = 理论股数/手数 - 四舍五入后的股数/手数
             fractional_part = theoretical_quantity - Decimal(rounded_quantity)
 
-            # 最终手数（初始值等于四舍五入后的值，可由交易员手动调整）
+            # 最终股数/手数（初始值等于四舍五入后的值，可由交易员手动调整）
             final_quantity = rounded_quantity
 
             order = IncrementalOrder(
@@ -412,10 +412,10 @@ class RebalanceEngine:
             logger.info(
                 f"{asset_code}: 目标市值={target_market_value:.2f}, "
                 f"价格={price}, 乘数={multiplier}, "
-                f"理论手数={theoretical_quantity:.6f}, "
+                f"理论股数/手数={theoretical_quantity:.6f}, "
                 f"四舍五入={rounded_quantity}, "
-                f"留白={fractional_part:.6f}, "
-                f"上次留白={previous_fractional:.6f}"
+                f"待调余量={fractional_part:.6f}, "
+                f"上次待调余量={previous_fractional:.6f}"
             )
 
         return orders
