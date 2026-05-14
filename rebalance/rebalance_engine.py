@@ -337,17 +337,14 @@ class RebalanceEngine:
             3. 理论手数 = (标的分配市值 + 上次留白市值) / (卖1价 × 合约乘数)
             4. 四舍五入 + 留白存储
         """
-        logger.info(f"开始计算增量买入订单: 净入金={net_inflow}, 杠杆={leverage_ratio}")
-
-        # 步骤1: 计算杠杆后市值
-        leveraged_amount = net_inflow * leverage_ratio
-        logger.info(f"杠杆后市值: {leveraged_amount}")
+        logger.info(f"开始计算增量买入订单: 净入金={net_inflow} (杠杆已包含在权重中)")
 
         orders = []
 
         for asset_code, weight in target_weights.items():
-            # 步骤2: 标的分配市值
-            target_market_value = leveraged_amount * weight
+            # 步骤1: 标的分配市值
+            # 直接用净入金乘以权重，因为权重本身已经体现了杠杆倍数
+            target_market_value = net_inflow * weight
 
             # 获取价格和合约乘数
             price = market_prices.get(asset_code)
