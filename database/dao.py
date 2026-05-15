@@ -255,10 +255,10 @@ class DatabaseDAO:
             updated_at=row.get("updated_at"),
         )
 
-    # ==================== 留白数据管理 ====================
+    # ==================== 待调余量管理 ====================
 
     def get_fractional_share(self, product_name: str, asset_code: str) -> Decimal:
-        """获取留白数据（不存在则返回0）"""
+        """获取单个资产的待调余量（不存在则返回0）"""
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:
@@ -269,10 +269,36 @@ class DatabaseDAO:
         finally:
             conn.close()
 
+    def get_all_fractional_shares(self, product_name: str) -> list[dict]:
+        """获取某产品下所有资产的待调余量记录"""
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                sql = """
+                SELECT asset_code, fractional_amount, last_updated
+                FROM fractional_shares
+                WHERE product_name = %s
+                ORDER BY asset_code
+                """
+                cursor.execute(sql, (product_name,))
+                rows = cursor.fetchall()
+                return [
+                    {
+                        "asset_code": row["asset_code"],
+                        "fractional_amount": float(row["fractional_amount"]),
+                        "last_updated": row["last_updated"].isoformat()
+                        if row["last_updated"]
+                        else None,
+                    }
+                    for row in rows
+                ]
+        finally:
+            conn.close()
+
     def update_fractional_share(
         self, product_name: str, asset_code: str, fractional_amount: Decimal
     ):
-        """更新留白数据（INSERT ON DUPLICATE KEY UPDATE）"""
+        """更新待调余量（INSERT ON DUPLICATE KEY UPDATE）"""
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:
@@ -300,9 +326,9 @@ class DatabaseDAO:
                 INSERT INTO pending_orders (
                     batch_id, product_name, asset_code, target_market_value,
                     price, contract_multiplier, theoretical_quantity,
-                    rounded_quantity, fractional_part, final_quantity, status,
-                    order_price_type
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    rounded_quantity, fractional_part, previous_fractional,
+                    final_quantity, status, order_price_type, direction
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(
                     sql,
@@ -316,9 +342,11 @@ class DatabaseDAO:
                         order.theoretical_quantity,
                         order.rounded_quantity,
                         order.fractional_part,
+                        order.previous_fractional,
                         order.final_quantity,
                         order.status.value,
                         order.order_price_type,
+                        order.direction,
                     ),
                 )
             conn.commit()
@@ -369,6 +397,7 @@ class DatabaseDAO:
             theoretical_quantity=row["theoretical_quantity"],
             rounded_quantity=row["rounded_quantity"],
             fractional_part=row["fractional_part"],
+            previous_fractional=Decimal(str(row.get("previous_fractional") or "0")),
             final_quantity=row["final_quantity"],
             status=OrderStatus(row["status"]),
             created_at=row["created_at"],
@@ -446,12 +475,34 @@ class DatabaseDAO:
             conn.close()
 
     def update_order_xt_id(self, order_id: int, xt_order_id: int):
-        """下单成功后将迅投返回的指令ID写入数据库，同时标记 xt_status='sent'"""
+        """下单成功后将迅投返回的指令ID写入数据库，同时标记 xt_status='sent'。
+
+        注意：若回调（onRtnOrder）先于本函数触发并已写入终态（filled/rejected 等），
+        则保留已有的终态，不覆盖为 'sent'。
+        """
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
+
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:
-                sql = "UPDATE pending_orders SET xt_order_id = %s, xt_status = 'sent' WHERE id = %s"
+                # 只有当前 xt_status 不是终态时，才写入 'sent'
+                # 用 CASE 防止覆盖已由回调写好的 filled/rejected/cancelled/stopped
+                sql = """
+                UPDATE pending_orders
+                SET xt_order_id = %s,
+                    xt_status = CASE
+                        WHEN xt_status IN ('filled', 'rejected', 'cancelled', 'stopped')
+                            THEN xt_status   -- 保留已有的终态
+                        ELSE 'sent'
+                    END
+                WHERE id = %s
+                """
                 cursor.execute(sql, (xt_order_id, order_id))
+                if cursor.rowcount > 0:
+                    _logger.debug(
+                        "update_order_xt_id: order %s → xt_order_id=%s", order_id, xt_order_id
+                    )
             conn.commit()
         finally:
             conn.close()

@@ -318,10 +318,10 @@ class RebalanceEngine:
         previous_fractionals: dict[str, Decimal],
     ) -> list[IncrementalOrder]:
         """
-        计算增量买入订单（净入金场景）。
+        计算增量订单（净入金或净出金场景均适用）。
 
         Args:
-            net_inflow: 净入金金额（元）
+            net_inflow: 净现金流（正数=入金/加仓，负数=出金/减仓）
             leverage_ratio: 杠杆倍数（如 2.0 表示2倍杠杆）
             target_weights: 目标权重字典 {asset_code: weight}
             market_prices: 市场价格字典 {asset_code: 卖1价}
@@ -329,13 +329,17 @@ class RebalanceEngine:
             previous_fractionals: 上次待调余量数据 {asset_code: fractional_amount}
 
         Returns:
-            增量订单列表
+            增量订单列表（final_quantity 正数=买入/开多，负数=卖出/平多）
 
         计算步骤：
-            1. 目标分配市值 = 净入金 × 目标权重 (权重已含杠杆)
+            1. 目标分配市值 = 净现金流 × 目标权重 (权重已含杠杆)
+               - 入金时为正值（需要买入的市值）
+               - 出金时为负值（需要卖出的市值）
             2. 总目标市值 = 目标分配市值 + 上次待调余量市值
-            3. 理论股数/手数 = (标的分配市值 + 上次待调余量市值) / (卖1价 × 合约乘数)
-            4. 四舍五入 + 待调余量存储
+               - 欠买余量（正）会减少卖出量，抵消部分出金减仓
+               - 多买余量（负）会增加卖出量，在下次出金时加速减仓
+            3. 理论股数/手数 = 总目标市值 / (价格 × 合约乘数)
+            4. 四舍五入 + 本次待调余量存储
         """
         logger.info(f"开始计算增量买入订单: 净入金={net_inflow} (杠杆已包含在权重中)")
 

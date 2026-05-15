@@ -96,7 +96,8 @@ class PendingOrder:
     contract_multiplier: int  # 合约乘数
     theoretical_quantity: Decimal  # 理论手数（未取整）
     rounded_quantity: int  # 四舍五入后的手数
-    fractional_part: Decimal  # 留白部分
+    fractional_part: Decimal  # 本次待调余量部分
+    previous_fractional: Decimal  # 上次待调余量（从 fractional_shares 读取，用于本次计算）
     final_quantity: int  # 最终确认的手数（可手动调整）
     status: OrderStatus
     created_at: Optional[datetime] = None

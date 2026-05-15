@@ -101,13 +101,37 @@
           <thead>
             <tr>
               <th>资产代码</th><th>目标市值（元）</th><th>实时价格</th>
-              <th>合约乘数</th><th>理论股数/手数</th><th>四舍五入</th><th>待调余量</th>
+              <th>合约乘数</th><th>理论股数/手数</th><th>四舍五入</th>
+              <th>待调余量
+                <span style="font-size:10px; color:#9ca3af; font-weight:400;">（可编辑上次余量）</span>
+              </th>
               <th>开/平方向</th><th>最终股数/手数</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="order in orders" :key="order.id">
-              <td><strong>{{ order.asset_code }}</strong></td>
+              <td>
+                <strong>{{ order.asset_code }}</strong>
+                <!-- 备注：点击展开公式 -->
+                <div style="margin-top:4px;">
+                  <span class="formula-toggle" @click="toggleFormula(order.id)"
+                    :title="showFormula[order.id] ? '隐藏计算备注' : '查看计算备注'">
+                    {{ showFormula[order.id] ? '▲ 隐藏备注' : '▼ 查看备注' }}
+                  </span>
+                </div>
+                <div v-if="showFormula[order.id]" class="formula-box">
+                  <div class="formula-title">📐 计算公式</div>
+                  <div class="formula-line">理论 = 目标市值 ÷ (价格 × 乘数) + 上次余量</div>
+                  <div class="formula-line formula-calc">
+                    = {{ fmtNum(order.target_market_value) }} ÷ ({{ calcPrice(order).toFixed(2) }} × {{ isFuturesOrder(order) ? order.contract_multiplier : 1 }})
+                    + {{ editableFractionals[order.id] !== undefined ? editableFractionals[order.id].toFixed(6) : parseFloat(order.previous_fractional).toFixed(6) }}
+                  </div>
+                  <div class="formula-line formula-result">
+                    = {{ calcBaseLots(order).toFixed(6) }} + {{ (editableFractionals[order.id] !== undefined ? editableFractionals[order.id] : parseFloat(order.previous_fractional)).toFixed(6) }}
+                    = <strong>{{ calcTheory(order).toFixed(6) }}</strong>
+                  </div>
+                </div>
+              </td>
               <td>{{ fmtNum(order.target_market_value) }}</td>
               <td>
                 <div v-if="priceType === 'limit'">
@@ -129,11 +153,22 @@
                 </div>
               </td>
               <td>{{ isFuturesOrder(order) ? order.contract_multiplier : '-' }}</td>
-              <td style="font-family:monospace; font-weight:600;">{{ calcTheory(order).toFixed(6) }}</td>
+              <!-- 理论股数/手数：已含上次待调余量 -->
+              <td style="font-family:monospace; font-weight:600; color:#1d4ed8;">
+                {{ calcTheory(order).toFixed(6) }}
+              </td>
               <td>{{ Math.round(calcTheory(order)) }}</td>
-              <td style="font-size:12px; color:#999;">
-                {{ (calcTheory(order) - Math.round(calcTheory(order))).toFixed(6) }}<br>
-                <small>(上次余量: {{ parseFloat(order.previous_fractional).toFixed(6) }})</small>
+              <!-- 待调余量列：只读展示上次余量，可编辑影响理论计算，修改余量请前往净入金录入页 -->
+              <td>
+                <div style="font-size:11px; color:#6b7280; margin-bottom:3px;">上次余量</div>
+                <input type="number" class="inp frac-inp"
+                  :value="editableFractionals[order.id] !== undefined ? editableFractionals[order.id] : parseFloat(order.previous_fractional)"
+                  @input="onFractionalInput(order, $event)"
+                  step="0.000001" />
+                <div style="font-size:10px; color:#9ca3af; margin-top:3px;">
+                  本次余量: {{ (calcTheory(order) - Math.round(calcTheory(order))).toFixed(6) }}
+                </div>
+                <div style="font-size:10px; color:#bfdbfe; margin-top:2px;">如需持久修改请至「净入金录入」页</div>
               </td>
               <td>
                 <select class="inp dir-select" v-model="orderDirections[order.id]"
@@ -170,7 +205,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted, watch } from 'vue';
+import { ref, computed, onUnmounted, watch, reactive } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CepApi } from '../api';
 import type { FundInflow, PendingOrder, RealtimePrice } from '../types';
@@ -191,6 +226,10 @@ const alertMsg = ref('');
 const alertType = ref<'success' | 'error'>('success');
 // per-order direction: { order_id -> direction_str }
 const orderDirections = ref<Record<number, string>>({});
+// 可编辑的上次待调余量：key=order.id, value=用户编辑后的数值
+const editableFractionals = ref<Record<number, number>>({});
+// 控制每行备注展开/收起
+const showFormula = ref<Record<number, boolean>>({});
 let priceTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
@@ -253,11 +292,38 @@ function fmtTime(val: string) {
 function statusLabel(s: string) {
   return { pending: '待确认', confirmed: '已确认', cancelled: '已取消' }[s] || s;
 }
-function calcTheory(order: any) {
-  const p = priceType.value === 'limit' && order.user_limit_price ? parseFloat(order.user_limit_price) : parseFloat(order.price);
+/** 获取当前使用的价格（限价时用用户输入价，其他用行情价）*/
+function calcPrice(order: any): number {
+  return (priceType.value === 'limit' && order.user_limit_price)
+    ? parseFloat(order.user_limit_price)
+    : parseFloat(order.price);
+}
+/** 仅基于目标市值的基础手数（不含上次余量），用于公式展示 */
+function calcBaseLots(order: any): number {
+  const p = calcPrice(order);
   const tmv = parseFloat(order.target_market_value);
-  const m = parseInt(order.contract_multiplier);
-  return p > 0 && m > 0 ? tmv / (p * m) : 0;
+  const m = parseInt(order.contract_multiplier) || 1;
+  return p > 0 ? tmv / (p * m) : 0;
+}
+/** 理论股数/手数 = 基础手数 + 上次待调余量（含用户覆盖值）*/
+function calcTheory(order: any): number {
+  const base = calcBaseLots(order);
+  const prevFrac = editableFractionals.value[order.id] !== undefined
+    ? editableFractionals.value[order.id]
+    : parseFloat(order.previous_fractional || '0');
+  return base + prevFrac;
+}
+function toggleFormula(orderId: number) {
+  showFormula.value[orderId] = !showFormula.value[orderId];
+}
+function onFractionalInput(order: any, event: Event) {
+  const val = parseFloat((event.target as HTMLInputElement).value);
+  if (!isNaN(val)) {
+    editableFractionals.value[order.id] = val;
+  }
+}
+function resetFractional(order: any) {
+  editableFractionals.value[order.id] = parseFloat(order.previous_fractional || '0');
 }
 function priceColor(order: any) {
   const live = livePrices.value[order.asset_code];
@@ -307,12 +373,17 @@ async function loadDetail() {
     if (data.success) {
       batchInfo.value = data;
       const dirs: Record<number, string> = {};
+      const fracs: Record<number, number> = {};
       for (const o of data.orders) {
         o.user_limit_price = parseFloat(o.price);
         // 默认方向: 期货→开多, 股票→买入
         dirs[o.id] = isFuturesCode(o.asset_code) ? 'open_long' : 'buy';
+        // 初始化可编辑余量 = 上次余量（来自数据库，已随订单一起返回）
+        fracs[o.id] = parseFloat(o.previous_fractional || '0');
       }
       orderDirections.value = dirs;
+      editableFractionals.value = fracs;
+      showFormula.value = {};
       orders.value = data.orders;
       if (data.status !== 'confirmed') startPricePolling();
     }
@@ -389,6 +460,22 @@ onUnmounted(() => { if (priceTimer) clearInterval(priceTimer); });
 </script>
 
 <style scoped>
+/* 待调余量输入框 */
+.frac-inp { width: 100px; font-family: monospace; font-size: 12px; padding: 3px 6px; }
+.frac-btn { border: none; border-radius: 4px; font-size: 11px; padding: 2px 6px; cursor: pointer; }
+.frac-btn-reset { background: #f3f4f6; color: #6b7280; }
+.frac-btn-reset:hover { background: #e5e7eb; }
+.frac-btn-save { background: #dbeafe; color: #1d4ed8; }
+.frac-btn-save:hover { background: #bfdbfe; }
+.frac-btn-save:disabled { opacity: 0.5; cursor: default; }
+/* 公式备注 */
+.formula-toggle { font-size: 11px; color: #9333ea; cursor: pointer; user-select: none; }
+.formula-toggle:hover { text-decoration: underline; }
+.formula-box { background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 11px; min-width: 280px; }
+.formula-title { font-weight: 700; color: #7c3aed; margin-bottom: 4px; }
+.formula-line { color: #4b5563; margin: 2px 0; font-family: monospace; }
+.formula-calc { color: #6d28d9; }
+.formula-result { color: #1d4ed8; font-weight: 600; }
 .batch-row { cursor: pointer; transition: background 0.15s; }
 .batch-row:hover { background: #eef2ff !important; }
 .info-panel { background: #f0f4ff; border-left: 4px solid var(--primary); padding: 12px 16px; border-radius: 4px; }

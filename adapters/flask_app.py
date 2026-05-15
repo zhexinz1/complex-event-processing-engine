@@ -765,6 +765,74 @@ def create_app() -> Flask:
         return jsonify({"success": True, "prices": result})
 
     # -----------------------------------------------------------------------
+    # GET /api/fractional-shares — 查询产品所有资产的待调余量
+    # PUT /api/fractional-shares — 手动更新某资产的待调余量
+    # -----------------------------------------------------------------------
+
+    @app.route("/api/fractional-shares", methods=["GET"])
+    def get_fractional_shares():
+        """
+        查询某产品下所有资产的待调余量记录。
+
+        查询参数:
+            product_name: 产品名称（必填）
+
+        返回:
+        {
+            "success": true,
+            "fractionals": [
+                {
+                    "asset_code": "TA609",
+                    "fractional_amount": -0.25,
+                    "last_updated": "2026-05-15T09:00:00"
+                }
+            ]
+        }
+        """
+        product_name = request.args.get("product_name")
+        if not product_name:
+            return jsonify({"success": False, "message": "缺少 product_name 参数"}), 400
+        try:
+            records = dao.get_all_fractional_shares(product_name)
+            return jsonify({"success": True, "fractionals": records})
+        except Exception as e:
+            logger.exception("查询待调余量失败")
+            return jsonify({"success": False, "message": str(e)}), 500
+
+    @app.route("/api/fractional-shares", methods=["PUT"])
+    def update_fractional_share_manual():
+        """
+        手动更新某产品下某资产的待调余量。
+
+        请求体:
+        {
+            "product_name": "仿真产品",
+            "asset_code": "TA609",
+            "fractional_amount": 0.0
+        }
+        """
+        data = request.get_json()
+        product_name = data.get("product_name", "").strip()
+        asset_code = data.get("asset_code", "").strip()
+        fractional_amount = data.get("fractional_amount")
+
+        if not product_name or not asset_code or fractional_amount is None:
+            return jsonify({"success": False, "message": "缺少必要参数"}), 400
+
+        try:
+            dao.update_fractional_share(
+                product_name, asset_code, Decimal(str(fractional_amount))
+            )
+            logger.info(
+                f"手动更新待调余量: product={product_name}, asset={asset_code}, "
+                f"amount={fractional_amount}"
+            )
+            return jsonify({"success": True, "message": "待调余量已更新"})
+        except Exception as e:
+            logger.exception("手动更新待调余量失败")
+            return jsonify({"success": False, "message": str(e)}), 500
+
+    # -----------------------------------------------------------------------
     # POST /api/fund/inflow — 提交净入金并计算订单
     # -----------------------------------------------------------------------
 
@@ -804,8 +872,8 @@ def create_app() -> Flask:
         net_inflow = Decimal(str(data.get("net_inflow")))
         input_by = data.get("input_by", "")
 
-        if not product_name or net_inflow <= 0:
-            return jsonify({"success": False, "message": "参数错误"}), 400
+        if not product_name or net_inflow == 0:
+            return jsonify({"success": False, "message": "参数错误（金额不能为零）"}), 400
 
         try:
             # 1. 查询产品配置（杠杆倍数）
@@ -907,6 +975,26 @@ def create_app() -> Flask:
             dao.create_fund_inflow(fund_inflow)
 
             # 8. 保存待确认订单
+            def _default_direction(asset_code: str, rounded_qty: int, inflow: "Decimal") -> str:
+                """根据手数和入/出金方向推断默认的开平方向。
+
+                - 股票（代码含 .SH/.SZ/.BJ）: buy / sell
+                - 期货：open_long / close_long
+                手数为0时，以净入/出金方向决定（出金 → 平多/卖出）。
+                """
+                is_stock = any(
+                    asset_code.upper().endswith(f".{ex}") for ex in ("SH", "SZ", "BJ")
+                )
+                if rounded_qty > 0:
+                    return "buy" if is_stock else "open_long"
+                elif rounded_qty < 0:
+                    return "sell" if is_stock else "close_long"
+                else:
+                    # 手数为0：按净入/出金方向判断（出金批次默认平仓方向）
+                    if inflow < 0:
+                        return "sell" if is_stock else "close_long"
+                    return "buy" if is_stock else "open_long"
+
             for order in orders:
                 pending_order = PendingOrder(
                     id=None,
@@ -919,8 +1007,10 @@ def create_app() -> Flask:
                     theoretical_quantity=order.theoretical_quantity,
                     rounded_quantity=order.rounded_quantity,
                     fractional_part=order.fractional_part,
+                    previous_fractional=order.previous_fractional,  # 保存本次计算所用的上次余量
                     final_quantity=order.final_quantity,
                     status=OrderStatus.PENDING,
+                    direction=_default_direction(order.asset_code, order.rounded_quantity, net_inflow),
                 )
                 dao.create_pending_order(pending_order)
 
@@ -1116,7 +1206,7 @@ def create_app() -> Flask:
                         "theoretical_quantity": float(o.theoretical_quantity),
                         "rounded_quantity": o.rounded_quantity,
                         "fractional_part": float(o.fractional_part),
-                        "previous_fractional": 0.0,
+                        "previous_fractional": float(o.previous_fractional),  # 从 DB 读取真实保存的上次余量
                         "final_quantity": o.final_quantity,
                         "status": o.status.value,
                         "xt_order_id": o.xt_order_id,

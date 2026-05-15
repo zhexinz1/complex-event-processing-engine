@@ -3,7 +3,9 @@
     <!-- Header -->
     <div class="card" style="padding:16px 20px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
       <h2 style="font-size:20px; font-weight:700;">订单列表</h2>
-      <div style="display:flex; gap:10px;">
+      <div style="display:flex; gap:10px; align-items:center;">
+        <span v-if="autoPolling" style="font-size:12px; color:#059669;">● 自动刷新中...</span>
+        <span v-if="lastUpdated" style="font-size:11px; color:#9ca3af;">{{ lastUpdated }}</span>
         <button class="btn btn-default" @click="refreshOrders">刷新</button>
       </div>
     </div>
@@ -88,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import { CepApi } from '../api';
 import type { ProductInfo } from '../types';
 
@@ -101,6 +103,15 @@ const reconcileSummary = ref<any>(null);
 const assetFilter = ref('');
 const alertMsg = ref('');
 const alertType = ref<'success' | 'error'>('success');
+const lastUpdated = ref('');
+const autoPolling = ref(false);
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+// 非终态状态：这些状态的订单需要自动轮询直到状态更新
+const NON_TERMINAL = new Set(['sent', 'running', 'partial']);
+const hasPendingOrders = computed(() =>
+  allOrders.value.some(o => NON_TERMINAL.has(o.xt_status))
+);
 
 const filteredOrders = computed(() => {
   const f = assetFilter.value.toLowerCase();
@@ -168,6 +179,31 @@ function refreshOrders() {
   loadOrders();
 }
 
+function startPolling() {
+  if (pollTimer) return;
+  autoPolling.value = true;
+  pollTimer = setInterval(async () => {
+    if (!hasPendingOrders.value) {
+      stopPolling();
+      return;
+    }
+    // 静默刷新订单状态
+    try {
+      const data = await CepApi.fetchAllOrders();
+      if (data.success) {
+        allOrders.value = (data as any).orders || [];
+        lastUpdated.value = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
+        if (!hasPendingOrders.value) stopPolling();
+      }
+    } catch { /* silent */ }
+  }, 3000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  autoPolling.value = false;
+}
+
 async function doReconcile() {
   if (!selectedProduct.value) { alertMsg.value = '请先选择产品'; alertType.value = 'error'; return; }
   reconciling.value = true;
@@ -191,7 +227,13 @@ async function doReconcile() {
 }
 
 loadProducts();
-loadOrders();
+async function init() {
+  await loadOrders();
+  // 如果有非终态订单，开启轮询
+  if (hasPendingOrders.value) startPolling();
+}
+init();
+onUnmounted(() => stopPolling());
 </script>
 
 <style scoped>
